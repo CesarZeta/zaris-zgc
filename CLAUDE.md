@@ -26,6 +26,16 @@ Es la reescritura moderna del software legacy **RevoSolution Gestión Comercial*
 
 > **Definición de producto**: el alcance del MVP, mercado objetivo, modelo SaaS multi-tenant y roadmap de diferenciales están en `docs/DEFINICION-PRODUCTO.md` (discovery del 2026-07-03). El plan de ejecución está en `docs/ROADMAP.md`. Leerlos antes de decidir alcances.
 
+## 1-ter. Multipropósito por rubro — regla de producto (César, 2026-07-04)
+
+ZGC no es solo para supermercados: la **gestión central es una sola y general**, con
+customización por **rubro del tenant** (supermercado, indumentaria/calzado, electrónica,
+ferretería/repuestos, distribuidora, general); los **POS sí son full orientados** al rubro.
+El habilitador es el modelo de **variantes** de artículos (talle, color, gusto, capacidad —
+con EAN y stock propios por combinación). El rubro cambia presets/UI, **nunca bifurca el
+modelo de datos**. Ver `docs/DISENO-RUBROS-Y-VARIANTES.md` antes de tocar el maestro de
+artículos, ventas o POS.
+
 ## 1-bis. Base Única de Entidades (BUE) — regla de arquitectura
 
 **"El cliente es el núcleo del sistema"** (César, 2026-07-03). Toda persona física o jurídica existe **una sola vez** en `entidades` (datos maestros: nombre/razón social, CUIT/DNI, condición IVA, domicilios, contactos). Los roles comerciales (`clientes`, `proveedores`, `vendedores`, `transportistas`) son tablas satélite que referencian `id_entidad` y solo agregan lo específico del rol. **Prohibido** duplicar datos maestros de personas en tablas de rol. Análogo a la BUC de ZGE (§2 de su CLAUDE.md). Todo registro lleva `tenant_id`; RLS de Supabase como segunda línea de defensa.

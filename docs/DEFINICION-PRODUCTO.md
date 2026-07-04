@@ -22,6 +22,16 @@ Los cuatro segmentos del legacy, con una sola base de código:
 
 **Primeros usuarios: ex clientes RevoSolution** — se les migran sus datos DBF con una **herramienta interna** (`tools/`, onboarding asistido por César, no autoservicio). La migración es pieza estratégica del go-to-market.
 
+### 2-bis. Multipropósito por rubro (adenda 2026-07-04)
+
+ZGC es **multipropósito**: no queda orientado a un solo vertical. Un supermercado,
+una tienda de ropa/calzado, una casa de electrónica, una ferretería/repuestos y una
+distribuidora usan la misma gestión central, con **customización por rubro**
+(switch por tenant): presets de UI, atributos sugeridos y, a futuro, el POS que
+se sirve a las cajas — los POS sí son full orientados al rubro. El habilitador
+técnico es el **modelo de variantes** (talle/color/gusto/capacidad con stock y EAN
+propios). Diseño, estadística de mercado y evaluación en `DISENO-RUBROS-Y-VARIANTES.md`.
+
 ## 3. Alcance del MVP
 
 El corazón del MVP es el **ciclo comercial completo en versión simple**:

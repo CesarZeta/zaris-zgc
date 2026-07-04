@@ -61,6 +61,22 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - [x] API verificada con 44 pruebas en vivo (incl. aislamiento de tenant); frontend verificado E2E en navegador.
 - Nota: campos legacy diferidos con trazabilidad en observaciones: proveedor (Fase 4), unidad de compra/coeficiente (Fase 4), bonificaciones por lista, cuenta contable (módulo Contabilidad).
 
+## FASE 2.5 — Rubros y Variantes de artículos (multipropósito)
+
+**Entregable: una tienda de ropa carga su catálogo con talles y colores; un tenant elige su rubro y el sistema se adapta.**
+
+> Mandato de César 2026-07-04: gestión central general con customización por rubro;
+> POS full orientados al rubro. Diseño completo en `DISENO-RUBROS-Y-VARIANTES.md`
+> (con estadística CACE 2025 / global 2026 y evaluación categoría por categoría).
+> Va ANTES de Ventas porque las líneas de comprobante referencian variantes.
+
+- Switch de rubro por tenant (`tenants.rubro`): presets de UI, flags visibles, atributos sugeridos y POS objetivo — sin bifurcar el modelo de datos
+- Atributos por tenant (Talle, Color, Gusto, Capacidad...) con valores ordenados
+- Variantes: combinación de hasta 3 atributos con EAN propio, stock propio y diferencial de precio; artículo sin variantes sigue igual que hoy
+- `variante_id` nullable en `articulo_stock` y `stock_movimientos`
+- Frontend: grilla matriz talle×color (carga y stock), alta masiva de combinaciones, presets por rubro
+- Diferido documentado: serie/IMEI, lote/vencimiento, modificadores de resto, equivalencias de repuestos
+
 ## FASE 3 — Ventas y Facturación Electrónica
 
 **Entregable: facturo con CAE real a mis clientes y llevo su cuenta corriente.**
