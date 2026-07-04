@@ -29,3 +29,6 @@ desktop.ini
 # Logs y temporales
 *.log
 tmp/
+
+.vercel
+.env*
