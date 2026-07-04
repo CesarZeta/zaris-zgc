@@ -45,6 +45,15 @@ Mismo stack que ZGE, para reusar patrones, auth y experiencia:
 
 Consultar el `CLAUDE.md` de ZGE (`C:\Users\Cesar\Documents\ZARIS\Desarrollo\ZGE\CLAUDE.md`) para los patrones ya resueltos (auth, roles, estructura de módulos React) antes de reinventar algo.
 
+### Diseño visual (decidido 2026-07-04): «ZARIS Heredado»
+
+César eligió (entre 3 mockups comparados) la identidad de suite con ZGE:
+- **Paleta**: crema `#f2f1ed` de fondo, tinta `#26251e`, acento único naranja `#f54e00`, dorado `#c08532` secundario, éxito `#1f8a65`, error `#cf2d56`. Superficies `--surface-100..500` y bordes rgba de tinta como en ZGE.
+- **Tipografía**: Space Grotesk (display/UI) + JetBrains Mono (códigos, CUIT, importes) — copiar fuentes y `tokens.css` desde `ZGE/web-app/src/styles/` y `assets/fonts/`.
+- **Forma**: radios chicos (2-4px), bordes hairline, sombras suaves; sidebar tinta oscura con ítem activo naranja.
+- Regla heredada de ZGE: **el naranja es del brand** — los estados usan otros colores (éxito verde, error rojo, advertencia amarillo lejos del naranja).
+- Los estados de comprobantes/clientes se codifican con chips/pills; números siempre `tabular-nums`.
+
 ## 3. Arquitectura: nube + nodo de sucursal (decidido 2026-07-03: "online y red LAN")
 
 El POS debe poder facturar **aunque se corte internet**, igual que el legacy. La arquitectura es híbrida:
