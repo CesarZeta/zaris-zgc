@@ -5,10 +5,13 @@ from app.api.v1.articulos import router as articulos_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.catalogos_articulos import router as catalogos_articulos_router
 from app.api.v1.clientes import router as clientes_router
+from app.api.v1.cobranzas import router as cobranzas_router
+from app.api.v1.comprobantes import router as comprobantes_router
 from app.api.v1.empresa import router as empresa_router
 from app.api.v1.entidades import router as entidades_router
 from app.api.v1.stock import router as stock_router
 from app.api.v1.variantes import router as variantes_router
+from app.api.v1.ventas_config import router as ventas_config_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -24,6 +27,9 @@ app.include_router(articulos_router, prefix="/api/v1")
 app.include_router(variantes_router, prefix="/api/v1")
 app.include_router(stock_router, prefix="/api/v1")
 app.include_router(empresa_router, prefix="/api/v1")
+app.include_router(ventas_config_router, prefix="/api/v1")
+app.include_router(comprobantes_router, prefix="/api/v1")
+app.include_router(cobranzas_router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,

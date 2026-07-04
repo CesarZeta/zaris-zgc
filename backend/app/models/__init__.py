@@ -22,6 +22,20 @@ from app.models.bue import (
     Zona,
 )
 from app.models.nucleo import Sucursal, Tenant, Usuario
+from app.models.ventas import (
+    ArcaConfig,
+    ArcaToken,
+    Comprobante,
+    ComprobanteAlicuota,
+    ComprobanteItem,
+    ComprobanteVencimiento,
+    Imputacion,
+    Numeracion,
+    PuntoVenta,
+    Recibo,
+    ReciboMedio,
+    TipoComprobante,
+)
 
 __all__ = [
     "Base",
@@ -46,4 +60,16 @@ __all__ = [
     "Atributo",
     "AtributoValor",
     "ArticuloVariante",
+    "PuntoVenta",
+    "TipoComprobante",
+    "Numeracion",
+    "Comprobante",
+    "ComprobanteItem",
+    "ComprobanteAlicuota",
+    "ComprobanteVencimiento",
+    "Recibo",
+    "ReciboMedio",
+    "Imputacion",
+    "ArcaConfig",
+    "ArcaToken",
 ]
