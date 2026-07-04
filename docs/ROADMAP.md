@@ -61,20 +61,21 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - [x] API verificada con 44 pruebas en vivo (incl. aislamiento de tenant); frontend verificado E2E en navegador.
 - Nota: campos legacy diferidos con trazabilidad en observaciones: proveedor (Fase 4), unidad de compra/coeficiente (Fase 4), bonificaciones por lista, cuenta contable (módulo Contabilidad).
 
-## FASE 2.5 — Rubros y Variantes de artículos (multipropósito)
+## FASE 2.5 — Rubros y Variantes de artículos (multipropósito) ✅ (completada 2026-07-04)
 
-**Entregable: una tienda de ropa carga su catálogo con talles y colores; un tenant elige su rubro y el sistema se adapta.**
+**Entregable: una tienda de ropa carga su catálogo con talles y colores; un tenant elige su rubro y el sistema se adapta.** ✔ verificado E2E (Empresa Demo SRL como tienda de indumentaria).
 
 > Mandato de César 2026-07-04: gestión central general con customización por rubro;
 > POS full orientados al rubro. Diseño completo en `DISENO-RUBROS-Y-VARIANTES.md`
 > (con estadística CACE 2025 / global 2026 y evaluación categoría por categoría).
-> Va ANTES de Ventas porque las líneas de comprobante referencian variantes.
+> Fue ANTES de Ventas porque las líneas de comprobante referencian variantes.
 
-- Switch de rubro por tenant (`tenants.rubro`): presets de UI, flags visibles, atributos sugeridos y POS objetivo — sin bifurcar el modelo de datos
-- Atributos por tenant (Talle, Color, Gusto, Capacidad...) con valores ordenados
-- Variantes: combinación de hasta 3 atributos con EAN propio, stock propio y diferencial de precio; artículo sin variantes sigue igual que hoy
-- `variante_id` nullable en `articulo_stock` y `stock_movimientos`
-- Frontend: grilla matriz talle×color (carga y stock), alta masiva de combinaciones, presets por rubro
+- [x] Switch de rubro por tenant (`tenants.rubro`, migración 004): 6 rubros con presets de UI y siembra idempotente de atributos sugeridos (indumentaria: Talle XS–XXL + Color) — sin bifurcar el modelo de datos. Página Configuración en el frontend.
+- [x] Atributos por tenant (Talle, Color, Gusto, Capacidad...) con valores ordenados, alta rápida desde el form
+- [x] Variantes: combinación de hasta 3 atributos (unique NULLS NOT DISTINCT), EAN propio (unicidad cruzada artículo↔variante en ambos sentidos), sufijo SKU autogenerado, diferencial de precio, activo
+- [x] `variante_id` nullable en `articulo_stock` y `stock_movimientos`: si el artículo tiene variantes activas, ajustes/transferencias/kardex exigen variante; sin variantes, opera igual que siempre (los 12.208 artículos migrados intactos)
+- [x] Frontend: chips de valores + "Generar combinaciones" (producto cartesiano idempotente), tabla de variantes con EAN/dif/stock editables inline, selector de variante en ajustes y transferencias, chips de variante en stock y kardex, flags de súper ocultos según rubro
+- [x] Verificado: 35 pruebas de API en vivo + E2E en navegador (rubro, generación 3×2, XXL/Rojo desde la UI, stock por variante)
 - Diferido documentado: serie/IMEI, lote/vencimiento, modificadores de resto, equivalencias de repuestos
 
 ## FASE 3 — Ventas y Facturación Electrónica

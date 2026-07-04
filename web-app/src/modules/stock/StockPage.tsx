@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
-import type { Articulo, Deposito, Movimiento, StockFila } from "../../lib/types";
+import type { Articulo, Deposito, Movimiento, StockFila, Variante } from "../../lib/types";
 
 const POR_PAGINA = 50;
 const fmtCant = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 });
@@ -76,6 +76,55 @@ function BuscadorArticulo({
   );
 }
 
+// selector de variante: aparece solo si el artículo tiene variantes activas
+function SelectorVariante({
+  articulo,
+  varianteId,
+  onCambiar,
+  inicial,
+}: {
+  articulo: Articulo | null;
+  varianteId: string;
+  onCambiar: (id: string, requerida: boolean) => void;
+  inicial?: string | null;
+}) {
+  const [variantes, setVariantes] = useState<Variante[]>([]);
+
+  useEffect(() => {
+    if (!articulo) {
+      setVariantes([]);
+      onCambiar("", false);
+      return;
+    }
+    void apiGet<Variante[]>(`/articulos/${articulo.id}/variantes`).then(({ data }) => {
+      const activas = data.filter((v) => v.activo);
+      setVariantes(activas);
+      const preseleccion = inicial && activas.some((v) => v.id === inicial) ? inicial : "";
+      onCambiar(preseleccion, activas.length > 0);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articulo?.id]);
+
+  if (!articulo || variantes.length === 0) return null;
+  return (
+    <div className="field">
+      <label>Variante *</label>
+      <select
+        className="select"
+        value={varianteId}
+        onChange={(ev) => onCambiar(ev.target.value, true)}
+      >
+        <option value="">— elegir —</option>
+        {variantes.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.etiqueta}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // ---------- modal de ajuste ----------
 
 function AjusteModal({
@@ -89,6 +138,8 @@ function AjusteModal({
 }) {
   const [articulo, setArticulo] = useState<Articulo | null>(null);
   const [depositoId, setDepositoId] = useState(inicial?.deposito_id ?? depositos[0]?.id ?? "");
+  const [varianteId, setVarianteId] = useState("");
+  const [varianteRequerida, setVarianteRequerida] = useState(false);
   const [modo, setModo] = useState<"recuento" | "delta">("recuento");
   const [cantidad, setCantidad] = useState("");
   const [obs, setObs] = useState("");
@@ -110,6 +161,7 @@ function AjusteModal({
       await apiPost("/stock/ajuste", {
         articulo_id: articulo.id,
         deposito_id: depositoId,
+        variante_id: varianteId || null,
         [modo === "recuento" ? "cantidad_final" : "delta"]: Number(cantidad.replace(",", ".")),
         observaciones: obs.trim() || null,
       });
@@ -129,6 +181,15 @@ function AjusteModal({
           <label>Artículo *</label>
           <BuscadorArticulo elegido={articulo} onElegir={setArticulo} />
         </div>
+        <SelectorVariante
+          articulo={articulo}
+          varianteId={varianteId}
+          inicial={inicial?.variante_id}
+          onCambiar={(id, req) => {
+            setVarianteId(id);
+            setVarianteRequerida(req);
+          }}
+        />
         <div className="fila">
           <div className="field">
             <label>Depósito *</label>
@@ -183,7 +244,7 @@ function AjusteModal({
           </button>
           <button
             className="btn btn-primary"
-            disabled={!articulo || cantidad === "" || guardando}
+            disabled={!articulo || cantidad === "" || guardando || (varianteRequerida && !varianteId)}
             type="submit"
           >
             {guardando ? "Guardando…" : "Registrar ajuste"}
@@ -206,6 +267,8 @@ function TransferenciaModal({
   const [articulo, setArticulo] = useState<Articulo | null>(null);
   const [origenId, setOrigenId] = useState(depositos[0]?.id ?? "");
   const [destinoId, setDestinoId] = useState(depositos[1]?.id ?? "");
+  const [varianteId, setVarianteId] = useState("");
+  const [varianteRequerida, setVarianteRequerida] = useState(false);
   const [cantidad, setCantidad] = useState("");
   const [obs, setObs] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +284,7 @@ function TransferenciaModal({
         articulo_id: articulo.id,
         origen_id: origenId,
         destino_id: destinoId,
+        variante_id: varianteId || null,
         cantidad: Number(cantidad.replace(",", ".")),
         observaciones: obs.trim() || null,
       });
@@ -240,6 +304,14 @@ function TransferenciaModal({
           <label>Artículo *</label>
           <BuscadorArticulo elegido={articulo} onElegir={setArticulo} />
         </div>
+        <SelectorVariante
+          articulo={articulo}
+          varianteId={varianteId}
+          onCambiar={(id, req) => {
+            setVarianteId(id);
+            setVarianteRequerida(req);
+          }}
+        />
         <div className="fila">
           <div className="field">
             <label>Desde *</label>
@@ -295,7 +367,13 @@ function TransferenciaModal({
           </button>
           <button
             className="btn btn-primary"
-            disabled={!articulo || cantidad === "" || origenId === destinoId || guardando}
+            disabled={
+              !articulo ||
+              cantidad === "" ||
+              origenId === destinoId ||
+              guardando ||
+              (varianteRequerida && !varianteId)
+            }
             type="submit"
           >
             {guardando ? "Transfiriendo…" : "Transferir"}
@@ -352,6 +430,7 @@ function KardexModal({
                 <tr>
                   <th>Fecha</th>
                   <th>Tipo</th>
+                  <th>Variante</th>
                   <th>Dep.</th>
                   <th className="num">Cantidad</th>
                   <th className="num">Saldo</th>
@@ -363,6 +442,7 @@ function KardexModal({
                   <tr key={m.id}>
                     <td className="mono">{fmtFecha.format(new Date(m.fecha))}</td>
                     <td>{TIPOS_MOV[m.tipo] ?? m.tipo}</td>
+                    <td>{m.variante_etiqueta ?? "—"}</td>
                     <td className="mono">{depPorId.get(m.deposito_id) ?? "?"}</td>
                     <td className={`num mono ${Number(m.cantidad) < 0 ? "neg" : "pos"}`}>
                       {Number(m.cantidad) > 0 ? "+" : ""}
@@ -536,9 +616,15 @@ export default function StockPage() {
             {filas.map((f) => {
               const bajo = Number(f.stock_minimo) > 0 && Number(f.cantidad) < Number(f.stock_minimo);
               return (
-                <tr key={`${f.articulo_id}-${f.deposito_id}`} onClick={() => setKardexFila(f)}>
+                <tr
+                  key={`${f.articulo_id}-${f.deposito_id}-${f.variante_id ?? ""}`}
+                  onClick={() => setKardexFila(f)}
+                >
                   <td className="mono">{f.articulo_codigo}</td>
-                  <td>{f.articulo_descripcion}</td>
+                  <td>
+                    {f.articulo_descripcion}
+                    {f.variante_etiqueta && <span className="chip chip-variante">{f.variante_etiqueta}</span>}
+                  </td>
                   <td>
                     {f.deposito_codigo} — {f.deposito_nombre}
                   </td>

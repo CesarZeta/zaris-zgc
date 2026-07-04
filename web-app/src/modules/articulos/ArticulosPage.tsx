@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
-import type { Articulo, Cotizacion, Familia, Marca, Unidad } from "../../lib/types";
+import type { Articulo, Cotizacion, Empresa, Familia, Marca, Rubro, Unidad } from "../../lib/types";
 import ArticuloForm from "./ArticuloForm";
 import CambioPreciosModal from "./CambioPreciosModal";
 
@@ -37,6 +37,7 @@ export default function ArticulosPage() {
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [cotizacion, setCotizacion] = useState<Cotizacion | null>(null);
+  const [rubro, setRubro] = useState<Rubro | null>(null);
 
   const [formAbierto, setFormAbierto] = useState(false);
   const [editando, setEditando] = useState<Articulo | null>(null);
@@ -55,16 +56,19 @@ export default function ArticulosPage() {
 
   const cargarCatalogos = useCallback(async () => {
     try {
-      const [f, m, u, c] = await Promise.all([
+      const [f, m, u, c, e, r] = await Promise.all([
         apiGet<Familia[]>("/catalogos-articulos/familias"),
         apiGet<Marca[]>("/catalogos-articulos/marcas"),
         apiGet<Unidad[]>("/catalogos-articulos/unidades"),
         apiGet<Cotizacion | null>("/catalogos-articulos/cotizacion"),
+        apiGet<Empresa>("/empresa"),
+        apiGet<Rubro[]>("/empresa/rubros"),
       ]);
       setFamilias(f.data);
       setMarcas(m.data);
       setUnidades(u.data);
       setCotizacion(c.data);
+      setRubro(r.data.find((x) => x.codigo === e.data.rubro) ?? null);
     } catch {
       /* los selects quedan vacíos; el listado principal reporta el error */
     }
@@ -301,6 +305,7 @@ export default function ArticulosPage() {
           familias={familias}
           marcas={marcas}
           unidades={unidades}
+          rubro={rubro}
           onCerrar={cerrarForm}
         />
       )}

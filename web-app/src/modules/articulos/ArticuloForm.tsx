@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { ApiError, apiPost, apiPut } from "../../lib/api";
-import type { Articulo, Familia, Marca, Unidad } from "../../lib/types";
+import type { Articulo, Familia, Marca, Rubro, Unidad } from "../../lib/types";
+import VariantesSection from "./VariantesSection";
 
 interface Props {
   articulo: Articulo | null; // null = alta
   familias: Familia[];
   marcas: Marca[];
   unidades: Unidad[];
+  rubro: Rubro | null; // preset del rubro del tenant (null = sin preset)
   onCerrar: (refrescar: boolean) => void;
 }
 
@@ -21,7 +23,9 @@ function fijar2(v: number): string {
   return (Math.round(v * 100) / 100).toFixed(2);
 }
 
-export default function ArticuloForm({ articulo: a, familias, marcas, unidades, onCerrar }: Props) {
+export default function ArticuloForm({ articulo: a, familias, marcas, unidades, rubro, onCerrar }: Props) {
+  // preset por rubro: los flags del POS súper solo aplican donde tienen sentido
+  const mostrarFlagsSuper = !rubro || rubro.flags_pos_super || rubro.codigo === "general";
   const [form, setForm] = useState({
     codigo: a?.codigo ?? "",
     codigo_barras: a?.codigo_barras ?? "",
@@ -379,7 +383,14 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
           Precios en dólares (se convierten con la cotización vigente)
         </label>
 
-        <div className="seccion">Stock y POS</div>
+        <div className="seccion">Variantes (talle, color, gusto…)</div>
+        {a ? (
+          <VariantesSection articuloId={a.id} />
+        ) : (
+          <p className="config-ayuda">Guardá el artículo primero para cargar sus variantes.</p>
+        )}
+
+        <div className="seccion">Stock{mostrarFlagsSuper ? " y POS" : ""}</div>
         <div className="fila">
           <label className="check">
             <input
@@ -389,33 +400,37 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
             />
             Controla stock
           </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={form.pesable}
-              onChange={(ev) => set("pesable", ev.target.checked)}
-            />
-            Pesable (balanza)
-          </label>
+          {mostrarFlagsSuper && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.pesable}
+                onChange={(ev) => set("pesable", ev.target.checked)}
+              />
+              Pesable (balanza)
+            </label>
+          )}
         </div>
-        <div className="fila">
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={form.venta_por_depto}
-              onChange={(ev) => set("venta_por_depto", ev.target.checked)}
-            />
-            Venta por departamento
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={form.es_envase_retornable}
-              onChange={(ev) => set("es_envase_retornable", ev.target.checked)}
-            />
-            Envase retornable
-          </label>
-        </div>
+        {mostrarFlagsSuper && (
+          <div className="fila">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.venta_por_depto}
+                onChange={(ev) => set("venta_por_depto", ev.target.checked)}
+              />
+              Venta por departamento
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.es_envase_retornable}
+                onChange={(ev) => set("es_envase_retornable", ev.target.checked)}
+              />
+              Envase retornable
+            </label>
+          </div>
+        )}
 
         <div className="field" style={{ marginTop: "var(--space-6)" }}>
           <label>Observaciones</label>

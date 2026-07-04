@@ -373,6 +373,84 @@
   font-size: var(--size-btn);
 }
 
+/* ---------- Rubros y variantes (Fase 2.5) ---------- */
+.config-card {
+  background: var(--zaris-white);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  max-width: 860px;
+}
+.config-card .seccion {
+  font-size: var(--size-caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-2);
+  margin: 0 0 var(--space-5);
+}
+.config-ayuda { color: var(--fg-3); font-size: var(--size-btn); margin: 0 0 var(--space-6); }
+.rubros-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-5);
+}
+.rubro-card {
+  text-align: left;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  background: var(--zaris-white);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.rubro-card:hover { border-color: var(--border-strong); }
+.rubro-card.activo { border: 2px solid var(--zaris-orange); }
+.rubro-nombre { font-weight: 600; font-size: var(--size-btn); }
+.rubro-detalle { color: var(--fg-3); font-size: var(--size-caption); }
+
+.variantes-seccion { margin-bottom: var(--space-6); }
+.atributo-fila { display: flex; gap: var(--space-5); align-items: baseline; margin-bottom: var(--space-4); }
+.atributo-nombre {
+  min-width: 90px;
+  font-size: var(--size-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.atributo-valores { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.valor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-5);
+  font-size: var(--size-btn);
+  cursor: pointer;
+  background: var(--zaris-white);
+}
+.valor-chip.sel { border-color: var(--zaris-orange); background: color-mix(in srgb, var(--zaris-orange) 10%, transparent); font-weight: 600; }
+.valor-chip input { accent-color: var(--zaris-orange); }
+.variantes-acciones { display: flex; gap: var(--space-5); align-items: center; margin: var(--space-4) 0 var(--space-6); }
+.tabla-variantes { background: var(--zaris-white); border: 1px solid var(--border-primary); border-radius: var(--radius-md); }
+.variante-inactiva td { opacity: 0.45; }
+.input-mini { padding: var(--space-2) var(--space-4); font-size: var(--size-caption); max-width: 160px; }
+.chip-variante {
+  margin-left: var(--space-3);
+  background: var(--surface-200, var(--surface-100));
+  border-color: var(--border-medium);
+  color: var(--fg-2);
+  display: inline-block;
+  font-size: var(--size-caption);
+  font-weight: 600;
+  padding: 1px var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-medium);
+}
+
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar {

@@ -28,6 +28,12 @@ export default function AppShell() {
         <NavLink to="/stock" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Stock
         </NavLink>
+        <NavLink
+          to="/configuracion"
+          className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+        >
+          Configuración
+        </NavLink>
         {MODULOS_PROXIMOS.map((m) => (
           <span key={m} className="nav-item soon">
             {m}

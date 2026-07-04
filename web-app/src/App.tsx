@@ -3,6 +3,7 @@ import AppShell from "./app/AppShell";
 import LoginPage from "./app/LoginPage";
 import ArticulosPage from "./modules/articulos/ArticulosPage";
 import ClientesPage from "./modules/clientes/ClientesPage";
+import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
 import StockPage from "./modules/stock/StockPage";
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="/clientes" element={<ClientesPage />} />
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
+          <Route path="/configuracion" element={<ConfiguracionPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

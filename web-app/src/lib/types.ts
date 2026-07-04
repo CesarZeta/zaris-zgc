@@ -123,6 +123,8 @@ export interface Articulo {
 export interface StockFila {
   articulo_id: string;
   deposito_id: string;
+  variante_id: string | null;
+  variante_etiqueta: string | null;
   cantidad: string;
   stock_minimo: string;
   ubicacion: string | null;
@@ -132,10 +134,56 @@ export interface StockFila {
   deposito_nombre: string;
 }
 
+// ===== Rubros y variantes (Fase 2.5) =====
+
+export interface Empresa {
+  id: string;
+  razon_social: string;
+  nombre_fantasia: string | null;
+  rubro: string;
+}
+
+export interface Rubro {
+  codigo: string;
+  nombre: string;
+  flags_pos_super: boolean;
+  variantes_destacadas: boolean;
+  en_dolares_destacado: boolean;
+}
+
+export interface AtributoValor {
+  id: string;
+  valor: string;
+  orden: number;
+}
+
+export interface Atributo {
+  id: string;
+  nombre: string;
+  orden: number;
+  valores: AtributoValor[];
+}
+
+export interface Variante {
+  id: string;
+  articulo_id: string;
+  valor_1_id: string;
+  valor_2_id: string | null;
+  valor_3_id: string | null;
+  etiqueta: string;
+  codigo_barras: string | null;
+  sku_sufijo: string | null;
+  dif_precio: string;
+  activo: boolean;
+  stock_total: string;
+}
+
 export interface Movimiento {
   id: string;
   articulo_id: string;
   deposito_id: string;
+  variante_id: string | null;
+  variante_etiqueta: string | null;
   fecha: string;
   tipo: string;
   cantidad: string;
