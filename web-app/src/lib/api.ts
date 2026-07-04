@@ -53,3 +53,25 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 export async function apiPut<T>(path: string, body: unknown): Promise<T> {
   return (await request<T>(path, { method: "PUT", body: JSON.stringify(body) })).data;
 }
+
+export async function apiUpload<T>(path: string, campo: string, archivo: File): Promise<T> {
+  const sesion = getSesion();
+  const form = new FormData();
+  form.append(campo, archivo);
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: sesion ? { Authorization: `Bearer ${sesion.access_token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    let detalle = `Error ${res.status}`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") detalle = body.detail;
+    } catch {
+      /* cuerpo no-JSON */
+    }
+    throw new ApiError(res.status, detalle);
+  }
+  return (await res.json()) as T;
+}

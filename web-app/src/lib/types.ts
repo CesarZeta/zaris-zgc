@@ -45,6 +45,106 @@ export interface Cliente {
   entidad: Entidad;
 }
 
+// ===== Artículos y Stock (Fase 2) =====
+
+export interface Subfamilia {
+  id: string;
+  familia_id: string;
+  nombre: string;
+  activa: boolean;
+}
+
+export interface Familia {
+  id: string;
+  nombre: string;
+  activa: boolean;
+  subfamilias: Subfamilia[];
+}
+
+export interface Marca {
+  id: string;
+  nombre: string;
+  activa: boolean;
+}
+
+export interface Unidad {
+  id: string;
+  codigo: string;
+  nombre: string;
+}
+
+export interface Deposito {
+  id: string;
+  codigo: string;
+  nombre: string;
+  sucursal_id: string | null;
+  activo: boolean;
+}
+
+export interface Cotizacion {
+  id: string;
+  valor: string;
+  vigente_desde: string;
+}
+
+export interface Articulo {
+  id: string;
+  codigo: string;
+  codigo_barras: string | null;
+  descripcion: string;
+  familia_id: string | null;
+  subfamilia_id: string | null;
+  marca_id: string | null;
+  unidad_id: string | null;
+  controla_stock: boolean;
+  costo: string;
+  costo_con_iva: boolean;
+  tasa_iva: string;
+  utilidad_1: string;
+  utilidad_2: string;
+  utilidad_3: string;
+  utilidad_4: string;
+  precio_1: string;
+  precio_2: string;
+  precio_3: string;
+  precio_4: string;
+  en_dolares: boolean;
+  impuesto_interno: string;
+  pesable: boolean;
+  venta_por_depto: boolean;
+  es_envase_retornable: boolean;
+  envase_articulo_id: string | null;
+  precio_actualizado_at: string | null;
+  observaciones: string | null;
+  activo: boolean;
+  stock_total: string | null;
+}
+
+export interface StockFila {
+  articulo_id: string;
+  deposito_id: string;
+  cantidad: string;
+  stock_minimo: string;
+  ubicacion: string | null;
+  articulo_codigo: string;
+  articulo_descripcion: string;
+  deposito_codigo: string;
+  deposito_nombre: string;
+}
+
+export interface Movimiento {
+  id: string;
+  articulo_id: string;
+  deposito_id: string;
+  fecha: string;
+  tipo: string;
+  cantidad: string;
+  saldo_resultante: string;
+  comprobante: string | null;
+  observaciones: string | null;
+  grupo_id: string | null;
+}
+
 export const CONDICIONES_IVA: Record<string, string> = {
   RI: "Resp. Inscripto",
   MT: "Monotributo",

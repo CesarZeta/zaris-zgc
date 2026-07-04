@@ -235,6 +235,144 @@
 }
 .check { display: flex; align-items: center; gap: var(--space-3); font-size: var(--size-btn); color: var(--fg-2); }
 
+/* ---------- Artículos y Stock (Fase 2) ---------- */
+.tabla th.num,
+.tabla td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tabla td.neg { color: var(--color-error); font-weight: 600; }
+.tabla td.pos { color: var(--color-success); }
+.mono { font-family: var(--font-mono, "JetBrains Mono", monospace); font-variant-numeric: tabular-nums; }
+.toolbar-select { max-width: 240px; }
+.chip-usd {
+  margin-left: var(--space-3);
+  background: color-mix(in srgb, var(--zaris-gold) 16%, transparent);
+  border-color: var(--zaris-gold);
+  color: var(--zaris-gold);
+}
+.cotizacion {
+  margin-left: var(--space-6);
+  font-size: var(--size-caption);
+  color: var(--zaris-gold);
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+}
+.cotizacion:hover { text-decoration: underline; }
+
+.mini-btn {
+  font-size: var(--size-caption);
+  color: var(--zaris-orange);
+  padding: 0 var(--space-2);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.mini-btn:hover { text-decoration: underline; }
+
+.precios-grid {
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr;
+  gap: var(--space-3) var(--space-6);
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+.precios-grid .precios-fila { display: contents; }
+.precios-head {
+  font-size: var(--size-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.precios-head.num, .precios-grid input.num { text-align: right; }
+.precios-lista { font-size: var(--size-btn); color: var(--fg-2); }
+
+/* modal centrado (cambio de precios, ajustes, kardex) */
+.modal {
+  width: min(620px, calc(100% - var(--space-8)));
+  max-height: calc(100vh - var(--space-16));
+  overflow-y: auto;
+  background: var(--zaris-cream);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-10);
+  margin: auto;
+}
+.modal h2 { font-size: var(--size-title-sm); margin: 0 0 var(--space-8); letter-spacing: var(--track-title); }
+.modal .seccion {
+  font-size: var(--size-caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-2);
+  margin: var(--space-8) 0 var(--space-6);
+}
+.modal-ancho { width: min(860px, calc(100% - var(--space-8))); }
+.drawer-backdrop:has(.modal) { justify-content: center; align-items: center; }
+
+.listas-checks { display: flex; gap: var(--space-6); padding-top: var(--space-3); }
+.previa {
+  background: var(--zaris-white);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  font-size: var(--size-btn);
+  margin-top: var(--space-4);
+}
+.previa .tabla-mini { margin-top: var(--space-4); }
+.tabla-mini th, .tabla-mini td { padding: var(--space-3) var(--space-5); }
+.cambio-ok { font-size: var(--size-ui); color: var(--color-success); }
+
+.import-resultado {
+  position: relative;
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+  color: var(--fg-1);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-10) var(--space-5) var(--space-6);
+  font-size: var(--size-btn);
+  margin-bottom: var(--space-6);
+}
+.import-resultado ul { margin: var(--space-3) 0 0; padding-left: var(--space-8); }
+.import-resultado .btn-cerrar {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-4);
+  font-size: var(--size-ui);
+  color: var(--fg-3);
+}
+
+/* buscador de artículo en modales de stock */
+.buscador { position: relative; }
+.buscador-opciones {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--zaris-white);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.buscador-opciones button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--size-btn);
+}
+.buscador-opciones button:hover { background: var(--surface-100); }
+.buscador-elegido {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--zaris-white);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--size-btn);
+}
+
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar {
