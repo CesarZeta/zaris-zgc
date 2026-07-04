@@ -1,0 +1,28 @@
+# Legacy RevoSolution: material de referencia local, NUNCA al repo
+# (gigas de binarios y datos reales de clientes — información sensible)
+Revosolution Software/
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Node / Vite
+node_modules/
+dist/
+*.local
+
+# IDE / SO
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# Logs y temporales
+*.log
+tmp/
