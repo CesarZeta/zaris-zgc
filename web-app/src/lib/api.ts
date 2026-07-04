@@ -25,7 +25,8 @@ async function request<T>(
 
   if (res.status === 401 && !path.startsWith("/auth/login")) {
     clearSesion();
-    window.location.href = "/login";
+    // BASE_URL cubre el subpath de GitHub Pages (/zaris-zgc/)
+    window.location.href = `${import.meta.env.BASE_URL}login`;
     throw new ApiError(401, "Sesión vencida");
   }
   if (!res.ok) {
