@@ -44,20 +44,22 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 
 ### Estado del entorno dev (para retomar)
 
-- DB local: `zgc_dev` en PostgreSQL 17 (127.0.0.1:5432). Migraciones 001+002 aplicadas (ver HISTORIAL_MIGRACIONES.md).
-- Usuarios dev: `admin@zgc.dev` / `123456` (tenant "Empresa Demo SRL") · `omni@zgc.dev` / `123456` (tenant "Omni (prueba)", 434 clientes migrados).
+- DB local: `zgc_dev` en PostgreSQL 17 (127.0.0.1:5432). Migraciones 001+002+003 aplicadas (ver HISTORIAL_MIGRACIONES.md).
+- Usuarios dev: `admin@zgc.dev` / `123456` (tenant "Empresa Demo SRL") · `omni@zgc.dev` / `123456` (tenant "Omni (prueba)", 434 clientes migrados) · `super@zgc.dev` / `123456` (tenant "Super (prueba)", 12.208 artículos migrados).
 - Correr backend: `cd backend; $env:ENV_FILE=".env.local"; .venv\Scripts\python.exe -m uvicorn app.main:app --port 8021`
 - Correr frontend: `cd web-app; npm run dev` → http://localhost:5173 (proxy `/api` → 8021)
 
-## FASE 2 — Artículos y Stock
+## FASE 2 — Artículos y Stock ✅ (completada 2026-07-04)
 
-**Entregable: catálogo completo cargado (o migrado) y stock confiable.**
+**Entregable: catálogo completo cargado (o migrado) y stock confiable.** ✔ demostrado con los 12.208 artículos reales de Super.
 
-- Familias/subfamilias, marcas, unidades
-- Maestro de artículos: código interno + código de barras, 4 listas de precios con márgenes, tasa IVA por artículo, **precios en USD + cotización** (decisión MVP), flags previstos del POS super (pesable, envase, venta por depto. — sin funcionalidad todavía)
-- Depósitos, movimientos de stock (kardex), ajustes
-- Cambio masivo de precios (porcentual / por margen), import desde Excel
-- Migrador v2: ARTICULO.DBF + FAMILIAS + STOCK
+- [x] Familias/subfamilias, marcas, unidades (catálogos por tenant, alta rápida desde el form)
+- [x] Maestro de artículos: código interno + código de barras, 4 listas de precios con márgenes (cálculo bidireccional costo↔margen↔precio, con costo con/sin IVA), tasa IVA por artículo, **precios en USD + cotización** (tabla `cotizaciones` con historia; widget en UI), flags del POS super (pesable, envase retornable + vínculo a artículo envase, venta por depto. — sin funcionalidad todavía)
+- [x] Depósitos, saldos por depósito (`articulo_stock`), kardex (`stock_movimientos` con `saldo_resultante` sellado), ajustes por recuento o delta, transferencias interdepósito (dos patas atadas por `grupo_id`, locks ordenados)
+- [x] Cambio masivo de precios (3 modos: % precios / % costo / fijar margen; filtros por familia/marca/texto; vista previa dry-run) + import desde Excel (upsert por código, catálogos on-the-fly, savepoint por fila)
+- [x] Migrador v2 (`tools/migrar_articulos.py`): ARTICULO.DBF + FAMILIAS + SUBFLIA + DEPOSITO + STOCK. Calibrado con recon de Super (encoding por LDID: cp1252 vs cp850; COSTIVA 1/2; UNIDAD sucia; precios literales; stock solo con contenido) y verificado adversarialmente (sumas al centavo, muestra de 30). Idempotente.
+- [x] API verificada con 44 pruebas en vivo (incl. aislamiento de tenant); frontend verificado E2E en navegador.
+- Nota: campos legacy diferidos con trazabilidad en observaciones: proveedor (Fase 4), unidad de compra/coeficiente (Fase 4), bonificaciones por lista, cuenta contable (módulo Contabilidad).
 
 ## FASE 3 — Ventas y Facturación Electrónica
 
