@@ -1,0 +1,12 @@
+# Solo el backend serverless va a Vercel; el resto no debe subirse
+Revosolution Software/
+web-app/
+docs/
+tools/
+sql/
+backend/.venv/
+backend/Dockerfile
+backend/__pycache__/
+**/__pycache__/
+*.md
+.github/
