@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPut } from "../../lib/api";
 import type { Empresa, Rubro } from "../../lib/types";
+import ArcaConfigSection from "../ventas/ArcaConfigSection";
 
 const DETALLE: Record<string, string> = {
   general: "Sin presets especiales: todas las opciones visibles.",
@@ -78,6 +79,8 @@ export default function ConfiguracionPage() {
           ))}
         </div>
       </div>
+
+      <ArcaConfigSection />
     </>
   );
 }

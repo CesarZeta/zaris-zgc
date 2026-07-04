@@ -1,7 +1,7 @@
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { clearSesion, getSesion } from "../lib/auth";
 
-const MODULOS_PROXIMOS = ["Inicio", "Ventas", "Compras", "Caja y Bancos", "Punto de Venta"];
+const MODULOS_PROXIMOS = ["Inicio", "Compras", "Caja y Bancos", "Punto de Venta"];
 
 export default function AppShell() {
   const navigate = useNavigate();
@@ -21,6 +21,9 @@ export default function AppShell() {
         </div>
         <NavLink to="/clientes" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Clientes
+        </NavLink>
+        <NavLink to="/ventas" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Ventas
         </NavLink>
         <NavLink to="/articulos" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Artículos

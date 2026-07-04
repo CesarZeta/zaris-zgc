@@ -78,15 +78,37 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - [x] Verificado: 35 pruebas de API en vivo + E2E en navegador (rubro, generación 3×2, XXL/Rojo desde la UI, stock por variante)
 - Diferido documentado: serie/IMEI, lote/vencimiento, modificadores de resto, equivalencias de repuestos
 
-## FASE 3 — Ventas y Facturación Electrónica
+## FASE 3 — Ventas y Facturación Electrónica 🔶 (código completo 2026-07-04; falta homologación real)
 
 **Entregable: facturo con CAE real a mis clientes y llevo su cuenta corriente.**
 
-- Presupuestos → facturas/NC/ND (A/B/C según condición IVA emisor/receptor)
-- **pyafipws**: WSAA + WSFEv1 en homologación → producción; comprobante PDF con QR ARCA
-- Cuenta corriente de clientes, cobranzas (recibos), vencimientos, saldos
-- Numeración por punto de venta; comprobantes internos (presupuesto, remito) con numeración propia
-- Listados: ventas, cobranzas, saldos, morosidad
+> Diseño de cumplimiento normativo en `docs/FACTURACION-ARCA.md` (normativa verificada
+> al 2026-07-04: RG 5616 obligatoria desde 1/9/2026 — ZGC la envía siempre —, Ley 27.743
+> transparencia fiscal, RG 5700 umbral CF, RG 4892 QR, RG 5003 letra A a monotributistas).
+
+- [x] Presupuestos → facturas/NC/ND con letra A/B/C calculada por el sistema (matriz
+  emisor × receptor); comprobantes internos X (presupuesto/remito/recibo, RG 1415)
+- [x] Circuito borrador → emitir → inmutable; fiscal emitido se revierte SOLO con NC
+  espejo (auto-imputada contra la factura); remito/presupuesto anulables con reversión de stock
+- [x] Cliente ARCA propio (WSAA firma CMS + WSFEv1 SOAP via httpx/cryptography — decisión
+  documentada en FACTURACION-ARCA.md §9: pyafipws arrastra deps incompatibles con Vercel).
+  Modos por tenant: deshabilitado / **simulado** (CAE prueba marcado) / homologación / producción.
+  Numeración fiscal la manda ARCA (`FECompUltimoAutorizado`+1); `FECompConsultar` ante timeout.
+- [x] Cuenta corriente: saldos por comprobante, recibos con medios de pago + imputaciones
+  (parciales, a cuenta, crédito de NC), vencimientos por condición de venta, saldos/morosidad-lite
+- [x] Stock: la factura/remito descarga (por variante si corresponde), la NC devuelve —
+  kardex sellado con el número de comprobante
+- [x] Impresión HTML (RG 1415): letra + cód. ARCA, CAE+vto, QR RG 4892 (solo CAE real),
+  bloque transparencia fiscal Ley 27.743 en B/C a CF, leyendas X y PRUEBA
+- [x] Frontend módulo Ventas (tabs Comprobantes/Cobranzas/Ctas. ctes.) + config ARCA y
+  puntos de venta en Configuración — verificado E2E en navegador
+- [x] Migración 006 + 66 pruebas de API en vivo (0 fallos)
+- [ ] **Homologación real**: César debe generar certificado (pasos en FACTURACION-ARCA.md §8),
+  cargarlo en Configuración → ARCA y probar contra wswhomo; después producción
+- [ ] Deploy: aplicar migración 006 en Supabase prod ANTES de pushear (el push
+  redeploya Pages/Vercel); registrar en HISTORIAL_MIGRACIONES
+- Diferido documentado: moneda DOL en factura (se convierte con cotización), percepciones
+  (`ImpTrib`), FCE MiPyME, CAEA, remito R con CAI (el X de ZGC no vale para traslado)
 
 ## FASE 4 — Compras y Proveedores
 

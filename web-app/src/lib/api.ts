@@ -55,6 +55,24 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
   return (await request<T>(path, { method: "PUT", body: JSON.stringify(body) })).data;
 }
 
+export async function apiDelete(path: string): Promise<void> {
+  const sesion = getSesion();
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: sesion ? { Authorization: `Bearer ${sesion.access_token}` } : {},
+  });
+  if (!res.ok && res.status !== 204) {
+    let detalle = `Error ${res.status}`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") detalle = body.detail;
+    } catch {
+      /* cuerpo no-JSON */
+    }
+    throw new ApiError(res.status, detalle);
+  }
+}
+
 export async function apiUpload<T>(path: string, campo: string, archivo: File): Promise<T> {
   const sesion = getSesion();
   const form = new FormData();

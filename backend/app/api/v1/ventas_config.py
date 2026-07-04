@@ -14,9 +14,55 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user
 from app.core.cuit import validar_cuit
 from app.core.db import get_db
-from app.models import ArcaConfig, Comprobante, PuntoVenta, Usuario
+from app.models import ArcaConfig, Comprobante, CondicionVenta, PuntoVenta, Usuario
 
 router = APIRouter(prefix="/ventas", tags=["ventas-config"])
+
+
+# ===== Condiciones de venta (contado / cta cte con vencimientos) =====
+
+class CondicionVentaIn(BaseModel):
+    descripcion: str = Field(min_length=2, max_length=60)
+    dias: list[int] = Field(min_length=1, max_length=12)  # [0,30,60] = 3 cuotas
+
+
+class CondicionVentaOut(BaseModel):
+    id: uuid.UUID
+    descripcion: str
+    dias: list[int]
+    activa: bool
+    model_config = {"from_attributes": True}
+
+
+@router.get("/condiciones-venta", response_model=list[CondicionVentaOut])
+async def listar_condiciones_venta(
+    usuario: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    filas = await db.scalars(
+        select(CondicionVenta)
+        .where(CondicionVenta.tenant_id == usuario.tenant_id, CondicionVenta.activa.is_(True))
+        .order_by(CondicionVenta.descripcion)
+    )
+    return list(filas)
+
+
+@router.post(
+    "/condiciones-venta", response_model=CondicionVentaOut, status_code=status.HTTP_201_CREATED
+)
+async def crear_condicion_venta(
+    body: CondicionVentaIn,
+    usuario: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    cond = CondicionVenta(
+        tenant_id=usuario.tenant_id,
+        descripcion=body.descripcion.strip(),
+        dias=sorted(set(body.dias)),
+    )
+    db.add(cond)
+    await db.commit()
+    return cond
 
 
 # ===== Puntos de venta =====

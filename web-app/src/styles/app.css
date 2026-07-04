@@ -469,3 +469,48 @@
   .content { padding: var(--space-6); }
   .fila, .fila-3 { grid-template-columns: 1fr; }
 }
+
+/* ===== Ventas (Fase 3) ===== */
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: var(--space-8);
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-4) var(--space-6);
+  font: inherit;
+  font-size: var(--size-btn);
+  font-weight: 600;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.tab:hover { color: var(--fg-1); }
+.tab.activa { color: var(--zaris-orange); border-bottom-color: var(--zaris-orange); }
+
+.chip-borrador { background: var(--surface-200); }
+.chip-ok { background: var(--color-success); color: #fff; border-color: var(--color-success); }
+.chip-prueba { background: var(--color-warning, #b58a1e); color: #fff; border-color: transparent; }
+.chip-anulado { background: var(--color-error); color: #fff; border-color: var(--color-error); }
+.fila-anulada td { opacity: 0.45; text-decoration: line-through; }
+.fila-anulada td:last-child { text-decoration: none; }
+
+.acciones { white-space: nowrap; }
+.acciones .mini-btn { margin-right: var(--space-2); }
+
+.total-preview {
+  font-size: var(--size-btn);
+  color: var(--fg-2);
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface-100);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm, 4px);
+  white-space: nowrap;
+}
+.col-articulo { min-width: 240px; }
+.config-lista { list-style: none; padding: 0; margin: var(--space-4) 0 0; }
+.config-lista li { padding: var(--space-2) 0; border-bottom: 1px dashed var(--border-primary); }
+textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); resize: vertical; }

@@ -5,6 +5,7 @@ import ArticulosPage from "./modules/articulos/ArticulosPage";
 import ClientesPage from "./modules/clientes/ClientesPage";
 import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
 import StockPage from "./modules/stock/StockPage";
+import VentasPage from "./modules/ventas/VentasPage";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/clientes" replace />} />
           <Route path="/clientes" element={<ClientesPage />} />
+          <Route path="/ventas" element={<VentasPage />} />
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/configuracion" element={<ConfiguracionPage />} />

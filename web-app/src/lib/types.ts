@@ -193,6 +193,165 @@ export interface Movimiento {
   grupo_id: string | null;
 }
 
+// ===== Ventas y Facturación Electrónica (Fase 3) =====
+
+export interface PuntoVenta {
+  id: string;
+  numero: number;
+  descripcion: string;
+  sucursal_id: string | null;
+  electronico: boolean;
+  activo: boolean;
+}
+
+export interface ArcaConfig {
+  modo: string;
+  cuit: string | null;
+  razon_social: string | null;
+  iibb: string | null;
+  inicio_actividades: string | null;
+  concepto: number;
+  umbral_identificar_cf: string;
+  tiene_certificado: boolean;
+  tiene_clave: boolean;
+  comprobantes_emitidos: number;
+}
+
+export interface CondicionVentaCatalogo {
+  id: string;
+  descripcion: string;
+  dias: number[];
+  activa: boolean;
+}
+
+export interface ComprobanteItem {
+  id: string;
+  orden: number;
+  articulo_id: string | null;
+  variante_id: string | null;
+  codigo: string | null;
+  descripcion: string;
+  cantidad: string;
+  precio_unitario: string;
+  bonif_pct: string;
+  tasa_iva: string;
+  importe_neto: string;
+  importe_iva: string;
+  importe_total: string;
+}
+
+export interface ComprobanteAlicuota {
+  tasa: string;
+  codigo_arca: number;
+  base: string;
+  importe: string;
+}
+
+export interface ComprobanteVencimiento {
+  nro_cuota: number;
+  fecha_vto: string;
+  importe: string;
+}
+
+export interface Comprobante {
+  id: string;
+  clase: string;
+  tipo_codigo: string;
+  tipo_descripcion: string;
+  letra: string;
+  punto_venta: number;
+  numero: number | null;
+  numero_formateado: string | null;
+  fecha: string;
+  cliente_id: string | null;
+  receptor_nombre: string;
+  receptor_doc_tipo: number;
+  receptor_doc_nro: string | null;
+  receptor_condicion_iva: string;
+  contado: boolean;
+  condicion_venta_desc: string | null;
+  moneda: string;
+  descuento_pct: string;
+  neto_gravado: string;
+  iva: string;
+  total: string;
+  saldo: string;
+  estado: string;
+  cae: string | null;
+  cae_vencimiento: string | null;
+  arca_resultado: string | null;
+  arca_observaciones: string | null;
+  comprobante_asociado_id: string | null;
+  origen_id: string | null;
+  observaciones: string | null;
+  items: ComprobanteItem[];
+  alicuotas: ComprobanteAlicuota[];
+  vencimientos: ComprobanteVencimiento[];
+}
+
+export interface ReciboMedio {
+  medio: string;
+  importe: string;
+  referencia: string | null;
+}
+
+export interface Recibo {
+  id: string;
+  numero: number;
+  numero_formateado: string;
+  fecha: string;
+  cliente_id: string;
+  receptor_nombre: string;
+  total: string;
+  aplicado: string;
+  a_cuenta: string;
+  estado: string;
+  observaciones: string | null;
+  medios: ReciboMedio[];
+}
+
+export interface SaldoCliente {
+  cliente_id: string;
+  codigo: string | null;
+  nombre: string;
+  saldo: string;
+  vencido: string;
+  limite_credito: string | null;
+}
+
+export interface MovimientoCtaCte {
+  fecha: string;
+  tipo: string;
+  numero: string;
+  debe: string;
+  haber: string;
+  pendiente: string;
+  saldo_acumulado: string;
+}
+
+export interface ImpresionPayload {
+  comprobante: Comprobante;
+  emisor: {
+    razon_social: string;
+    nombre_fantasia: string | null;
+    cuit: string | null;
+    condicion_iva: string;
+    domicilio: string;
+    iibb: string | null;
+    inicio_actividades: string | null;
+  };
+  receptor_condicion_iva_desc: string;
+  codigo_arca: number | null;
+  discrimina_iva: boolean;
+  leyendas: string[];
+  transparencia_fiscal: {
+    titulo: string;
+    iva_contenido: string;
+    otros_impuestos_nacionales_indirectos: string;
+  } | null;
+  qr_svg: string | null;
+}
+
 export const CONDICIONES_IVA: Record<string, string> = {
   RI: "Resp. Inscripto",
   MT: "Monotributo",
