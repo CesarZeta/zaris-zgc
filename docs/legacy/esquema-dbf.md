@@ -1,5 +1,5 @@
 # Esquema del legacy RevoSolution (tablas DBF)
-Generado el 2026-07-03 por `tools/extraer_esquema_dbf.py`. Se analizaron 7185 archivos DBF; 306 tablas únicas. Para cada tabla se documenta la copia **canónica** (la de más registros / más reciente).
+Generado el 2026-07-04 por `tools/extraer_esquema_dbf.py`. Se analizaron 7185 archivos DBF; 306 tablas únicas. Para cada tabla se documenta la copia **canónica** (la de más registros / más reciente).
 
 Tipos: C=Character, N=Numeric, D=Date, L=Logical, M=Memo, F=Float.
 
