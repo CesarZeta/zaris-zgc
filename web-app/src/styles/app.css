@@ -1,0 +1,255 @@
+/* ===== ZGC — estilos de aplicación (dirección «ZARIS Heredado») ===== */
+
+/* ---------- Login ---------- */
+.login-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  background: var(--zaris-cream);
+  padding: var(--space-8);
+}
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--zaris-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-12) var(--space-12) var(--space-10);
+}
+.login-logo {
+  font-size: var(--size-subhead);
+  font-weight: 700;
+  letter-spacing: var(--track-subhead);
+  margin: 0 0 var(--space-2);
+}
+.login-logo span { color: var(--zaris-orange); }
+.login-sub {
+  color: var(--fg-3);
+  font-size: var(--size-btn);
+  margin: 0 0 var(--space-10);
+}
+.login-error {
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: var(--color-error);
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--size-btn);
+  margin-bottom: var(--space-6);
+}
+
+/* ---------- Controles ---------- */
+.field { margin-bottom: var(--space-6); }
+.field label {
+  display: block;
+  font-size: var(--size-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin-bottom: var(--space-2);
+}
+.input,
+.select,
+.textarea {
+  width: 100%;
+  background: var(--zaris-white);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--size-btn);
+}
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid var(--zaris-orange);
+  outline-offset: -1px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-8);
+  font-size: var(--size-btn);
+  font-weight: 600;
+}
+.btn:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
+.btn-primary { background: var(--zaris-orange); color: #fff; }
+.btn-primary:hover { background: color-mix(in srgb, var(--zaris-orange) 88%, black); }
+.btn-primary:disabled { opacity: 0.55; cursor: default; }
+.btn-ghost { border: 1px solid var(--border-medium); color: var(--fg-2); background: var(--zaris-white); }
+.btn-ghost:hover { border-color: var(--border-strong); color: var(--fg-1); }
+.btn-block { width: 100%; justify-content: center; }
+
+/* ---------- Shell ---------- */
+.shell { display: grid; grid-template-columns: 224px 1fr; min-height: 100%; }
+.sidebar {
+  background: var(--zaris-dark);
+  color: var(--zaris-cream);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-8) var(--space-6);
+  gap: var(--space-1);
+}
+.sidebar-logo {
+  font-size: var(--size-title-sm);
+  font-weight: 700;
+  letter-spacing: var(--track-title);
+  padding: var(--space-2) var(--space-5) var(--space-8);
+}
+.sidebar-logo span { color: var(--zaris-orange); }
+.nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--size-btn);
+  color: rgba(242, 241, 237, 0.72);
+}
+.nav-item:hover { color: var(--zaris-cream); background: rgba(242, 241, 237, 0.06); }
+.nav-item.active { background: var(--zaris-orange); color: #fff; font-weight: 600; }
+.nav-item.soon { color: rgba(242, 241, 237, 0.34); cursor: default; }
+.nav-item.soon:hover { background: none; color: rgba(242, 241, 237, 0.34); }
+.nav-item.soon::after { content: " ·  pronto"; font-size: var(--size-caption); }
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--space-5);
+  font-size: var(--size-caption);
+  color: rgba(242, 241, 237, 0.5);
+}
+.sidebar-footer .logout {
+  color: rgba(242, 241, 237, 0.7);
+  font-size: var(--size-btn);
+  padding: 0;
+}
+.sidebar-footer .logout:hover { color: var(--zaris-orange); }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-10);
+  background: var(--surface-100);
+  border-bottom: 1px solid var(--border-primary);
+}
+.topbar .empresa { font-size: var(--size-btn); color: var(--fg-2); }
+.topbar .usuario { margin-left: auto; font-size: var(--size-btn); }
+.topbar .usuario b { font-weight: 600; }
+.content { padding: var(--space-10); flex: 1; min-width: 0; }
+
+/* ---------- Página de listado ---------- */
+.page-title { font-size: var(--size-title-sm); font-weight: 700; letter-spacing: var(--track-title); margin: 0; }
+.page-sub { color: var(--fg-3); font-size: var(--size-btn); margin: var(--space-2) 0 var(--space-8); }
+.toolbar { display: flex; gap: var(--space-5); margin-bottom: var(--space-8); flex-wrap: wrap; }
+.toolbar .input { flex: 1; min-width: 240px; }
+
+.tabla-card {
+  background: var(--zaris-white);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.tabla { border-collapse: collapse; width: 100%; }
+.tabla th {
+  text-align: left;
+  font-size: var(--size-caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  font-weight: 600;
+  padding: var(--space-5) var(--space-7);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--surface-100);
+  white-space: nowrap;
+}
+.tabla td {
+  padding: var(--space-5) var(--space-7);
+  font-size: var(--size-btn);
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+}
+.tabla tbody tr:hover { background: var(--surface-100); cursor: pointer; }
+.tabla tbody tr:last-child td { border-bottom: 0; }
+.fantasia { display: block; color: var(--fg-4); font-size: var(--size-caption); }
+
+.chip {
+  display: inline-block;
+  font-size: var(--size-caption);
+  font-weight: 600;
+  padding: 1px var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-medium);
+  color: var(--fg-2);
+}
+.chip-ri { background: var(--zaris-dark); color: var(--zaris-cream); border-color: var(--zaris-dark); }
+.estado-ok { color: var(--color-success); font-weight: 600; font-size: var(--size-btn); }
+.estado-bloq { color: var(--color-error); font-weight: 600; font-size: var(--size-btn); }
+
+.paginado {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  font-size: var(--size-btn);
+  color: var(--fg-3);
+}
+.vacio { padding: var(--space-16); text-align: center; color: var(--fg-3); }
+
+/* ---------- Drawer de formulario ---------- */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(38, 37, 30, 0.4);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 50;
+}
+.drawer {
+  width: min(560px, 100%);
+  background: var(--zaris-cream);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-10);
+  box-shadow: var(--shadow-card);
+}
+.drawer h2 { font-size: var(--size-title-sm); margin: 0 0 var(--space-8); letter-spacing: var(--track-title); }
+.drawer .seccion {
+  font-size: var(--size-caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-2);
+  margin: var(--space-10) 0 var(--space-6);
+}
+.drawer .seccion:first-of-type { margin-top: 0; }
+.fila { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+.fila-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-6); }
+.drawer-acciones {
+  display: flex;
+  gap: var(--space-5);
+  justify-content: flex-end;
+  margin-top: var(--space-10);
+}
+.check { display: flex; align-items: center; gap: var(--space-3); font-size: var(--size-btn); color: var(--fg-2); }
+
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-6);
+  }
+  .sidebar .nav-item { width: auto; padding: var(--space-3) var(--space-5); }
+  .nav-item.soon { display: none; }
+  .sidebar-logo { padding: var(--space-2) var(--space-4); font-size: var(--size-ui); }
+  .sidebar-footer { margin-top: 0; margin-left: auto; padding: var(--space-2); }
+  .sidebar-footer div { display: none; }
+  .topbar .empresa { display: none; }
+  .content { padding: var(--space-6); }
+  .fila, .fila-3 { grid-template-columns: 1fr; }
+}

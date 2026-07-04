@@ -1,0 +1,147 @@
+/* ZARIS Design System — tokens. Copia de design-system/colors_and_type.css */
+
+:root {
+  --zaris-dark:  #26251e;
+  --zaris-cream: #f2f1ed;
+  --zaris-light: #e6e5e0;
+  --zaris-white: #ffffff;
+  --zaris-black: #000000;
+
+  --zaris-orange: #f54e00;
+  --zaris-gold:   #c08532;
+
+  --color-error:   #cf2d56;
+  --color-success: #1f8a65;
+  --color-accent:  var(--zaris-orange);
+
+  /* Prioridades de Emergencias (espejo de design-system/colors_and_type.css).
+     Lejos del naranja del brand a proposito (regla de estados, CLAUDE.md s4). */
+  --prio-p1: #c62828;   /* P1: vida en riesgo / delito en curso */
+  --prio-p2: #f57f17;   /* P2: dano material en curso o inminente */
+  --prio-p3: #1f8a65;   /* P3: prevencion / informacion */
+
+  --timeline-thinking: #dfa88f;
+  --timeline-grep:     #9fc9a2;
+  --timeline-read:     #9fbbe0;
+  --timeline-edit:     #c0a8dd;
+
+  --surface-100: #f7f7f4;
+  --surface-200: #f2f1ed;
+  --surface-300: #ebeae5;
+  --surface-400: #e6e5e0;
+  --surface-500: #e1e0db;
+  /* Overlay semitransparente sobre mapas/imagenes (cards flotantes del Dashboard) */
+  --surface-overlay: rgba(247, 247, 244, 0.92);
+
+  --fg-1: #26251e;
+  --fg-2: rgba(38, 37, 30, 0.7);
+  --fg-3: rgba(38, 37, 30, 0.55);
+  --fg-4: rgba(38, 37, 30, 0.4);
+  --fg-5: rgba(38, 37, 30, 0.2);
+
+  --border-primary: rgba(38, 37, 30, 0.10);
+  --border-medium:  rgba(38, 37, 30, 0.20);
+  --border-strong:  rgba(38, 37, 30, 0.55);
+  --border-solid:   #26251e;
+
+  --shadow-ambient:
+    rgba(0, 0, 0, 0.02) 0px 0px 16px,
+    rgba(0, 0, 0, 0.008) 0px 0px 8px;
+  --shadow-card:
+    rgba(0, 0, 0, 0.14) 0px 28px 70px,
+    rgba(0, 0, 0, 0.10) 0px 14px 32px,
+    rgba(38, 37, 30, 0.10) 0px 0px 0px 1px;
+  --shadow-focus:   rgba(0, 0, 0, 0.10) 0px 4px 12px;
+  --ring-border:    0 0 0 1px var(--border-primary);
+  --ring-border-med:0 0 0 1px var(--border-medium);
+
+  --radius-micro: 1.5px;
+  --radius-xs:    2px;
+  --radius-sm:    3px;
+  --radius-md:    4px;
+  --radius-lg:    8px;
+  --radius-xl:    10px;
+  --radius-pill:  9999px;
+
+  --space-1:  2.5px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5:  10px;
+  --space-6:  12px;
+  --space-7:  14px;
+  --space-8:  16px;
+  --space-10: 24px;
+  --space-12: 32px;
+  --space-16: 48px;
+  --space-20: 64px;
+  --space-24: 96px;
+
+  --font-display: "Space Grotesk", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-serif:   "Fraunces", "Iowan Old Style", ui-serif, Georgia, serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "Courier New", monospace;
+  --font-system:  system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+
+  --size-hero:     4.5rem;
+  --size-section:  2.25rem;
+  --size-subhead:  1.625rem;
+  --size-title-sm: 1.375rem;
+  --size-body-lg:  1.2rem;
+  --size-body:     1.08rem;
+  --size-ui:       1rem;
+  --size-btn:      0.875rem;
+  --size-mono:     0.75rem;
+  --size-caption:  0.6875rem;
+
+  --lh-tight:   1.10;
+  --lh-tight-2: 1.20;
+  --lh-ui:      1.33;
+  --lh-normal:  1.50;
+
+  --track-hero:    -2.16px;
+  --track-section: -0.72px;
+  --track-subhead: -0.325px;
+  --track-title:   -0.11px;
+  --track-micro:   0.048px;
+}
+
+/* Dark mode — espejo de design-system/colors_and_type.css [data-theme="dark"].
+   El data-theme lo setea un script inline en web-app/index.html leyendo
+   localStorage `zaris_theme` (el toggle vive en el shell vanilla). */
+:root[data-theme="dark"] {
+  --zaris-cream: #1d1c19;
+  --zaris-light: #2c2b27;
+
+  --surface-100: #262522;
+  --surface-200: #21201d;
+  --surface-300: #181714;
+  --surface-400: #2c2b27;
+  --surface-500: #33322d;
+  --surface-overlay: rgba(38, 37, 34, 0.92);
+
+  --fg-1: #edece7;
+  --fg-2: rgba(237, 236, 231, 0.72);
+  --fg-3: rgba(237, 236, 231, 0.55);
+  --fg-4: rgba(237, 236, 231, 0.40);
+  --fg-5: rgba(237, 236, 231, 0.22);
+
+  --border-primary: rgba(237, 236, 231, 0.10);
+  --border-medium:  rgba(237, 236, 231, 0.22);
+  --border-strong:  rgba(237, 236, 231, 0.55);
+  --border-solid:   #edece7;
+
+  --shadow-ambient:
+    rgba(0, 0, 0, 0.25) 0px 0px 16px,
+    rgba(0, 0, 0, 0.12) 0px 0px 8px;
+  --shadow-card:
+    rgba(0, 0, 0, 0.50) 0px 28px 70px,
+    rgba(0, 0, 0, 0.35) 0px 14px 32px,
+    rgba(237, 236, 231, 0.08) 0px 0px 0px 1px;
+  --shadow-focus:   rgba(0, 0, 0, 0.35) 0px 4px 12px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] ::selection {
+  background: rgba(245, 78, 0, 0.35);
+}
