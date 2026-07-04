@@ -28,8 +28,8 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - [x] Repo git + GitHub (`CesarZeta/zaris-zgc`, público), estructura `backend/` + `web-app/` + `sql/` + `docs/` + `tools/`
 - [x] Backend FastAPI (`/health` verificado, config por entorno con `ENV_FILE`)
 - [x] Frontend React/Vite (build verificado)
-- [ ] **PENDIENTE**: proyecto Supabase en la cuenta NUEVA de César (el free tier de la cuenta principal está lleno: ZGE + news-bot). César crea el proyecto `zaris-zgc` en sa-east-1 y pasa la connection string → replicar migraciones 001 y 002.
-- [ ] **PENDIENTE**: deploy Railway (backend) + GitHub Pages (frontend)
+- [x] Proyecto Supabase `zaris-zgc` en la cuenta NUEVA de César, **sa-east-1** (2026-07-04). Migraciones 001-005 aplicadas, RLS deny-all en las 21 tablas, seed prod (tenant "ZARIS (principal)" + admin de César). Conexión SIEMPRE por session pooler (:5432, IPv4) o transaction pooler (:6543, serverless).
+- [x] Deploy (2026-07-04): backend en **Vercel serverless región gru1/São Paulo** (`https://zaris-zgc-api.vercel.app` — Railway se descartó: no tiene región SP; proyecto `zaris-zgc-api`, cuenta Vercel de César, env vars en el proyecto) + frontend en **GitHub Pages** (`https://cesarzeta.github.io/zaris-zgc/`, workflow `deploy-pages.yml`, variable de repo `API_URL`). Login E2E online verificado. Pendiente menor: purga de commits huérfanos en GitHub (recrear repo — decisión de César).
 
 ## FASE 1 — Núcleo: Tenants, Usuarios y BUE ✅ (completada 2026-07-04)
 

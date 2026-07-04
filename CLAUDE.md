@@ -47,9 +47,9 @@ Mismo stack que ZGE, para reusar patrones, auth y experiencia:
 | Capa | Tecnología |
 |---|---|
 | Backend | **FastAPI** (Python 3.10+), SQLAlchemy async + asyncpg |
-| DB | **PostgreSQL** — Supabase en prod, Postgres local en dev |
+| DB | **PostgreSQL** — Supabase en prod (cuenta nueva, sa-east-1), Postgres local en dev |
 | Frontend | **React (Vite)** |
-| Hosting | Backend en **Railway**, frontend en **GitHub Pages**, DB **Supabase** |
+| Hosting | Backend en **Vercel serverless región gru1/São Paulo** (decisión 2026-07-04: Railway no tiene región SP; pooler transaccional :6543 de Supabase), frontend en **GitHub Pages**, DB **Supabase** |
 | Facturación electrónica | **pyafipws** (WSAA + WSFEv1) — razón de peso para backend Python |
 | Auth | JWT como ZGE (`POST /auth/login`, bcrypt directo — **no passlib**) |
 
