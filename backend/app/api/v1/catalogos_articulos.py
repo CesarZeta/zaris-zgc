@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.models import (
+    Atributo,
+    AtributoValor,
     Cotizacion,
     Deposito,
     Familia,
@@ -347,6 +349,82 @@ async def actualizar_deposito(
         await db.rollback()
         raise _conflicto("Ya existe un depósito con ese código o nombre")
     return DepositoOut.model_validate(deposito)
+
+
+# ===== Atributos y valores (para variantes — Fase 2.5) =====
+
+class AtributoValorOut(BaseModel):
+    id: uuid.UUID
+    valor: str
+    orden: int
+    model_config = {"from_attributes": True}
+
+
+class AtributoOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    orden: int
+    valores: list[AtributoValorOut] = []
+    model_config = {"from_attributes": True}
+
+
+class AtributoIn(BaseModel):
+    nombre: str = Field(min_length=1, max_length=30)
+
+
+class ValorIn(BaseModel):
+    atributo_id: uuid.UUID
+    valor: str = Field(min_length=1, max_length=30)
+
+
+@router.get("/atributos", response_model=list[AtributoOut])
+async def listar_atributos(
+    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    atributos = (
+        await db.scalars(
+            select(Atributo).where(Atributo.tenant_id == usuario.tenant_id).order_by(Atributo.orden)
+        )
+    ).unique().all()
+    return [AtributoOut.model_validate(a) for a in atributos]
+
+
+@router.post("/atributos", response_model=AtributoOut, status_code=status.HTTP_201_CREATED)
+async def crear_atributo(
+    body: AtributoIn,
+    usuario: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    total = len((await db.scalars(select(Atributo).where(Atributo.tenant_id == usuario.tenant_id))).all())
+    atributo = Atributo(tenant_id=usuario.tenant_id, nombre=body.nombre.strip(), orden=total)
+    db.add(atributo)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise _conflicto("Ya existe un atributo con ese nombre")
+    atributo = await db.scalar(select(Atributo).where(Atributo.id == atributo.id))
+    return AtributoOut.model_validate(atributo)
+
+
+@router.post("/atributos/valores", response_model=AtributoValorOut, status_code=status.HTTP_201_CREATED)
+async def crear_valor(
+    body: ValorIn,
+    usuario: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    atributo = await _obtener(db, Atributo, usuario.tenant_id, body.atributo_id)
+    total = len(atributo.valores)
+    valor = AtributoValor(
+        tenant_id=usuario.tenant_id, atributo_id=atributo.id, valor=body.valor.strip(), orden=total
+    )
+    db.add(valor)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise _conflicto("Ya existe ese valor en el atributo")
+    return AtributoValorOut.model_validate(valor)
 
 
 # ===== Cotización del dólar =====

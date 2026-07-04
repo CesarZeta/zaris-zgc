@@ -24,6 +24,7 @@ class Tenant(Base):
     localidad: Mapped[str | None] = mapped_column(String(60))
     provincia: Mapped[str | None] = mapped_column(String(40))
     codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    rubro: Mapped[str] = mapped_column(String(30), default="general")
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

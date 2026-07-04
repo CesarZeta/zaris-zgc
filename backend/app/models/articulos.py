@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Numeric,
+    SmallInteger,
     String,
     Text,
     func,
@@ -131,6 +132,51 @@ class Articulo(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Atributo(Base):
+    __tablename__ = "atributos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    nombre: Mapped[str] = mapped_column(String(30))
+    orden: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+    valores: Mapped[list["AtributoValor"]] = relationship(
+        lazy="selectin", order_by="AtributoValor.orden"
+    )
+
+
+class AtributoValor(Base):
+    __tablename__ = "atributo_valores"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    atributo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("atributos.id", ondelete="CASCADE"))
+    valor: Mapped[str] = mapped_column(String(30))
+    orden: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+
+class ArticuloVariante(Base):
+    __tablename__ = "articulo_variantes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    articulo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("articulos.id", ondelete="CASCADE"))
+    valor_1_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("atributo_valores.id"))
+    valor_2_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("atributo_valores.id"))
+    valor_3_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("atributo_valores.id"))
+    codigo_barras: Mapped[str | None] = mapped_column(String(20))
+    sku_sufijo: Mapped[str | None] = mapped_column(String(20))
+    dif_precio: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ArticuloStock(Base):
     __tablename__ = "articulo_stock"
 
@@ -140,6 +186,9 @@ class ArticuloStock(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     articulo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("articulos.id", ondelete="CASCADE"))
     deposito_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("depositos.id"))
+    variante_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("articulo_variantes.id", ondelete="CASCADE")
+    )
     cantidad: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
     stock_minimo: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
     ubicacion: Mapped[str | None] = mapped_column(String(20))
@@ -155,6 +204,9 @@ class StockMovimiento(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     articulo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("articulos.id", ondelete="CASCADE"))
     deposito_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("depositos.id"))
+    variante_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("articulo_variantes.id", ondelete="CASCADE")
+    )
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     tipo: Mapped[str] = mapped_column(String(15))
     cantidad: Mapped[Decimal] = mapped_column(Numeric(14, 3))

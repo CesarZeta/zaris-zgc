@@ -24,6 +24,7 @@ from app.core.db import get_db
 from app.models import (
     Articulo,
     ArticuloStock,
+    ArticuloVariante,
     Familia,
     Marca,
     Subfamilia,
@@ -204,6 +205,26 @@ async def _validar_referencias(db: AsyncSession, tenant_id: uuid.UUID, datos: di
             )
 
 
+async def _validar_cbarra_contra_variantes(
+    db: AsyncSession, tenant_id: uuid.UUID, cbarra: str | None
+) -> None:
+    """El EAN del artículo tampoco puede pisar el de una variante (unicidad
+    cruzada entre tablas, a nivel app — espejo del chequeo en variantes.py)."""
+    if not cbarra:
+        return
+    en_variante = await db.scalar(
+        select(ArticuloVariante.id).where(
+            ArticuloVariante.tenant_id == tenant_id,
+            ArticuloVariante.codigo_barras == cbarra,
+        )
+    )
+    if en_variante:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El código de barras {cbarra} ya está en uso por una variante",
+        )
+
+
 def _subquery_stock_total(tenant_id: uuid.UUID):
     return (
         select(func.coalesce(func.sum(ArticuloStock.cantidad), 0))
@@ -236,6 +257,7 @@ async def crear_articulo(
         datos["codigo_barras"] = datos["codigo_barras"].strip() or None
     datos = completar_precios(datos, body.model_dump(exclude_unset=True).keys() | set())
     await _validar_referencias(db, usuario.tenant_id, datos)
+    await _validar_cbarra_contra_variantes(db, usuario.tenant_id, datos["codigo_barras"])
 
     articulo = Articulo(
         tenant_id=usuario.tenant_id, precio_actualizado_at=datetime.now(timezone.utc), **datos
@@ -320,6 +342,8 @@ async def actualizar_articulo(
         datos["codigo_barras"] = datos["codigo_barras"].strip() or None
     datos = completar_precios(datos, enviados)
     await _validar_referencias(db, usuario.tenant_id, datos)
+    if datos["codigo_barras"] != articulo.codigo_barras:
+        await _validar_cbarra_contra_variantes(db, usuario.tenant_id, datos["codigo_barras"])
 
     toca_precios = any(
         getattr(articulo, campo) != datos[campo] for campo in CAMPOS_PRECIO

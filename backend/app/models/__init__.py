@@ -1,6 +1,9 @@
 from app.models.articulos import (
     Articulo,
     ArticuloStock,
+    ArticuloVariante,
+    Atributo,
+    AtributoValor,
     Cotizacion,
     Deposito,
     Familia,
@@ -40,4 +43,7 @@ __all__ = [
     "Articulo",
     "ArticuloStock",
     "StockMovimiento",
+    "Atributo",
+    "AtributoValor",
+    "ArticuloVariante",
 ]
