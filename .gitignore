@@ -3,6 +3,9 @@
 Revosolution Software/
 *.pdf
 
+# Reportes de migración: contienen datos reales de clientes (repo público)
+tools/reportes/
+
 # Python
 __pycache__/
 *.pyc
