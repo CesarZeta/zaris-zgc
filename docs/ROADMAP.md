@@ -20,27 +20,34 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 
 ---
 
-## FASE 0 — Fundaciones ✅ (en curso)
+## FASE 0 — Fundaciones ✅ (completada 2026-07-03, salvo deploy)
 
 **Entregable: repo funcionando con backend y frontend esqueleto, deployables.**
 
 - [x] CLAUDE.md (stack, arquitectura), DEFINICION-PRODUCTO.md, esquema legacy extraído
-- [ ] Repo git inicializado, estructura `backend/` + `web-app/` + `sql/` + `docs/` + `tools/`
-- [ ] Backend FastAPI esqueleto (`/health`, config por entorno, CORS)
-- [ ] Frontend React/Vite esqueleto
-- [ ] Proyecto Supabase propio (crear al comenzar Fase 1, para no gastar la ventana de pausa free-tier sin esquema)
-- [ ] Deploy inicial: Railway (backend) + GitHub Pages (frontend)
+- [x] Repo git + GitHub (`CesarZeta/zaris-zgc`, público), estructura `backend/` + `web-app/` + `sql/` + `docs/` + `tools/`
+- [x] Backend FastAPI (`/health` verificado, config por entorno con `ENV_FILE`)
+- [x] Frontend React/Vite (build verificado)
+- [ ] **PENDIENTE**: proyecto Supabase en la cuenta NUEVA de César (el free tier de la cuenta principal está lleno: ZGE + news-bot). César crea el proyecto `zaris-zgc` en sa-east-1 y pasa la connection string → replicar migraciones 001 y 002.
+- [ ] **PENDIENTE**: deploy Railway (backend) + GitHub Pages (frontend)
 
-## FASE 1 — Núcleo: Tenants, Usuarios y Base Única de Entidades
+## FASE 1 — Núcleo: Tenants, Usuarios y BUE ✅ (completada 2026-07-04)
 
-**Entregable: puedo dar de alta mi empresa, mis usuarios y mi cartera de clientes completa.**
+**Entregable: puedo dar de alta mi empresa, mis usuarios y mi cartera de clientes completa.** ✔ demostrado con datos reales.
 
-- Modelo multi-tenant: `tenants` (empresas), `sucursales`, `usuarios` + auth JWT (patrón ZGE: bcrypt directo, sin passlib) + roles/permisos por módulo
-- **BUE**: `entidades` + domicilios/contactos, validación CUIT/DNI (dígito verificador), condición IVA
-- Rol **cliente**: lista de precios asignada, condición de venta, límite de crédito, zona, viajante, estado (activo/bloqueado)
-- Tablas de referencia: provincias, zonas, condiciones de venta, transportistas (rol)
-- Pantallas: alta/edición/búsqueda de clientes (búsqueda multi-campo digits-only como la BUC de ZGE)
-- Migrador v1 en `tools/`: importa CLIENTES.DBF del legacy a la BUE
+- [x] Multi-tenant: `tenants`, `sucursales`, `usuarios` + auth JWT (migración 001; bcrypt directo, patrón ZGE). Permisos por módulo: pendiente para cuando haya más módulos.
+- [x] **BUE**: `entidades` + contactos, validación CUIT/DNI con dígito verificador, condición IVA (migración 002)
+- [x] Rol **cliente** completo + catálogos (provincias ARCA, zonas, condiciones de venta). Viajante/transportista quedan como nota de migración hasta sus fases.
+- [x] API clientes/entidades con búsqueda multi-campo digits-only (patrón BUC) — 10 pruebas en vivo
+- [x] Frontend: login + shell + módulo Clientes (estilo «ZARIS Heredado») — verificado E2E en navegador
+- [x] Migrador CLIENTES.DBF (`tools/migrar_clientes.py`) — calibrado con recon de datos reales y verificado adversarialmente; Omni migrado (434 clientes)
+
+### Estado del entorno dev (para retomar)
+
+- DB local: `zgc_dev` en PostgreSQL 17 (127.0.0.1:5432). Migraciones 001+002 aplicadas (ver HISTORIAL_MIGRACIONES.md).
+- Usuarios dev: `admin@zgc.dev` / `123456` (tenant "Empresa Demo SRL") · `omni@zgc.dev` / `123456` (tenant "Omni (prueba)", 434 clientes migrados).
+- Correr backend: `cd backend; $env:ENV_FILE=".env.local"; .venv\Scripts\python.exe -m uvicorn app.main:app --port 8021`
+- Correr frontend: `cd web-app; npm run dev` → http://localhost:5173 (proxy `/api` → 8021)
 
 ## FASE 2 — Artículos y Stock
 
