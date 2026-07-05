@@ -42,7 +42,7 @@
   **"Smoke Test ZGC"** (creado 2026-07-05 vía SQL Editor para verificar deploys
   sin tocar el tenant real; la contraseña la tiene César). Se elimina todo con
   `delete from tenants where razon_social = 'Smoke Test ZGC';`.
-- Higiene pendiente: la contraseña de la DB circuló por el chat de la sesión del 2026-07-04 — rotarla en algún momento (Supabase → Settings → Database → Reset password) y actualizar la env var `DATABASE_URL` en Vercel + redeploy.
+- Contraseña de la DB: **NO se rota** (decisión de César 2026-07-05: la seguridad está bajo su control; descartada la rotación que esta doc sugería). Vive en la env var de Vercel y en `%APPDATA%\postgresql\pgpass.conf` de la PC de César.
 
 ## Verificaciones pendientes conocidas
 
@@ -53,3 +53,6 @@
 - Import Excel y cambio masivo de precios **en producción serverless** (límite de 10s por request en Vercel Hobby — con catálogos grandes puede requerir lotes).
 - Chequeo externo de que PostgREST rechaza la anon key (requiere la anon key del proyecto).
 - Purga de commits huérfanos en GitHub (César borra el repo → recrear + re-push + reconfigurar Pages y `API_URL`).
+- **CITI RG 3685 (Fase 5)**: los 4 TXT nunca se validaron contra el aplicativo real de ARCA/libro IVA digital — es best-effort documentado. Antes de la primera presentación real, que el contador importe un ZIP de prueba y confirme el layout.
+- **Caja/Libros en prod (Fase 5)**: el smoke E2E fue por API (24/24); el click-through en navegador contra prod (planilla, cierre desde la UI, descargas CSV/ZIP) quedó para cuando César entre logueado. En dev sí se verificó E2E en navegador.
+- **Percepciones en el libro de ventas**: van en 0 porque el modelo de comprobantes aún no las discrimina (`ImpTrib` diferido de Fase 3) — al implementarlas, revisar `libros.py`.
