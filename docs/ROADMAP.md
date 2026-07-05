@@ -192,7 +192,7 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   aún no las discrimina — `ImpTrib` diferido de Fase 3), sucursal en OP (entran
   solo en planilla global), export Excel nativo (.xlsx; el CSV lo cubre).
 
-## FASE 6 — POS Mostrador Web ✅ (cierra el MVP — código completo 2026-07-05)
+## FASE 6 — POS Mostrador Web ✅ (cierra el MVP — en producción 2026-07-05)
 
 **Entregable: una caja vendiendo rápido con lector e impresora térmica.** ✔ verificado con 42 pruebas de API en vivo (0 fallos) + regresión Fase 3 + E2E en navegador.
 
@@ -230,7 +230,11 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   simulado, medios y vuelto — vía diálogo de impresión del navegador. **QZ Tray
   evaluado y diferido**: el diálogo nativo cubre el MVP; QZ (impresión silenciosa)
   queda para cuando un piloto lo pida (agrega firma digital + instalación local).
-- [ ] Deploy a producción (migración 009 en Supabase + Vercel + Pages + smoke E2E).
+- [x] Deploy a producción (2026-07-05): migración 009 + 005 re-aplicada en Supabase
+  (psql via pooler, corrida por César en sesión paralela; RLS=t verificado en las 3
+  tablas), backend Vercel (`/pos/cajas` responde en prod) y Pages (workflow OK;
+  verificado que el bundle publicado contiene el POS). Click-through del POS en prod
+  logueado: pendiente de César (DEPLOY.md § Verificaciones pendientes).
 - Diferido documentado: pesables por etiqueta de balanza, envases, venta por depto.
   (POS Súper, fase 12), descuento por línea/venta en el POS (el backend ya lo soporta
   vía `descuento_pct`), identificación CF ≥ umbral RG 5700 la exige el backend (422).

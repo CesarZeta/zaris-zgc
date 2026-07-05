@@ -107,3 +107,17 @@ ZGC/
 - IVA: tasas múltiples por artículo, precios con o sin IVA incluido según configuración.
 - ARCA/AFIP: factura electrónica (CAE vía WSFEv1), libros de IVA digital, retenciones/percepciones, CITI.
 - Monotributo vs. Responsable Inscripto.
+
+## 6. Convenciones de API (lecciones permanentes)
+
+- **401 es SOLO "no autenticado"** (JWT ausente/inválido): el interceptor global del
+  frontend (`api.ts`) trata cualquier 401 como sesión vencida → desloguea y redirige a
+  login. Toda validación de credenciales **embebidas en el body** de un request ya
+  autenticado (p. ej. autorización de supervisor en el POS) responde **403** — un 401
+  ahí desloguea la caja entera (bug real cazado en el E2E de Fase 6).
+- **Reusar el núcleo, no copiarlo**: la emisión fiscal y la NC espejo viven en
+  `emitir_core`/`crear_nc_espejo_core` (`api/v1/comprobantes.py`, sin commit adentro) —
+  cualquier flujo nuevo que emita comprobantes (POS, futuras integraciones) los llama
+  dentro de su propia transacción. No duplicar esa lógica.
+- **Pruebas sobre agregados del día** (planilla, resúmenes): asertar **deltas**
+  (después − antes), nunca absolutos — el día es compartido entre corridas y sesiones.
