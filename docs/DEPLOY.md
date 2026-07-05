@@ -12,6 +12,7 @@
 
 - Proyecto Vercel: `zaris-zgc-api` (cuenta de César; CLI autenticado en su PC).
 - Entrada serverless: `api/index.py` (reusa `backend/app` tal cual); config en `vercel.json` (región `gru1`, `includeFiles` del backend); `.vercelignore` excluye el árbol legacy (¡gigas!), web-app, docs y tools.
+- ⚠️ **Dependencias por duplicado**: Vercel instala `api/requirements.txt` (el que está junto al entrypoint), NO `backend/requirements.txt`. Toda dependencia nueva del backend va en **los dos** archivos — si falta en `api/`, el import de la app muere en prod (mordió el 2026-07-05 con httpx/cryptography/segno de Fase 3).
 - **Comando**: `npx vercel deploy --prod --yes` desde la raíz del repo.
 - Env vars del proyecto (Vercel → Settings → Environment Variables): `DATABASE_URL` (pooler **transaccional** `:6543`, password percent-encoded: `#`→`%23`, `$`→`%24`), `JWT_SECRET`, `CORS_ORIGINS` (`https://cesarzeta.github.io` — solo origen, sin path), `ENV=prod`.
 - `backend/app/core/db.py` detecta `:6543` → NullPool + `statement_cache_size=0` (requisito Supavisor transacción). En VM/local (`:5432`) usa pool clásico.
@@ -28,6 +29,7 @@
 - **Conexión**: SIEMPRE session pooler `aws-1-sa-east-1.pooler.supabase.com:5432` (IPv4) para migraciones/psql, o transaction pooler `:6543` para serverless. La "Direct connection" es solo IPv6.
 - Usuario: `postgres.lasjyuygcfqhwjdrkrkq`; la contraseña la tiene César (y está en la env var de Vercel).
 - **Migraciones**: `psql -h aws-1-sa-east-1.pooler.supabase.com -p 5432 -U postgres.lasjyuygcfqhwjdrkrkq -d postgres -v ON_ERROR_STOP=1 -f sql/NNN_*.sql` (PGPASSWORD en el entorno). Registrar en `HISTORIAL_MIGRACIONES.md`.
+- **Lección 2026-07-05 (migración 006)**: Claude no puede migrar prod solo — la contraseña no está en disco, `vercel env pull` lo bloquea el clasificador de permisos (correcto), y el conector MCP de Supabase apunta a la cuenta VIEJA (ZGE), no a la de ZGC. Opciones: (a) César pega el SQL en el SQL Editor del dashboard —lo que se hizo—, (b) conectar el conector Supabase de claude.ai a la cuenta nueva para habilitar `apply_migration` vía MCP, (c) aprobar `vercel env pull` fuera del modo auto. Tras cada migración, re-correr la 005 (idempotente).
 - **RLS**: deny-all en todas las tablas (migración 005) — PostgREST queda cerrado; el backend (rol dueño) bypassa. Toda tabla nueva hereda la regla si se re-corre la 005 (es idempotente): **re-aplicarla después de cada migración nueva en Supabase**.
 - **Free tier**: el proyecto se PAUSA tras ~1 semana sin actividad → se reactiva desde el dashboard. El primer request tras inactividad puede tardar (cold start + resume).
 
@@ -38,6 +40,10 @@
 
 ## Verificaciones pendientes conocidas
 
+- **Ventas en prod (Fase 3)**: click-through de César logueado — crear punto de venta, modo simulado, emitir factura de prueba, imprimirla y revertirla con NC (los comprobantes de prueba quedan en la DB del tenant real: marcados PRUEBA, pero conviene hacer pocos).
+- **Homologación ARCA**: diferida por César (2026-07-05) — certificados con Clave Fiscal, pasos en FACTURACION-ARCA.md §8. El código real (WSAA/WSFEv1) nunca se ejercitó contra ARCA de verdad: probarlo apenas haya certificado, con `tools`/script de smoke antes que desde la UI.
+- UI para crear condiciones de venta (hoy: solo API `POST /ventas/condiciones-venta` o SQL; el form de venta las lista pero no las crea).
+- Impresión física real (térmica/A4) del HTML de comprobantes — verificado solo en pantalla.
 - Import Excel y cambio masivo de precios **en producción serverless** (límite de 10s por request en Vercel Hobby — con catálogos grandes puede requerir lotes).
 - Chequeo externo de que PostgREST rechaza la anon key (requiere la anon key del proyecto).
 - Purga de commits huérfanos en GitHub (César borra el repo → recrear + re-push + reconfigurar Pages y `API_URL`).

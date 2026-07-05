@@ -50,7 +50,7 @@ Mismo stack que ZGE, para reusar patrones, auth y experiencia:
 | DB | **PostgreSQL** — Supabase en prod (cuenta nueva, sa-east-1), Postgres local en dev |
 | Frontend | **React (Vite)** |
 | Hosting | Backend en **Vercel serverless región gru1/São Paulo** (decisión 2026-07-04: Railway no tiene región SP; pooler transaccional :6543 de Supabase), frontend en **GitHub Pages**, DB **Supabase** |
-| Facturación electrónica | **pyafipws** (WSAA + WSFEv1) — razón de peso para backend Python |
+| Facturación electrónica | **Cliente propio WSAA + WSFEv1** (`backend/app/services/arca/`: firma CMS con `cryptography` + SOAP con `httpx`) — decidido 2026-07-04: pyafipws arrastra deps incompatibles con Vercel serverless y queda como implementación de referencia. Diseño de cumplimiento en `docs/FACTURACION-ARCA.md` — **leerlo antes de tocar cualquier cosa de comprobantes** |
 | Auth | JWT como ZGE (`POST /auth/login`, bcrypt directo — **no passlib**) |
 
 Consultar el `CLAUDE.md` de ZGE (`C:\Users\Cesar\Documents\ZARIS\Desarrollo\ZGE\CLAUDE.md`) para los patrones ya resueltos (auth, roles, estructura de módulos React) antes de reinventar algo.
