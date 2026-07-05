@@ -192,15 +192,63 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   aún no las discrimina — `ImpTrib` diferido de Fase 3), sucursal en OP (entran
   solo en planilla global), export Excel nativo (.xlsx; el CSV lo cubre).
 
-## FASE 6 — POS Mostrador Web (cierra el MVP)
+## FASE 6 — POS Mostrador Web ✅ (cierra el MVP — código completo 2026-07-05)
 
-**Entregable: una caja vendiendo rápido con lector e impresora térmica.**
+**Entregable: una caja vendiendo rápido con lector e impresora térmica.** ✔ verificado con 42 pruebas de API en vivo (0 fallos) + regresión Fase 3 + E2E en navegador.
 
-- Pantalla de venta rápida (teclado-first): lector código de barras USB, multiplicador, búsqueda
-- Medios de pago (efectivo, tarjeta, Mercado Pago manual), factura B/ticket con CAE
-- Impresión térmica 58/80mm (diálogo del navegador; evaluar QZ Tray)
-- Autorización de supervisor para anulaciones (patrón legacy)
-- Arqueo simple de caja por cajero
+- [x] Migración 009: `pos_cajas` (config por caja: PV que factura, depósito, lista de
+  precios, ancho ticket 58/80), `pos_sesiones` (turno de cajero: apertura con fondo →
+  cierre con totales sellados; una abierta por caja/cajero), `venta_medios` (medios por
+  venta contado — el hueco que la planilla de Fase 5 dejó documentado) y
+  `comprobantes.pos_sesion_id`. RLS en las 3 tablas nuevas.
+- [x] La venta POS es una factura fiscal de Fase 3 (misma tabla, mismo circuito
+  ARCA/stock/cta.cte.) emitida en un paso: `POST /pos/ventas/calcular` (dry-run con el
+  total EXACTO, redondeo fiscal por alícuota) → `POST /pos/ventas` (factura + CAE +
+  stock + medios + sesión en una transacción; los medios deben sumar el total). El
+  cajero no elige precios ni letra: precios de servidor (lista de la caja, finales con
+  IVA, + diferencial de variante, × cotización si USD), letra por matriz (CF→B; cliente
+  identificado F3 → A si corresponde). Refactor: `emitir_core`/`crear_nc_espejo_core`
+  compartidos con los endpoints de gestión (regresión F3 verificada).
+- [x] Búsqueda de mostrador `GET /pos/buscar`: EAN de variante → cód. barras → código
+  interno (exactos) → texto; precio ya resuelto por caja. Multiplicador `3*` en el front.
+- [x] Anulación con autorización de SUPERVISOR (patrón legacy): credenciales + nivel
+  (`nivel_acceso <= 2`, semántica ZGE 1=admin/2=supervisor) → NC espejo fiscal emitida
+  en el acto, stock devuelto, medios de la venta original en negativo en el arqueo.
+  Gotcha cazado en E2E: credencial de supervisor inválida responde **403** (un 401
+  dispara el "sesión vencida" global del front y desloguea la caja).
+- [x] Arqueo por cajero: resumen vivo (tickets, anulaciones, ventas por medio, efectivo
+  teórico = fondo + efectivo neto) y cierre que sella totales + `diferencia = contado −
+  teórico`. La planilla de caja (F5) ahora discrimina `ventas_por_medio` (las ventas
+  sin medios registrados siguen asumidas efectivo).
+- [x] Frontend `/pos` fuera del shell (pantalla completa de caja, teclado-first):
+  apertura con fondo, escaneo con Enter (lector USB emula teclado), multiplicador,
+  picker de variantes, F3 cliente / F6 tickets+reimpresión+anulación / F8 cierre /
+  F10 cobrar, modal de cobro con medios múltiples y vuelto. Cajas POS se administran
+  en Configuración.
+- [x] Ticket térmico 58/80mm (`ticket.ts`): layout angosto con CUIT/PV-número/CAE/
+  vto/QR (solo CAE real), transparencia fiscal Ley 27.743 en B/C a CF, leyenda de
+  simulado, medios y vuelto — vía diálogo de impresión del navegador. **QZ Tray
+  evaluado y diferido**: el diálogo nativo cubre el MVP; QZ (impresión silenciosa)
+  queda para cuando un piloto lo pida (agrega firma digital + instalación local).
+- [ ] Deploy a producción (migración 009 en Supabase + Vercel + Pages + smoke E2E).
+- Diferido documentado: pesables por etiqueta de balanza, envases, venta por depto.
+  (POS Súper, fase 12), descuento por línea/venta en el POS (el backend ya lo soporta
+  vía `descuento_pct`), identificación CF ≥ umbral RG 5700 la exige el backend (422).
+
+## FASE 6.5 — Usuarios, Roles y Permisos por módulo (RBAC)
+
+**Entregable: cada tenant administra sus usuarios, define roles y controla qué módulo puede ver/editar/anular cada uno.**
+
+> Discovery 2026-07-05 (César). Diseño completo en `docs/DISENO-USUARIOS-Y-PERMISOS.md`
+> — leerlo antes de implementar. Va **después del POS** (no lo frena) y **antes** del
+> POST-MVP porque es transversal: todo módulo futuro debe nacer con guardas.
+
+- Modelo **roles + permisos por módulo**, granularidad **Ver / Editar / Anular** (acumulativas).
+- Migración 010: `roles`, `rol_permisos`, `usuarios.rol_id` + backfill (usuarios actuales → rol `admin`, no rompe nada de hoy) + seed de 5 roles base por tenant (admin, gerente, cajero, vendedor, consulta).
+- Backend: guarda declarativa `requiere(modulo, accion)` (dependency FastAPI) aplicada a los endpoints de escritura/anulación de los 10 módulos; `rol_id` en el JWT.
+- Frontend: gestor en Configuración (usuarios + roles + matriz de permisos) + sidebar filtrado por permisos.
+- Convive con `nivel_acceso` del POS sin tocarlo (aditivo). Sin permisos que migrar del legacy (`PERMISOS.DBF` tiene 0 registros; solo sembrar roles base).
+- Smoke E2E: crear rol limitado, asignarlo, verificar 403 en backend y sidebar recortado.
 
 ---
 

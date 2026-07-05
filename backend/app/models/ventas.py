@@ -120,6 +120,7 @@ class Comprobante(Base):
         ForeignKey("comprobantes.id")
     )
     origen_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("comprobantes.id"))
+    pos_sesion_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pos_sesiones.id"))
     observaciones: Mapped[str | None] = mapped_column(Text)
     emitido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     emitido_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))

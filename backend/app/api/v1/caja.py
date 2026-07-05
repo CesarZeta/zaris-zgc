@@ -38,6 +38,7 @@ from app.models import (
     ReciboMedio,
     TipoComprobante,
     Usuario,
+    VentaMedio,
 )
 
 router = APIRouter(prefix="/caja", tags=["caja"])
@@ -113,6 +114,7 @@ class PlanillaOut(BaseModel):
     saldo_inicial: Decimal
     ventas_contado_cantidad: int
     ventas_contado_total: Decimal  # neto: facturas/ND menos NC contado del día
+    ventas_por_medio: list[TotalMedio]  # ventas con medios registrados (POS, Fase 6)
     cobranzas: list[TotalMedio]
     pagos: list[TotalMedio]
     movimientos: list[MovimientoOut]
@@ -209,6 +211,56 @@ async def _calcular_planilla(
         )
     ventas_cant, ventas_total = (await db.execute(stmt)).one()
 
+    # --- ventas con medios registrados (POS Fase 6): entran por su medio real ---
+    stmt = (
+        select(
+            VentaMedio.medio,
+            func.coalesce(func.sum(VentaMedio.importe * TipoComprobante.signo_cta_cte), 0),
+            func.count(),
+        )
+        .select_from(VentaMedio)
+        .join(Comprobante, Comprobante.id == VentaMedio.comprobante_id)
+        .join(TipoComprobante, TipoComprobante.codigo == Comprobante.tipo_codigo)
+        .where(
+            Comprobante.tenant_id == tenant_id,
+            Comprobante.fecha == fecha,
+            Comprobante.estado == "emitido",
+            Comprobante.contado.is_(True),
+        )
+        .group_by(VentaMedio.medio)
+    )
+    if sucursal_id:
+        stmt = stmt.join(PuntoVenta, PuntoVenta.id == Comprobante.punto_venta_id).where(
+            PuntoVenta.sucursal_id == sucursal_id
+        )
+    ventas_por_medio = [
+        TotalMedio(medio=m, total=t, cantidad=c) for m, t, c in (await db.execute(stmt)).all()
+    ]
+
+    # --- ventas SIN medios registrados (gestión manual): se asumen efectivo,
+    # criterio Fase 5 (el POS ya registra los suyos arriba) ---
+    tiene_medios = (
+        select(VentaMedio.id).where(VentaMedio.comprobante_id == Comprobante.id).exists()
+    )
+    stmt = (
+        select(func.coalesce(func.sum(Comprobante.total * TipoComprobante.signo_cta_cte), 0))
+        .select_from(Comprobante)
+        .join(TipoComprobante, TipoComprobante.codigo == Comprobante.tipo_codigo)
+        .where(
+            Comprobante.tenant_id == tenant_id,
+            Comprobante.fecha == fecha,
+            Comprobante.estado == "emitido",
+            Comprobante.contado.is_(True),
+            TipoComprobante.clase.in_(("factura", "nota_debito", "nota_credito")),
+            ~tiene_medios,
+        )
+    )
+    if sucursal_id:
+        stmt = stmt.join(PuntoVenta, PuntoVenta.id == Comprobante.punto_venta_id).where(
+            PuntoVenta.sucursal_id == sucursal_id
+        )
+    ventas_sin_medios = Decimal((await db.scalar(stmt)) or 0)
+
     # --- cobranzas del día por medio ---
     stmt = (
         select(ReciboMedio.medio, func.sum(ReciboMedio.importe), func.count())
@@ -255,7 +307,8 @@ async def _calcular_planilla(
         stmt = stmt.where(CajaMovimiento.sucursal_id == sucursal_id)
     movimientos = (await db.scalars(stmt)).all()
 
-    # --- efectivo: ventas contado (asumidas efectivo) + cobranzas/pagos/movs ---
+    # --- efectivo: ventas sin medios (asumidas efectivo) + medios POS en
+    # efectivo + cobranzas/pagos/movs ---
     cob_ef = sum((c.total for c in cobranzas if c.medio == "efectivo"), Decimal("0"))
     pag_ef = sum((p.total for p in pagos if p.medio == "efectivo"), Decimal("0"))
     mov_ent_ef = sum(
@@ -267,8 +320,11 @@ async def _calcular_planilla(
         Decimal("0"),
     )
     ventas_total = Decimal(ventas_total)
-    entradas = (ventas_total if ventas_total > 0 else Decimal("0")) + cob_ef + mov_ent_ef
-    salidas = (-ventas_total if ventas_total < 0 else Decimal("0")) + pag_ef + mov_sal_ef
+    ventas_ef = ventas_sin_medios + sum(
+        (Decimal(v.total) for v in ventas_por_medio if v.medio == "efectivo"), Decimal("0")
+    )
+    entradas = (ventas_ef if ventas_ef > 0 else Decimal("0")) + cob_ef + mov_ent_ef
+    salidas = (-ventas_ef if ventas_ef < 0 else Decimal("0")) + pag_ef + mov_sal_ef
 
     cierre = await _cierre_de(db, tenant_id, fecha, sucursal_id)
     return PlanillaOut(
@@ -277,6 +333,7 @@ async def _calcular_planilla(
         saldo_inicial=saldo_inicial,
         ventas_contado_cantidad=ventas_cant,
         ventas_contado_total=ventas_total,
+        ventas_por_medio=ventas_por_medio,
         cobranzas=cobranzas,
         pagos=pagos,
         movimientos=[_mov_out(m) for m in movimientos],

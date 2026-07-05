@@ -35,6 +35,7 @@ from app.models.compras import (
 )
 from app.models.caja import CajaCierre, CajaMovimiento, ConceptoCaja, Retencion
 from app.models.nucleo import Sucursal, Tenant, Usuario
+from app.models.pos import PosCaja, PosSesion, VentaMedio
 from app.models.ventas import (
     ArcaConfig,
     ArcaToken,
@@ -99,4 +100,7 @@ __all__ = [
     "CajaMovimiento",
     "CajaCierre",
     "Retencion",
+    "PosCaja",
+    "PosSesion",
+    "VentaMedio",
 ]

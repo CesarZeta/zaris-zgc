@@ -151,6 +151,14 @@ export default function CajaPage() {
                     </td>
                     <td className="num mono">{fmt.format(Number(p.ventas_contado_total))}</td>
                   </tr>
+                  {p.ventas_por_medio.map((v) => (
+                    <tr key={`v-${v.medio}`}>
+                      <td className="chico" style={{ paddingLeft: 24 }}>
+                        · por {MEDIOS_PAGO[v.medio] ?? v.medio} ({v.cantidad}, POS)
+                      </td>
+                      <td className="num mono">{fmt.format(Number(v.total))}</td>
+                    </tr>
+                  ))}
                   {p.cobranzas.map((c) => (
                     <tr key={`c-${c.medio}`}>
                       <td>

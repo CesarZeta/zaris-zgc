@@ -7,6 +7,7 @@ import ClientesPage from "./modules/clientes/ClientesPage";
 import ComprasPage from "./modules/compras/ComprasPage";
 import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
 import LibrosPage from "./modules/libros/LibrosPage";
+import POSPage from "./modules/pos/POSPage";
 import ProveedoresPage from "./modules/proveedores/ProveedoresPage";
 import StockPage from "./modules/stock/StockPage";
 import VentasPage from "./modules/ventas/VentasPage";
@@ -16,6 +17,8 @@ export default function App() {
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* El POS va fuera del shell: pantalla completa de caja */}
+        <Route path="/pos" element={<POSPage />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/clientes" replace />} />
           <Route path="/clientes" element={<ClientesPage />} />

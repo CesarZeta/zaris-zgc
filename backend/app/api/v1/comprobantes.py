@@ -703,16 +703,12 @@ def _validar_para_emitir(comp: Comprobante, config: ArcaConfig | None) -> None:
         )
 
 
-@router.post("/{comp_id}/emitir", response_model=ComprobanteOut)
-async def emitir_comprobante(
-    comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    comp = await _cargar(db, usuario.tenant_id, comp_id)
-    config = await db.scalar(
-        select(ArcaConfig).where(ArcaConfig.tenant_id == usuario.tenant_id)
-    )
+async def emitir_core(
+    db: AsyncSession, comp: Comprobante, usuario: Usuario, config: ArcaConfig | None
+) -> None:
+    """Núcleo de emisión (sin commit): numeración/CAE + cta. cte. + stock.
+    Lo comparten el endpoint /emitir y la venta POS (Fase 6), que lo corre
+    dentro de su propia transacción junto con los medios de pago."""
     _validar_para_emitir(comp, config)
     clase = comp.tipo.clase
 
@@ -782,6 +778,18 @@ async def emitir_comprobante(
         elif clase == "nota_credito":
             await _mover_stock(db, comp, usuario.id, +1, "devolucion")
 
+
+@router.post("/{comp_id}/emitir", response_model=ComprobanteOut)
+async def emitir_comprobante(
+    comp_id: uuid.UUID,
+    usuario: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    comp = await _cargar(db, usuario.tenant_id, comp_id)
+    config = await db.scalar(
+        select(ArcaConfig).where(ArcaConfig.tenant_id == usuario.tenant_id)
+    )
+    await emitir_core(db, comp, usuario, config)
     await db.commit()
     comp = await _cargar(db, usuario.tenant_id, comp_id)
     return _out(comp)
@@ -811,14 +819,11 @@ async def anular_interno(
     return _out(await _cargar(db, usuario.tenant_id, comp_id))
 
 
-@router.post("/{comp_id}/nota-credito", response_model=ComprobanteOut)
-async def crear_nc_espejo(
-    comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Crea la NC borrador espejo de una factura emitida (reversión total)."""
-    factura = await _cargar(db, usuario.tenant_id, comp_id)
+async def crear_nc_espejo_core(
+    db: AsyncSession, factura: Comprobante, usuario: Usuario
+) -> Comprobante:
+    """Arma la NC borrador espejo de una factura emitida (reversión total).
+    Sin commit: la comparten el endpoint /nota-credito y la anulación POS."""
     if factura.tipo.clase != "factura" or factura.estado != "emitido":
         raise HTTPException(status_code=409, detail="Solo se revierte una factura emitida")
     nc = Comprobante(
@@ -885,6 +890,18 @@ async def crear_nc_espejo(
                 importe=al.importe,
             )
         )
+    return nc
+
+
+@router.post("/{comp_id}/nota-credito", response_model=ComprobanteOut)
+async def crear_nc_espejo(
+    comp_id: uuid.UUID,
+    usuario: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Crea la NC borrador espejo de una factura emitida (reversión total)."""
+    factura = await _cargar(db, usuario.tenant_id, comp_id)
+    nc = await crear_nc_espejo_core(db, factura, usuario)
     await db.commit()
     return _out(await _cargar(db, usuario.tenant_id, nc.id))
 

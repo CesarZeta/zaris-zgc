@@ -573,6 +573,7 @@ export interface Planilla {
   saldo_inicial: string;
   ventas_contado_cantidad: number;
   ventas_contado_total: string;
+  ventas_por_medio: TotalMedio[];
   cobranzas: TotalMedio[];
   pagos: TotalMedio[];
   movimientos: CajaMovimiento[];
@@ -645,3 +646,99 @@ export const MEDIOS_PAGO: Record<string, string> = {
   mercadopago: "Mercado Pago",
   otro: "Otro",
 };
+
+// ===== POS Mostrador (Fase 6) =====
+
+export interface PosCaja {
+  id: string;
+  nombre: string;
+  sucursal_id: string | null;
+  punto_venta_id: string;
+  punto_venta_numero: number;
+  deposito_id: string | null;
+  lista_precios: number;
+  ancho_ticket: number;
+  activa: boolean;
+  sesion_abierta: boolean;
+}
+
+export interface PosSesion {
+  id: string;
+  caja_id: string;
+  caja_nombre: string;
+  ancho_ticket: number;
+  cajero_id: string;
+  cajero_nombre: string;
+  estado: "abierta" | "cerrada";
+  fondo_inicial: string;
+  abierta_at: string;
+  cerrada_at: string | null;
+  cantidad_tickets: number | null;
+  total_ventas: string | null;
+  cobrado_efectivo: string | null;
+  cobrado_tarjeta: string | null;
+  cobrado_mercadopago: string | null;
+  cobrado_otros: string | null;
+  efectivo_teorico: string | null;
+  efectivo_contado: string | null;
+  diferencia: string | null;
+  observaciones: string | null;
+}
+
+export interface PosResumen {
+  sesion_id: string;
+  fondo_inicial: string;
+  cantidad_tickets: number;
+  anulaciones: number;
+  total_ventas: string;
+  medios: TotalMedio[];
+  efectivo_teorico: string;
+}
+
+export interface PosVarianteBusqueda {
+  variante_id: string;
+  descripcion: string;
+  codigo_barras: string | null;
+  precio: string;
+}
+
+export interface PosResultadoBusqueda {
+  articulo_id: string;
+  variante_id: string | null;
+  codigo: string;
+  descripcion: string;
+  precio: string;
+  tasa_iva: string;
+  pesable: boolean;
+  exacto: boolean;
+  tiene_variantes: boolean;
+  variantes: PosVarianteBusqueda[];
+}
+
+export interface PosItemCalculado {
+  descripcion: string;
+  cantidad: string;
+  precio_unitario: string;
+  importe_total: string;
+}
+
+export interface PosCalculo {
+  letra: string;
+  receptor_nombre: string;
+  neto_gravado: string;
+  iva: string;
+  total: string;
+  items: PosItemCalculado[];
+}
+
+export interface PosTicketResumen {
+  id: string;
+  tipo_codigo: string;
+  clase: string;
+  letra: string;
+  numero_formateado: string | null;
+  emitido_at: string | null;
+  receptor_nombre: string;
+  total: string;
+  anulada: boolean;
+}

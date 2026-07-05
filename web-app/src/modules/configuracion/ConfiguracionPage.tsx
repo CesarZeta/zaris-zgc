@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPut } from "../../lib/api";
 import type { Empresa, Rubro } from "../../lib/types";
+import CajasSection from "../pos/CajasSection";
 import ArcaConfigSection from "../ventas/ArcaConfigSection";
 
 const DETALLE: Record<string, string> = {
@@ -79,6 +80,8 @@ export default function ConfiguracionPage() {
           ))}
         </div>
       </div>
+
+      <CajasSection />
 
       <ArcaConfigSection />
     </>
