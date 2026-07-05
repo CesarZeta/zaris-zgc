@@ -36,6 +36,10 @@
 ## Cuentas y credenciales
 
 - Admin de la app: `chispito4ever@gmail.com` (tenant "ZARIS (principal)").
+- Smoke testing en prod: usuario `smoke@zgc.test` en el tenant aislado
+  **"Smoke Test ZGC"** (creado 2026-07-05 vía SQL Editor para verificar deploys
+  sin tocar el tenant real; la contraseña la tiene César). Se elimina todo con
+  `delete from tenants where razon_social = 'Smoke Test ZGC';`.
 - Higiene pendiente: la contraseña de la DB circuló por el chat de la sesión del 2026-07-04 — rotarla en algún momento (Supabase → Settings → Database → Reset password) y actualizar la env var `DATABASE_URL` en Vercel + redeploy.
 
 ## Verificaciones pendientes conocidas

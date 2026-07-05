@@ -113,7 +113,7 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Diferido documentado: moneda DOL en factura (se convierte con cotización), percepciones
   (`ImpTrib`), FCE MiPyME, CAEA, remito R con CAI (el X de ZGC no vale para traslado)
 
-## FASE 4 — Compras y Proveedores ✅ (código completo 2026-07-05; falta deploy a prod)
+## FASE 4 — Compras y Proveedores ✅ (en producción 2026-07-05)
 
 **Entregable: registro compras, actualizo stock y costos, pago a proveedores.** ✔ verificado con 61 pruebas de API en vivo (0 fallos, kardex al centavo) + E2E en navegador.
 
@@ -140,11 +140,15 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   de listas sin esperar una compra.
 - [x] Frontend: módulo Proveedores (BUE, drill-down a artículos que provee) + módulo Compras
   (tabs Comprobantes / Pagos / Ctas. ctes. / Comparativo) — verificado E2E en navegador.
-- [ ] Deploy a prod: correr migración 007 en Supabase (SQL Editor, como la 006) + redeploy
-  Vercel y Pages.
-- [ ] Migrador PROVEEDO.DBF / ART_PROV: **decidir con César** — el patrón está (migrar_clientes),
-  pero calibrarlo pide recon de datos reales como en Fases 1/2; tiene sentido al onboardear
-  el primer cliente real con proveedores.
+- [x] Deploy a prod (2026-07-05): migración 007 en Supabase (SQL Editor, la corrió César),
+  backend Vercel y Pages redeployados. Smoke test E2E contra prod OK (tenant aislado
+  "Smoke Test ZGC" + usuario smoke@zgc.test: login, alta proveedor BUE, endpoints de
+  compras/pagos vivos contra las tablas de la 007).
+- [x] Migrador PROVEEDO.DBF / ART_PROV (2026-07-05): `tools/migrar_proveedores.py`, espejo de
+  migrar_clientes (BUE cross-rol: si el CUIT ya existe, el rol proveedor se cuelga de esa
+  entidad). Censo y calibración en `docs/legacy/recon-proveedores.md`. Verificado E2E en dev
+  con eVARISTORE (63 proveedores, 1.885 filas de comparativo, 2.381 proveedores habituales,
+  idempotente); también completa `articulos.proveedor_habitual_id` desde ARTICULO.DBF.
 - Diferido documentado: retenciones practicadas en la OP (RET_PROV → registro básico en
   Fase 5), unidad de compra/coeficiente, factura M, importaciones (despacho/aduana).
 
