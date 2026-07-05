@@ -21,6 +21,18 @@ from app.models.bue import (
     Provincia,
     Zona,
 )
+from app.models.compras import (
+    ArticuloProveedor,
+    Compra,
+    CompraItem,
+    CompraVencimiento,
+    ImputacionCompra,
+    NumeracionCompras,
+    OrdenPago,
+    OrdenPagoMedio,
+    Proveedor,
+    TipoComprobanteCompra,
+)
 from app.models.nucleo import Sucursal, Tenant, Usuario
 from app.models.ventas import (
     ArcaConfig,
@@ -72,4 +84,14 @@ __all__ = [
     "Imputacion",
     "ArcaConfig",
     "ArcaToken",
+    "Proveedor",
+    "ArticuloProveedor",
+    "TipoComprobanteCompra",
+    "Compra",
+    "CompraItem",
+    "CompraVencimiento",
+    "NumeracionCompras",
+    "OrdenPago",
+    "OrdenPagoMedio",
+    "ImputacionCompra",
 ]

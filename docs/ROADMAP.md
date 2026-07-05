@@ -113,14 +113,40 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Diferido documentado: moneda DOL en factura (se convierte con cotización), percepciones
   (`ImpTrib`), FCE MiPyME, CAEA, remito R con CAI (el X de ZGC no vale para traslado)
 
-## FASE 4 — Compras y Proveedores
+## FASE 4 — Compras y Proveedores ✅ (código completo 2026-07-05; falta deploy a prod)
 
-**Entregable: registro compras, actualizo stock y costos, pago a proveedores.**
+**Entregable: registro compras, actualizo stock y costos, pago a proveedores.** ✔ verificado con 61 pruebas de API en vivo (0 fallos, kardex al centavo) + E2E en navegador.
 
-- Rol **proveedor** sobre la BUE
-- Facturas/NC/ND de compra (carga manual), remitos de proveedor, actualización de costo y stock
-- Cuenta corriente de proveedores, órdenes de pago, vencimientos
-- Comparativo de precios por proveedor (feature querida del legacy)
+- [x] Rol **proveedor** sobre la BUE (migración 007): satélite de `entidades` — una entidad
+  puede ser cliente Y proveedor sin duplicarse (probado en vivo). Condición de pago
+  habitual reusa el catálogo `condiciones_venta` (plazos genéricos, como el legacy).
+- [x] Facturas/NC/ND de compra + remitos de proveedor (COMPRASM/D y REMITOPM/D del legacy):
+  carga manual del documento AJENO — letra y punto de venta/número del papel, sin ARCA.
+  **Letra A: costos netos + IVA discriminado; B/C: importes finales** (IVA no computable
+  al costo). Percepciones IVA/IIBB, imp. internos, otros y `redondeo` (calza con el papel)
+  en cabecera; `periodo_iva` sellado para el libro de compras de Fase 5. Duplicados
+  bloqueados por (proveedor, tipo, PV, número). Circuito: borrador → registrar (stock +
+  costos + cta. cte. + vencimientos) → anulable con reversión mientras no tenga pagos.
+- [x] Costos al registrar factura: `articulos.costo` en su convención con/sin IVA (COSTIVA),
+  upsert de `articulo_proveedores` (lista neta + bonifs en cadena + última compra) y
+  proveedor habitual si no tenía. La anulación NO revierte costos (puede haber compras
+  posteriores; se corrige desde Artículos).
+- [x] Cta. cte. de proveedores: saldos por compra, **órdenes de pago** (numeración interna
+  OP-nnnnnnnn por tenant) con medios + imputaciones (parciales, a cuenta, crédito de NC
+  auto-imputada contra su factura), cuenta corriente debe/haber, saldos por proveedor y
+  **cuentas a pagar** (vencimientos por condición, vencidas marcadas).
+- [x] **Comparativo de precios por proveedor** (ART_PROV, feature querida del legacy):
+  costo neto tras bonifs en cadena, mejor precio primero, chip de habitual, carga manual
+  de listas sin esperar una compra.
+- [x] Frontend: módulo Proveedores (BUE, drill-down a artículos que provee) + módulo Compras
+  (tabs Comprobantes / Pagos / Ctas. ctes. / Comparativo) — verificado E2E en navegador.
+- [ ] Deploy a prod: correr migración 007 en Supabase (SQL Editor, como la 006) + redeploy
+  Vercel y Pages.
+- [ ] Migrador PROVEEDO.DBF / ART_PROV: **decidir con César** — el patrón está (migrar_clientes),
+  pero calibrarlo pide recon de datos reales como en Fases 1/2; tiene sentido al onboardear
+  el primer cliente real con proveedores.
+- Diferido documentado: retenciones practicadas en la OP (RET_PROV → registro básico en
+  Fase 5), unidad de compra/coeficiente, factura M, importaciones (despacho/aduana).
 
 ## FASE 5 — Caja e IVA
 

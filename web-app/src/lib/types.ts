@@ -352,6 +352,147 @@ export interface ImpresionPayload {
   qr_svg: string | null;
 }
 
+// ===== Compras y Proveedores (Fase 4) =====
+
+export interface Proveedor {
+  id: string;
+  codigo: string | null;
+  condicion_compra_id: string | null;
+  rubro: string | null;
+  observaciones: string | null;
+  activo: boolean;
+  entidad: Entidad;
+}
+
+export interface CompraItem {
+  id: string;
+  orden: number;
+  articulo_id: string | null;
+  variante_id: string | null;
+  codigo: string | null;
+  descripcion: string;
+  cantidad: string;
+  costo_unitario: string;
+  bonif_1: string;
+  bonif_2: string;
+  tasa_iva: string;
+  importe_neto: string;
+  importe_iva: string;
+  importe_total: string;
+}
+
+export interface Compra {
+  id: string;
+  clase: string;
+  tipo_codigo: string;
+  tipo_descripcion: string;
+  letra: string;
+  punto_venta: number;
+  numero: number;
+  numero_formateado: string;
+  fecha: string;
+  periodo_iva: string | null;
+  proveedor_id: string;
+  proveedor_nombre: string;
+  proveedor_cuit: string | null;
+  proveedor_condicion_iva: string;
+  contado: boolean;
+  condicion_desc: string | null;
+  actualiza_stock: boolean;
+  actualiza_costos: boolean;
+  neto_gravado: string;
+  no_gravado: string;
+  exento: string;
+  iva: string;
+  percepcion_iva: string;
+  percepcion_iibb: string;
+  impuestos_internos: string;
+  otros_tributos: string;
+  redondeo: string;
+  total: string;
+  saldo: string;
+  estado: string;
+  compra_asociada_id: string | null;
+  observaciones: string | null;
+  items: CompraItem[];
+  vencimientos: ComprobanteVencimiento[];
+}
+
+export interface OrdenPago {
+  id: string;
+  numero: number;
+  numero_formateado: string;
+  fecha: string;
+  proveedor_id: string;
+  proveedor_nombre: string;
+  total: string;
+  aplicado: string;
+  a_cuenta: string;
+  estado: string;
+  observaciones: string | null;
+  medios: ReciboMedio[];
+}
+
+export interface SaldoProveedor {
+  proveedor_id: string;
+  codigo: string | null;
+  nombre: string;
+  saldo: string;
+}
+
+export interface VencimientoPagar {
+  compra_id: string;
+  proveedor_id: string;
+  proveedor_nombre: string;
+  tipo_codigo: string;
+  numero: string;
+  nro_cuota: number;
+  fecha_vto: string;
+  importe_cuota: string;
+  saldo_compra: string;
+  vencida: boolean;
+}
+
+export interface ComparativoFila {
+  articulo_proveedor_id: string;
+  proveedor_id: string;
+  proveedor_codigo: string | null;
+  proveedor_nombre: string;
+  codigo_proveedor: string | null;
+  costo_lista: string;
+  bonif_1: string;
+  bonif_2: string;
+  bonif_3: string;
+  costo_neto: string;
+  ultima_compra: string | null;
+  habitual: boolean;
+}
+
+export interface Comparativo {
+  articulo: {
+    id: string;
+    codigo: string;
+    descripcion: string;
+    costo_actual: string;
+    costo_con_iva: boolean;
+  };
+  proveedores: ComparativoFila[];
+}
+
+export interface ArticuloDeProveedor {
+  id: string;
+  articulo_id: string;
+  articulo_codigo: string;
+  articulo_descripcion: string;
+  codigo_proveedor: string | null;
+  costo: string;
+  bonif_1: string;
+  bonif_2: string;
+  bonif_3: string;
+  costo_neto: string;
+  ultima_compra: string | null;
+}
+
 export const CONDICIONES_IVA: Record<string, string> = {
   RI: "Resp. Inscripto",
   MT: "Monotributo",

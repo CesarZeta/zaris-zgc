@@ -125,6 +125,7 @@ class Articulo(Base):
     venta_por_depto: Mapped[bool] = mapped_column(Boolean, default=False)
     es_envase_retornable: Mapped[bool] = mapped_column(Boolean, default=False)
     envase_articulo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("articulos.id"))
+    proveedor_habitual_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("proveedores.id"))
     precio_actualizado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     observaciones: Mapped[str | None] = mapped_column(Text)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)

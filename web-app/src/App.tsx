@@ -3,7 +3,9 @@ import AppShell from "./app/AppShell";
 import LoginPage from "./app/LoginPage";
 import ArticulosPage from "./modules/articulos/ArticulosPage";
 import ClientesPage from "./modules/clientes/ClientesPage";
+import ComprasPage from "./modules/compras/ComprasPage";
 import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
+import ProveedoresPage from "./modules/proveedores/ProveedoresPage";
 import StockPage from "./modules/stock/StockPage";
 import VentasPage from "./modules/ventas/VentasPage";
 
@@ -16,6 +18,8 @@ export default function App() {
           <Route index element={<Navigate to="/clientes" replace />} />
           <Route path="/clientes" element={<ClientesPage />} />
           <Route path="/ventas" element={<VentasPage />} />
+          <Route path="/proveedores" element={<ProveedoresPage />} />
+          <Route path="/compras" element={<ComprasPage />} />
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/configuracion" element={<ConfiguracionPage />} />
