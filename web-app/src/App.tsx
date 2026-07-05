@@ -2,9 +2,11 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AppShell from "./app/AppShell";
 import LoginPage from "./app/LoginPage";
 import ArticulosPage from "./modules/articulos/ArticulosPage";
+import CajaPage from "./modules/caja/CajaPage";
 import ClientesPage from "./modules/clientes/ClientesPage";
 import ComprasPage from "./modules/compras/ComprasPage";
 import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
+import LibrosPage from "./modules/libros/LibrosPage";
 import ProveedoresPage from "./modules/proveedores/ProveedoresPage";
 import StockPage from "./modules/stock/StockPage";
 import VentasPage from "./modules/ventas/VentasPage";
@@ -22,6 +24,8 @@ export default function App() {
           <Route path="/compras" element={<ComprasPage />} />
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
+          <Route path="/caja" element={<CajaPage />} />
+          <Route path="/libros" element={<LibrosPage />} />
           <Route path="/configuracion" element={<ConfiguracionPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

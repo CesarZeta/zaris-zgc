@@ -33,6 +33,7 @@ from app.models.compras import (
     Proveedor,
     TipoComprobanteCompra,
 )
+from app.models.caja import CajaCierre, CajaMovimiento, ConceptoCaja, Retencion
 from app.models.nucleo import Sucursal, Tenant, Usuario
 from app.models.ventas import (
     ArcaConfig,
@@ -94,4 +95,8 @@ __all__ = [
     "OrdenPago",
     "OrdenPagoMedio",
     "ImputacionCompra",
+    "ConceptoCaja",
+    "CajaMovimiento",
+    "CajaCierre",
+    "Retencion",
 ]

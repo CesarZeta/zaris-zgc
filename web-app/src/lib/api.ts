@@ -55,6 +55,35 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
   return (await request<T>(path, { method: "PUT", body: JSON.stringify(body) })).data;
 }
 
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return (await request<T>(path, { method: "PATCH", body: JSON.stringify(body) })).data;
+}
+
+/** Descarga un archivo autenticado (CSV/ZIP) y dispara el guardado local. */
+export async function apiDescargar(path: string, nombre: string): Promise<void> {
+  const sesion = getSesion();
+  const res = await fetch(`${BASE}${path}`, {
+    headers: sesion ? { Authorization: `Bearer ${sesion.access_token}` } : {},
+  });
+  if (!res.ok) {
+    let detalle = `Error ${res.status}`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") detalle = body.detail;
+    } catch {
+      /* cuerpo no-JSON */
+    }
+    throw new ApiError(res.status, detalle);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function apiDelete(path: string): Promise<void> {
   const sesion = getSesion();
   const res = await fetch(`${BASE}${path}`, {

@@ -526,3 +526,122 @@ export const PROVINCIAS: { id: number; nombre: string }[] = [
   { id: 23, nombre: "Santa Cruz" },
   { id: 24, nombre: "Tierra del Fuego" },
 ];
+
+// ===== Caja e IVA (Fase 5) =====
+
+export interface ConceptoCaja {
+  id: string;
+  nombre: string;
+  tipo: "entrada" | "salida";
+  activo: boolean;
+}
+
+export interface CajaMovimiento {
+  id: string;
+  fecha: string;
+  sucursal_id: string | null;
+  concepto_id: string;
+  concepto_nombre: string;
+  tipo: "entrada" | "salida";
+  medio: string;
+  importe: string;
+  descripcion: string | null;
+}
+
+export interface TotalMedio {
+  medio: string;
+  total: string;
+  cantidad: number;
+}
+
+export interface CajaCierre {
+  id: string;
+  sucursal_id: string | null;
+  fecha: string;
+  saldo_inicial: string;
+  entradas: string;
+  salidas: string;
+  saldo_final: string;
+  efectivo_contado: string | null;
+  diferencia: string | null;
+  observaciones: string | null;
+}
+
+export interface Planilla {
+  fecha: string;
+  sucursal_id: string | null;
+  saldo_inicial: string;
+  ventas_contado_cantidad: number;
+  ventas_contado_total: string;
+  cobranzas: TotalMedio[];
+  pagos: TotalMedio[];
+  movimientos: CajaMovimiento[];
+  entradas_efectivo: string;
+  salidas_efectivo: string;
+  saldo_final: string;
+  cierre: CajaCierre | null;
+}
+
+export interface AlicuotaLibro {
+  tasa: string;
+  base: string;
+  importe: string;
+}
+
+export interface FilaLibro {
+  id: string;
+  fecha: string;
+  tipo_codigo: string;
+  tipo_descripcion: string;
+  letra: string;
+  punto_venta: number;
+  numero: number;
+  contraparte: string;
+  doc_nro: string | null;
+  condicion_iva: string;
+  neto_gravado: string;
+  no_gravado: string;
+  exento: string;
+  iva: string;
+  percepciones: string;
+  otros: string;
+  total: string;
+  alicuotas: AlicuotaLibro[];
+}
+
+export interface LibroIva {
+  periodo: string;
+  filas: FilaLibro[];
+  totales: Omit<FilaLibro, "id" | "fecha" | "tipo_codigo" | "tipo_descripcion" | "letra" | "punto_venta" | "numero" | "contraparte" | "doc_nro" | "condicion_iva" | "alicuotas"> & {
+    por_alicuota: AlicuotaLibro[];
+  };
+}
+
+export interface Retencion {
+  id: string;
+  tipo: "sufrida" | "practicada";
+  regimen: string;
+  fecha: string;
+  importe: string;
+  nro_certificado: string | null;
+  cliente_id: string | null;
+  proveedor_id: string | null;
+  contraparte: string | null;
+  descripcion: string | null;
+}
+
+export interface ResumenRetencion {
+  tipo: string;
+  regimen: string;
+  cantidad: number;
+  total: string;
+}
+
+export const MEDIOS_PAGO: Record<string, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  cheque: "Cheque",
+  tarjeta: "Tarjeta",
+  mercadopago: "Mercado Pago",
+  otro: "Otro",
+};

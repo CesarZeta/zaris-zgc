@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.articulos import router as articulos_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.caja import router as caja_router
 from app.api.v1.catalogos_articulos import router as catalogos_articulos_router
 from app.api.v1.clientes import router as clientes_router
 from app.api.v1.cobranzas import router as cobranzas_router
@@ -10,6 +11,7 @@ from app.api.v1.compras import router as compras_router
 from app.api.v1.comprobantes import router as comprobantes_router
 from app.api.v1.empresa import router as empresa_router
 from app.api.v1.entidades import router as entidades_router
+from app.api.v1.libros import router as libros_router
 from app.api.v1.pagos import router as pagos_router
 from app.api.v1.proveedores import router as proveedores_router
 from app.api.v1.stock import router as stock_router
@@ -36,6 +38,8 @@ app.include_router(cobranzas_router, prefix="/api/v1")
 app.include_router(proveedores_router, prefix="/api/v1")
 app.include_router(compras_router, prefix="/api/v1")
 app.include_router(pagos_router, prefix="/api/v1")
+app.include_router(caja_router, prefix="/api/v1")
+app.include_router(libros_router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,

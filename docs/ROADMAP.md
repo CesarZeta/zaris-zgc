@@ -152,13 +152,39 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Diferido documentado: retenciones practicadas en la OP (RET_PROV → registro básico en
   Fase 5), unidad de compra/coeficiente, factura M, importaciones (despacho/aduana).
 
-## FASE 5 — Caja e IVA
+## FASE 5 — Caja e IVA 🔶 (código completo y verificado 2026-07-05; deploy en curso)
 
 **Entregable: cierro la caja del día y le entrego los libros al contador.**
 
-- Conceptos de entrada/salida, movimientos de caja, planilla de caja diaria por sucursal
-- Libros de IVA ventas y compras, resumen de retenciones (registro básico), export CITI
-- Export para contador (Excel/CSV)
+- [x] Migración 008 (espejo del legacy CONC_CAJ/MOVIM/SALCAJA/RET_CLI/RET_PROV):
+  `conceptos_caja`, `caja_movimientos` (solo manuales; tipo sellado del concepto),
+  `caja_cierres` (totales sellados + arqueo, unique por fecha/sucursal y global),
+  `retenciones` (sufrida=cliente/recibo, practicada=proveedor/OP, CHECK cruzado),
+  `codigo_arca` en tipos_comprobante_compra. Los libros de IVA y la planilla NO
+  tienen tabla: son reportes regenerables (como el _ADMINC del legacy).
+- [x] Caja: conceptos entrada/salida (alta/rename/inactivar, unicidad por tenant),
+  movimientos manuales por medio, **planilla diaria** por sucursal o global (ventas
+  contado ± NC + cobranzas por medio + pagos por medio + manuales; saldo = solo
+  efectivo), cierre con arqueo (`diferencia = contado − saldo_final`) que bloquea
+  altas/bajas de esa fecha; reabrible borrando el cierre.
+- [x] Libros de IVA ventas (comprobantes emitidos fiscales, NC en negativo, totales
+  por alícuota) y compras (por `periodo_iva` sellado con fallback a fecha; letra A
+  con crédito fiscal por tasa, B/C a no gravado sin crédito — IVA al costo).
+- [x] Retenciones registro básico: alta/baja con referencias validadas por tenant,
+  resumen por tipo/régimen, CSV.
+- [x] Exports para el contador: CSV separador `;` decimales con coma UTF-8 BOM
+  (Excel es-AR directo) y **CITI RG 3685**: ZIP con los 4 TXT de ancho fijo
+  (ventas cbte 266 / alícuotas 62, compras cbte 325 / alícuotas 84) — best-effort
+  documentado, el contador valida antes de presentar.
+- [x] Frontend: módulo Caja (tabs Planilla del día / Movimientos / Conceptos +
+  cierre con arqueo) y módulo Libros IVA (tabs IVA Ventas / IVA Compras /
+  Retenciones / Exportar con descargas autenticadas).
+- [x] Verificado 2026-07-05: 48 pruebas de API en vivo (0 fallos reales; incluye
+  anchos CITI, coherencia de totales, aislamiento de tenant y bloqueo por caja
+  cerrada) + E2E en navegador (planilla coherente, libros con datos reales).
+- Diferido documentado: percepciones de ventas en el libro (el modelo de ventas
+  aún no las discrimina — `ImpTrib` diferido de Fase 3), sucursal en OP (entran
+  solo en planilla global), export Excel nativo (.xlsx; el CSV lo cubre).
 
 ## FASE 6 — POS Mostrador Web (cierra el MVP)
 

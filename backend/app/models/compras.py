@@ -83,6 +83,7 @@ class TipoComprobanteCompra(Base):
     clase: Mapped[str] = mapped_column(String(13))
     signo_cta_cte: Mapped[int] = mapped_column(SmallInteger, default=0)
     fiscal: Mapped[bool] = mapped_column(Boolean, default=False)
+    codigo_arca: Mapped[int | None] = mapped_column(SmallInteger)  # 008: libro/CITI compras
 
 
 class Compra(Base):
