@@ -103,10 +103,13 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - [x] Frontend módulo Ventas (tabs Comprobantes/Cobranzas/Ctas. ctes.) + config ARCA y
   puntos de venta en Configuración — verificado E2E en navegador
 - [x] Migración 006 + 66 pruebas de API en vivo (0 fallos)
-- [ ] **Homologación real**: César debe generar certificado (pasos en FACTURACION-ARCA.md §8),
-  cargarlo en Configuración → ARCA y probar contra wswhomo; después producción
-- [ ] Deploy: aplicar migración 006 en Supabase prod ANTES de pushear (el push
-  redeploya Pages/Vercel); registrar en HISTORIAL_MIGRACIONES
+- [x] Deploy a producción (2026-07-05): migración 006 + 005 en Supabase (las corrió César
+  por SQL Editor), backend Vercel (`npx vercel deploy --prod`), Pages redeployado.
+  Gotcha registrado: las deps del backend van TAMBIÉN en `api/requirements.txt` (es el
+  que instala Vercel).
+- [ ] **Homologación real** (diferido por César 2026-07-05, no bloquea): generar certificado
+  con Clave Fiscal (pasos en FACTURACION-ARCA.md §8), cargarlo en Configuración → ARCA y
+  probar contra wswhomo; después producción. Mientras tanto, modo simulado.
 - Diferido documentado: moneda DOL en factura (se convierte con cotización), percepciones
   (`ImpTrib`), FCE MiPyME, CAEA, remito R con CAI (el X de ZGC no vale para traslado)
 
