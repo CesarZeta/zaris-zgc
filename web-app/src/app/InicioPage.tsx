@@ -80,40 +80,51 @@ export default function InicioPage() {
         </div>
 
         <div className="hero-der">
-          <div className="hero-vivo">
-            <span className="pulso" aria-hidden="true" />
-            Sesión activa · monitoreada
+          {/* Bloque 1 — sesión activa + datos del usuario, todo junto */}
+          <div className="hero-bloque">
+            <div className="hero-vivo">
+              <span className="pulso" aria-hidden="true" />
+              Sesión activa · monitoreada
+            </div>
+            <p className="inicio-hola">Bienvenido</p>
+            <h1 className="inicio-titulo">{nombre || "Usuario"}</h1>
+            <dl className="hero-datos">
+              <div>
+                <dt>Nivel de acceso</dt>
+                <dd>{nivelTexto(nivel)}</dd>
+              </div>
+              <div>
+                <dt>Módulos habilitados</dt>
+                <dd>
+                  {MODULOS.length} de {MODULOS.length}
+                </dd>
+              </div>
+            </dl>
           </div>
-          <p className="inicio-hola">Bienvenido</p>
-          <h1 className="inicio-titulo">{nombre || "Usuario"}</h1>
 
-          {/* reloj grande en vivo */}
-          <div className="hero-reloj">
+          {/* Bloque 2 — horario (hora en vivo) */}
+          <div className="hero-bloque">
+            <dt className="hero-etiqueta">Hora</dt>
             <span className="reloj-hora">{relojFull}</span>
-            <span className="reloj-fecha">{fechaLarga}</span>
           </div>
 
-          {/* datos de sesión */}
-          <dl className="hero-datos">
-            <div>
-              <dt>Inicio de sesión</dt>
-              <dd>{loginAt ? hh(loginAt) : "—"} h</dd>
-            </div>
-            <div>
-              <dt>Tiempo en sesión</dt>
-              <dd className="mono">{enSesion}</dd>
-            </div>
-            <div>
-              <dt>Nivel de acceso</dt>
-              <dd>{nivelTexto(nivel)}</dd>
-            </div>
-            <div>
-              <dt>Módulos habilitados</dt>
-              <dd>
-                {MODULOS.length} de {MODULOS.length}
-              </dd>
-            </div>
-          </dl>
+          {/* Bloque 3 — fecha y tiempo de sesión */}
+          <div className="hero-bloque">
+            <dl className="hero-datos">
+              <div>
+                <dt>Fecha</dt>
+                <dd className="reloj-fecha">{fechaLarga}</dd>
+              </div>
+              <div>
+                <dt>Inicio de sesión</dt>
+                <dd>{loginAt ? hh(loginAt) : "—"} h</dd>
+              </div>
+              <div>
+                <dt>Tiempo en sesión</dt>
+                <dd className="mono">{enSesion}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </section>
 

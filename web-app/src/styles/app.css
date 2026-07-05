@@ -664,10 +664,11 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
 /* ---------- Inicio / Dashboard (bienvenida) ---------- */
 .inicio { max-width: 1100px; }
 
-/* hero apaisado: gráfica animada a la izquierda, panel de sesión a la derecha */
+/* hero apaisado dividido por la mitad: gráfica animada a la izquierda,
+   panel de sesión a la derecha (50/50). */
 .inicio-hero {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 1fr 1fr;
   align-items: center;
   gap: var(--space-12);
   background: var(--zaris-dark);
@@ -714,37 +715,37 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
   margin: 0 0 var(--space-1);
 }
 .inicio-titulo {
-  font-size: var(--size-title);
+  font-size: var(--size-subhead);
   font-weight: 700;
   letter-spacing: var(--track-title);
-  margin: 0 0 var(--space-6);
-  line-height: 1.05;
+  margin: 0 0 var(--space-5);
+  line-height: 1.1;
   color: var(--zaris-cream);
 }
 .inicio-titulo span { color: var(--zaris-orange); }
 
-/* reloj en vivo */
-.hero-reloj {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-5);
-  margin-bottom: var(--space-6);
-  padding-bottom: var(--space-6);
-  border-bottom: 1px solid rgba(242, 241, 237, 0.12);
-  flex-wrap: wrap;
+/* bloques del panel derecho, separados por hairline */
+.hero-bloque { padding: var(--space-6) 0; }
+.hero-bloque + .hero-bloque { border-top: 1px solid rgba(242, 241, 237, 0.12); }
+.hero-bloque:first-child { padding-top: 0; }
+.hero-bloque:last-child { padding-bottom: 0; }
+.hero-etiqueta {
+  display: block;
+  font-size: var(--size-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(242, 241, 237, 0.5);
+  margin-bottom: var(--space-2);
 }
 .reloj-hora {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: var(--size-title-sm);
+  font-size: var(--size-subhead);
   font-weight: 700;
   color: var(--zaris-orange);
   line-height: 1;
 }
-.reloj-fecha {
-  font-size: var(--size-btn);
-  color: rgba(242, 241, 237, 0.7);
-}
+.reloj-fecha { color: var(--zaris-cream); }
 .reloj-fecha::first-letter { text-transform: uppercase; }
 
 /* datos de sesión en grilla */
@@ -763,7 +764,7 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
 }
 .hero-datos dd {
   margin: 0;
-  font-size: var(--size-title-sm);
+  font-size: var(--size-ui);
   font-weight: 600;
   color: var(--zaris-cream);
   overflow-wrap: break-word;
