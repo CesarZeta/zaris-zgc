@@ -789,11 +789,11 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
 .ver-detalle:hover { text-decoration: underline; }
 .modulos-pop-backdrop { position: fixed; inset: 0; z-index: 40; }
 .modulos-pop {
-  position: absolute;
+  position: fixed;         /* anclado a la ventana → no lo recorta el overflow del hero */
   z-index: 41;
-  top: calc(100% + var(--space-3));
-  left: 0;
-  min-width: 220px;
+  width: min(360px, calc(100vw - var(--space-8)));
+  max-height: calc(100vh - var(--space-16));
+  overflow-y: auto;
   background: var(--zaris-white);
   color: var(--fg-1);
   border: 1px solid var(--border-medium);
@@ -808,7 +808,15 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
   color: var(--fg-3);
   margin-bottom: var(--space-4);
 }
-.modulos-pop-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+/* dos columnas: los 10 módulos entran sin scroll ni corte */
+.modulos-pop-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2) var(--space-8);
+}
 .modulos-pop-lista li {
   display: flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSesion } from "../lib/auth";
 import HeroOrbita from "./HeroOrbita";
@@ -66,13 +66,46 @@ export default function InicioPage() {
     return () => clearInterval(id);
   }, []);
 
-  // popover con el detalle de módulos habilitados
+  // popover con el detalle de módulos habilitados.
+  // Se ancla al botón con position:fixed (coords del botón) para que NO lo
+  // recorte el overflow:hidden del hero.
+  const btnModulosRef = useRef<HTMLButtonElement>(null);
   const [verModulos, setVerModulos] = useState(false);
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null);
+
+  function toggleModulos() {
+    if (verModulos) {
+      setVerModulos(false);
+      return;
+    }
+    const r = btnModulosRef.current?.getBoundingClientRect();
+    if (r) {
+      // ancho estimado del popover (2 columnas). Si no entra a la derecha del
+      // botón, lo alineamos por su borde derecho para que no se salga.
+      const ancho = Math.min(360, window.innerWidth - 32);
+      const margen = 16;
+      let left = r.left;
+      if (left + ancho > window.innerWidth - margen) {
+        left = Math.max(margen, r.right - ancho);
+      }
+      setPopPos({ top: r.bottom + 8, left });
+    }
+    setVerModulos(true);
+  }
+
   useEffect(() => {
     if (!verModulos) return;
     const cerrar = (e: KeyboardEvent) => e.key === "Escape" && setVerModulos(false);
+    // si cambia el tamaño o hace scroll, cerramos (la posición quedaría vieja)
+    const reposicionar = () => setVerModulos(false);
     document.addEventListener("keydown", cerrar);
-    return () => document.removeEventListener("keydown", cerrar);
+    window.addEventListener("resize", reposicionar);
+    window.addEventListener("scroll", reposicionar, true);
+    return () => {
+      document.removeEventListener("keydown", cerrar);
+      window.removeEventListener("resize", reposicionar);
+      window.removeEventListener("scroll", reposicionar, true);
+    };
   }, [verModulos]);
 
   const hh = (d: Date) =>
@@ -109,34 +142,13 @@ export default function InicioPage() {
                   <button
                     type="button"
                     className="ver-detalle"
-                    onClick={() => setVerModulos((v) => !v)}
+                    ref={btnModulosRef}
+                    onClick={toggleModulos}
                     aria-expanded={verModulos}
                   >
                     Ver detalle
                   </button>
                 </dd>
-                {verModulos && (
-                  <>
-                    <div
-                      className="modulos-pop-backdrop"
-                      onClick={() => setVerModulos(false)}
-                      aria-hidden="true"
-                    />
-                    <div className="modulos-pop" role="dialog" aria-label="Módulos habilitados">
-                      <div className="modulos-pop-titulo">Acceso a {MODULOS.length} módulos</div>
-                      <ul className="modulos-pop-lista">
-                        {MODULOS.map((m) => (
-                          <li key={m.to}>
-                            <span className="tilde" aria-hidden="true">
-                              ✓
-                            </span>
-                            {m.nombre}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </>
-                )}
               </div>
             </dl>
           </div>
@@ -189,6 +201,35 @@ export default function InicioPage() {
           </Link>
         ))}
       </section>
+
+      {/* Popover de módulos: fijo a la ventana (no lo recorta el overflow del hero) */}
+      {verModulos && popPos && (
+        <>
+          <div
+            className="modulos-pop-backdrop"
+            onClick={() => setVerModulos(false)}
+            aria-hidden="true"
+          />
+          <div
+            className="modulos-pop"
+            role="dialog"
+            aria-label="Módulos habilitados"
+            style={{ top: popPos.top, left: popPos.left }}
+          >
+            <div className="modulos-pop-titulo">Acceso a {MODULOS.length} módulos</div>
+            <ul className="modulos-pop-lista">
+              {MODULOS.map((m) => (
+                <li key={m.to}>
+                  <span className="tilde" aria-hidden="true">
+                    ✓
+                  </span>
+                  {m.nombre}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
     </div>
   );
 }
