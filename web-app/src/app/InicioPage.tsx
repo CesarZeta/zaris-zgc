@@ -66,6 +66,15 @@ export default function InicioPage() {
     return () => clearInterval(id);
   }, []);
 
+  // popover con el detalle de módulos habilitados
+  const [verModulos, setVerModulos] = useState(false);
+  useEffect(() => {
+    if (!verModulos) return;
+    const cerrar = (e: KeyboardEvent) => e.key === "Escape" && setVerModulos(false);
+    document.addEventListener("keydown", cerrar);
+    return () => document.removeEventListener("keydown", cerrar);
+  }, [verModulos]);
+
   const hh = (d: Date) =>
     `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const fechaLarga = `${DIAS[ahora.getDay()]} ${ahora.getDate()} de ${MESES[ahora.getMonth()]} de ${ahora.getFullYear()}`;
@@ -93,11 +102,41 @@ export default function InicioPage() {
                 <dt>Nivel de acceso</dt>
                 <dd>{nivelTexto(nivel)}</dd>
               </div>
-              <div>
+              <div className="hero-modulos-dato">
                 <dt>Módulos habilitados</dt>
                 <dd>
                   {MODULOS.length} de {MODULOS.length}
+                  <button
+                    type="button"
+                    className="ver-detalle"
+                    onClick={() => setVerModulos((v) => !v)}
+                    aria-expanded={verModulos}
+                  >
+                    Ver detalle
+                  </button>
                 </dd>
+                {verModulos && (
+                  <>
+                    <div
+                      className="modulos-pop-backdrop"
+                      onClick={() => setVerModulos(false)}
+                      aria-hidden="true"
+                    />
+                    <div className="modulos-pop" role="dialog" aria-label="Módulos habilitados">
+                      <div className="modulos-pop-titulo">Acceso a {MODULOS.length} módulos</div>
+                      <ul className="modulos-pop-lista">
+                        {MODULOS.map((m) => (
+                          <li key={m.to}>
+                            <span className="tilde" aria-hidden="true">
+                              ✓
+                            </span>
+                            {m.nombre}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                )}
               </div>
             </dl>
           </div>
