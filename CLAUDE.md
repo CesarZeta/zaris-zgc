@@ -121,3 +121,57 @@ ZGC/
   dentro de su propia transacción. No duplicar esa lógica.
 - **Pruebas sobre agregados del día** (planilla, resúmenes): asertar **deltas**
   (después − antes), nunca absolutos — el día es compartido entre corridas y sesiones.
+- **Números `Numeric` viajan como STRING en el JSON** de la API (SQLAlchemy los
+  serializa así): al consumir la API desde un script, convertir con `float()` antes de
+  comparar/operar (`precio_1 > 0` sobre un string revienta).
+- **Backdating de comprobantes**: `fecha` es un campo opcional del body en ventas
+  (`/ventas/comprobantes`) y compras (`/compras/comprobantes`); en modo ARCA `simulado`
+  no hay validación de secuencia contra AFIP, así que se pueden generar comprobantes con
+  fecha pasada por API **de forma segura** (el server mantiene numeración/stock/IVA/cta.cte).
+  Caveat: `stock_movimientos.fecha` se sella con `now()` (el helper `_mover_stock` no
+  expone la fecha) → para un kardex con fechas históricas hay que hacer un `UPDATE`
+  post-generación por SQL, matcheando por el TEXTO del campo `comprobante`
+  (`TIPO 0001-00000123`), no hay FK a comprobantes/compras.
+
+## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
+
+- **Orden de migradores en un mismo tenant: CLIENTES antes que PROVEEDORES.** Bug real
+  (2026-07-05): `migrar_clientes.py` NO reusa entidades existentes por documento — solo
+  dedupea dentro del rol cliente —, así que corriendo después de proveedores, un CUIT
+  compartido revienta `uq_entidades_doc` y aborta la transacción. `migrar_proveedores.py`
+  SÍ reusa entidades (patrón BUE, `entidades_reusadas_bue`). Artículos es independiente.
+  (Arreglar el migrador de clientes para que reuse por doc queda como deuda técnica.)
+- **Borrar entidades de un tenant**: primero `update articulos set proveedor_habitual_id=null`
+  y `delete articulo_proveedores` (FK `articulos_proveedor_habitual_id_fkey`), luego roles
+  (clientes/proveedores), luego `entidad_contactos`, luego `entidades`.
+- **Correr scripts (migradores) contra PROD**: no hay `.env.prod` en el repo. Armar uno
+  temporal con la `DATABASE_URL` de Supabase (session pooler `:5432`, password del
+  `%APPDATA%\postgresql\pgpass.conf` **percent-encoded** con `urllib.parse.quote`).
+  **BORRARLO al terminar** — tiene la password en claro (está en `.gitignore` por `.env.*`,
+  pero igual eliminarlo). La generación de operaciones sí va por la API pública (Vercel),
+  no por SQL directo.
+- **Setup de un tenant para poder facturar** (no existe como un solo comando): tenant +
+  usuario + `arca_config` modo simulado + punto de venta + depósito activo. Lo orquesta
+  `tools/demo_setup_tenant.py` (idempotente). Sin depósito activo, `emitir` da 422.
+
+## 7. Deploy y frontend (lecciones permanentes)
+
+- **El deploy de GitHub Pages falla transitoriamente** (`actions/deploy-pages@v4`:
+  "Deployment failed, try again later", `error_count: 10`) con frecuencia ~50%. **No es el
+  código** — verificar que el job `build` dio `success` y re-lanzar con
+  `gh run rerun <id> --failed`. No tocar nada.
+- **Push a `master` = deploy a producción**: dispara el workflow de Pages (frontend) y el
+  redeploy del backend en Vercel. Antes de pushear, si el modelo agregó columnas/tablas,
+  **la migración va SIEMPRE primero** (si no, el backend nuevo pega contra tablas que no
+  existen → 500). Verificarlo con `execute_sql`/psql antes del push.
+- **Popover/dropdown dentro de un contenedor con `overflow:hidden`** (p.ej. el hero del
+  inicio, que lo tiene para las órbitas animadas): un hijo con `position:absolute` se
+  RECORTA. Usar `position:fixed` anclado a las coords del botón (`getBoundingClientRect`
+  en el onClick) + clamp horizontal y vertical al viewport. Verificar en ventana chica.
+- **Tokens de tipografía**: solo existen `--size-hero`, `--size-subhead`, `--size-title-sm`,
+  `--size-ui`, `--size-btn`, `--size-caption` (NO `--size-title`). Usar una var inexistente
+  cae al default heredado y descuadra el diseño — verificar el nombre contra `tokens.css`.
+- **HMR de Vite en dev deja componentes stale**: al verificar cambios de estado/handlers en
+  el navegador, si un click "no hace nada", **recargar la página completa** antes de
+  concluir que hay un bug (pasó 2-3 veces en esta sesión: el handler nuevo no estaba
+  adjunto por HMR).
