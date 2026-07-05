@@ -152,7 +152,7 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Diferido documentado: retenciones practicadas en la OP (RET_PROV → registro básico en
   Fase 5), unidad de compra/coeficiente, factura M, importaciones (despacho/aduana).
 
-## FASE 5 — Caja e IVA 🔶 (código completo y verificado 2026-07-05; deploy en curso)
+## FASE 5 — Caja e IVA ✅ (en producción 2026-07-05)
 
 **Entregable: cierro la caja del día y le entrego los libros al contador.**
 
@@ -179,9 +179,15 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - [x] Frontend: módulo Caja (tabs Planilla del día / Movimientos / Conceptos +
   cierre con arqueo) y módulo Libros IVA (tabs IVA Ventas / IVA Compras /
   Retenciones / Exportar con descargas autenticadas).
-- [x] Verificado 2026-07-05: 48 pruebas de API en vivo (0 fallos reales; incluye
-  anchos CITI, coherencia de totales, aislamiento de tenant y bloqueo por caja
-  cerrada) + E2E en navegador (planilla coherente, libros con datos reales).
+- [x] Verificado 2026-07-05: 48 pruebas de API en vivo en dev (0 fallos reales;
+  incluye anchos CITI, coherencia de totales, aislamiento de tenant y bloqueo por
+  caja cerrada) + E2E en navegador (planilla coherente, libros con datos reales).
+- [x] Deploy a prod (2026-07-05): migración 008 + re-aplicación de la 005 en Supabase
+  por psql via session pooler (Claude, con la password que pasó César en el chat →
+  `pgpass.conf`), backend Vercel (`npx vercel deploy --prod`) y Pages redeployados.
+  Smoke E2E contra prod OK: 24/24 con tenant efímero "Smoke Fase 5 ZGC" (login,
+  ciclo de caja completo con arqueo/diferencia, libros vacíos coherentes, CSV+CITI,
+  retenciones) — tenant creado y eliminado en la misma corrida.
 - Diferido documentado: percepciones de ventas en el libro (el modelo de ventas
   aún no las discrimina — `ImpTrib` diferido de Fase 3), sucursal en OP (entran
   solo en planilla global), export Excel nativo (.xlsx; el CSV lo cubre).
