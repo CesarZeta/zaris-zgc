@@ -9,6 +9,36 @@ ZGC es un **SaaS multi-tenant** de gestión comercial, contable y de stock para 
 
 Es un **producto independiente** del ecosistema ZARIS (repo, DB y auth propios). Comparte patrones y experiencia de ZGE, no infraestructura lógica.
 
+## 1-bis. Alcance objetivo: ERP-liviano argentino (adenda 2026-07-05)
+
+ZGC se posiciona como **ERP-liviano argentino en la nube**: le gana a los ERP grandes
+(referencia competitiva: SAP Business One) en el segmento PyME/comercio por
+**FIT + PRECIO + FISCAL NATIVO**, nunca por amplitud de módulos. La **simplicidad es
+marca de producto, no límite**: un comercio lo opera sin consultores, y el cumplimiento
+argentino (ARCA, libros, retenciones/percepciones, IIBB) viene nativo de fábrica, no
+como "localización" agregada.
+
+**Regla de crecimiento** (rectora de todo el post-MVP):
+
+- Se extiende **HACIA ADENTRO**: finanzas (contabilidad, activos fijos, tesorería),
+  fiscal (impuestos, presentaciones a fiscos) y, al final y condicionado, sueldos.
+  El foso es la **localización argentina**: a los ERP internacionales les cuesta
+  construirla y a los locales legacy les cuesta modernizarla.
+- **NUNCA hacia afuera**: producción/MRP, gestión de proyectos/obras, gestión de
+  servicios (horas, mesa de ayuda) y localización internacional quedan
+  **FUERA PERMANENTE** — cero foso, segmento equivocado, mantenimiento sin retorno.
+
+**Gates (disciplina heredada, sin excepciones):**
+
+- El MVP sigue siendo **Fases 0–6** y no se re-scopea; toda ampliación es post-MVP.
+- Ningún módulo-foso se construye antes del **primer cliente de referencia pagando**.
+- Infraestructura 100% free-tier hasta que haya clientes facturando.
+- Cada módulo-foso lleva **condición de activación explícita** en el ROADMAP: no se
+  activa hasta que haya ingresos/capacidad que sostengan su mantenimiento perpetuo
+  (padrones, paritarias, cambios normativos) y su piso de testing.
+
+El detalle de fases, condiciones de activación y decisiones abiertas vive en `ROADMAP.md`.
+
 ## 2. Mercado objetivo
 
 Los cuatro segmentos del legacy, con una sola base de código:
@@ -41,7 +71,7 @@ El corazón del MVP es el **ciclo comercial completo en versión simple**:
 - **Clientes / Ventas**: presupuestos, facturación, cobranzas, cuenta corriente.
 - **Proveedores / Compras**: facturas de compra, pagos, cuenta corriente.
 - **Caja**: movimientos y planilla diaria.
-- **Facturación electrónica ARCA/AFIP desde el MVP**: pyafipws (WSAA + WSFEv1), homologación primero. Comprobantes A/B/C con CAE + QR.
+- **Facturación electrónica ARCA/AFIP desde el MVP**: cliente **propio** WSAA + WSFEv1 (`backend/app/services/arca/` — decisión 2026-07-04, ver FACTURACION-ARCA.md §9; pyafipws quedó como implementación de referencia). Comprobantes A/B/C con CAE + QR. Homologación real diferida por César (2026-07-05): prod opera en modo simulado hasta generar certificados.
 - **POS mostrador web**: pantalla de venta rápida en navegador — lector de código de barras USB (emula teclado, costo cero) e impresión térmica de tickets. Sin pesables/envases todavía.
 - **IVA**: libros de IVA ventas/compras (el contador externo es el usuario indirecto).
 
@@ -68,12 +98,16 @@ Elegidos los cuatro:
 
 Elegidas las cuatro: **Mercado Pago** (QR en POS + conciliación), **e-commerce** (Tiendanube / WooCommerce / Mercado Libre — stock unificado), **WhatsApp** (comprobantes y avisos de vencimiento), **bancos** (importación de extractos para conciliación).
 
+> Criterio 2026-07-05: son **integraciones de canal** — paridad con el mercado, no foso
+> (todos los ERP argentinos las tienen). Van gated por demanda real y con la carga de
+> mantenimiento perpetuo de cada API asumida explícitamente. Ver ROADMAP F13.
+
 ## 6. Infraestructura (todo free-tier)
 
 | Pieza | Decisión | Límite free a vigilar |
 |---|---|---|
 | DB | **Proyecto Supabase propio** (separado de ZGE) | 500 MB, pausa tras ~1 semana inactivo, 2 proyectos free por cuenta |
-| Backend | **Railway, junto a ZGE** (servicio adicional) | Consumo compartido del plan existente |
+| Backend | **Vercel serverless, región gru1/São Paulo** (decisión 2026-07-04; Railway descartado: no tiene región SP) | Plan Hobby = uso no comercial → migrar a plan pago u Oracle Cloud cuando haya clientes facturando |
 | Frontend | **GitHub Pages** | Repo público o Pages de repo privado según plan |
 | FE AFIP | Servicios web de ARCA | Gratuitos; certificado propio por tenant o emisor |
 

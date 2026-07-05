@@ -204,17 +204,51 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 
 ---
 
-## POST-MVP (orden tentativo, a repriorizar con feedback de pilotos)
+## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
-| # | Fase | Contenido |
-|---|---|---|
-| 7 | Dashboard + móvil | Indicadores en tiempo real, experiencia responsive del dueño |
-| 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos |
-| 9 | Vendedores y comisiones | Liquidación por venta / por cobranza |
-| 10 | POS Supermercado | Pesables, envases, venta por departamento, multi-caja |
-| 11 | Contabilidad (módulo activable) | Plan de cuentas, asientos automáticos, libro diario, balances |
-| 12 | Integraciones | Mercado Pago QR, WhatsApp, e-commerce, nodo LAN de sucursal |
-| 13 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries |
+> Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
+> fiscal, sueldos = foso de localización argentina) y **NUNCA hacia afuera**
+> (producción/MRP, proyectos, gestión de servicios, localización internacional =
+> FUERA PERMANENTE). Gate global: **ningún módulo-foso antes del primer cliente de
+> referencia pagando**. Orden re-priorizable con feedback de pilotos, decisiones
+> ya tomadas anotadas en cada fila.
+
+| # | Fase | Contenido | Condición de activación |
+|---|---|---|---|
+| 7 | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal) | Post-MVP inmediato |
+| 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
+| 9 | **Contabilidad** (módulo activable) | Plan de cuentas, asientos automáticos desde ventas/compras/caja/OP (ya registran todo), libro diario, balances; **activos fijos + amortizaciones**; **export al software del contador** (formaliza los CSV de F5) | **FOSO** — primer cliente de referencia pagando. *Adelantada de F11→F9 (decisión César 2026-07-05): mejor relación valor/mantenimiento (principios estables), palanca de plan pago, habilita F10* |
+| 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
+| 11 | Vendedores y comisiones | Liquidación por venta / por cobranza | — |
+| 12 | POS Supermercado | Pesables, envases, venta por departamento, multi-caja | Demanda ex clientes RevoSolution |
+| 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |
+| 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |
+| 15 | **Sueldos y cargas sociales** | Alcance si se construye: legajos, liquidación por convenio, F.931/SICOSS, Libro de Sueldos Digital, ART. **Build-vs-integrar ABIERTO** (ver Decisiones abiertas) | **FOSO MÁXIMO, el más condicional**: F9+F10 maduros + N clientes pagos estables + **asesoría laboral contratada**. Mantenimiento MUY ALTO (paritarias, escalas), riesgo legal ALTO |
+
+### Gaps evaluados 2026-07-05 (clasificación foso / canal / fuera)
+
+| Capacidad | Veredicto |
+|---|---|
+| BI / reportería propia | **FOSO-light, evolución de F7** — export universal ya, vistas guardadas + envío programado cuando haya plan pago. NO report-builder/cubos propio temprano (mantenimiento alto, free-tier no banca OLAP) |
+| Activos fijos / amortizaciones | **IN — dentro de F9** (mantenimiento bajo, paridad SAP B1 ante el contador) |
+| Flujo de fondos proyectado | **IN — dentro de F8** (vista de tesorería, no fase propia) |
+| Multi-empresa (usuario ↔ N tenants) / consolidación | **IN diferido** — switch de empresa barato cuando haya demanda de estudios contables; consolidación va con Contabilidad/BI |
+| Multi-moneda completa (mayor multimoneda) | **OUT salvo demanda de exportadores** — se mantiene precios USD + factura DOL (diferida F3); WSFEX ya estaba fuera |
+| Factura recurrente / abonos (Concepto 2/3) | **IN feature menor de Ventas**, gated por pedido de cliente real (el cliente WSFEv1 ya lo soporta parametrizado) |
+| Producción/MRP, proyectos/obras, gestión de servicios, localización internacional | **FUERA PERMANENTE** (regla hacia-afuera) |
+
+### Decisiones abiertas (César)
+
+1. **Sueldos: build vs. integrar** — ABIERTA. *Construir*: foso total y captura de plan
+   pago, pero mantenimiento perpetuo brutal y responsabilidad legal que exige asesoría
+   laboral permanente. *Integrar* (export de novedades al liquidador del contador /
+   import de asientos y recibos): ~20% del costo, ZGC sigue siendo el hub, foso menor
+   pero suficiente al inicio. Recomendación de Claude: **integrar primero, construir
+   solo si el volumen de clientes lo paga**. Se decide recién al activar F15.
+2. ~~Prioridad de Contabilidad~~ — **RESUELTA 2026-07-05: adelantada a F9** (era F11).
+3. ~~Alcance de "integración fiscal"~~ — **RESUELTA 2026-07-05: ambas** — profundizar
+   fiscos nativos (padrón en F7; SIRE/SICORE/padrones en F10; libro IVA digital sobre
+   el CITI de F5) **y** export al software del contador (F9).
 
 ## Reglas de ejecución
 
@@ -222,3 +256,8 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 2. El esquema PostgreSQL de cada fase se diseña mirando `docs/legacy/esquema-dbf.md` — no inventar de cero lo que el legacy ya resolvió en 20 años de uso real.
 3. Nada de infraestructura paga. Si un límite free-tier aprieta, se documenta y se decide con César.
 4. Los diferenciales (dashboard, IA, portal) no se adelantan: primero paridad útil con el legacy.
+5. **Regla ERP-liviano (2026-07-05)**: crecer hacia adentro (finanzas/fiscal/sueldos),
+   nunca hacia afuera (MRP/proyectos/servicios/internacional). Ningún módulo-foso antes
+   del primer cliente de referencia pagando, y cada foso con su condición de activación
+   cumplida — el mantenimiento perpetuo (padrones, paritarias, APIs de canal) se asume
+   explícitamente o el módulo no se construye.
