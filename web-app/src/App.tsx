@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AppShell from "./app/AppShell";
+import InicioPage from "./app/InicioPage";
 import LoginPage from "./app/LoginPage";
 import ArticulosPage from "./modules/articulos/ArticulosPage";
 import CajaPage from "./modules/caja/CajaPage";
@@ -20,7 +21,8 @@ export default function App() {
         {/* El POS va fuera del shell: pantalla completa de caja */}
         <Route path="/pos" element={<POSPage />} />
         <Route element={<AppShell />}>
-          <Route index element={<Navigate to="/clientes" replace />} />
+          <Route index element={<Navigate to="/inicio" replace />} />
+          <Route path="/inicio" element={<InicioPage />} />
           <Route path="/clientes" element={<ClientesPage />} />
           <Route path="/ventas" element={<VentasPage />} />
           <Route path="/proveedores" element={<ProveedoresPage />} />

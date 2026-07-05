@@ -16,13 +16,19 @@
   box-shadow: var(--shadow-card);
   padding: var(--space-12) var(--space-12) var(--space-10);
 }
+.login-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-2);
+}
+.login-marca .zaris-mark { color: var(--zaris-orange); flex: none; }
 .login-logo {
   font-size: var(--size-subhead);
   font-weight: 700;
   letter-spacing: var(--track-subhead);
-  margin: 0 0 var(--space-2);
+  margin: 0;
 }
-.login-logo span { color: var(--zaris-orange); }
 .login-sub {
   color: var(--fg-3);
   font-size: var(--size-btn);
@@ -92,12 +98,17 @@
   gap: var(--space-1);
 }
 .sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   font-size: var(--size-title-sm);
   font-weight: 700;
   letter-spacing: var(--track-title);
   padding: var(--space-2) var(--space-5) var(--space-8);
+  color: var(--zaris-cream);
 }
-.sidebar-logo span { color: var(--zaris-orange); }
+.sidebar-logo .zaris-mark { color: var(--zaris-orange); flex: none; }
+.sidebar-logo-txt { color: var(--zaris-cream); }
 .nav-item {
   display: block;
   width: 100%;
@@ -648,4 +659,167 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
 @media (max-width: 900px) {
   .pos-cuerpo { grid-template-columns: 1fr; }
   .pos-derecha { position: static; }
+}
+
+/* ---------- Inicio / Dashboard (bienvenida) ---------- */
+.inicio { max-width: 1080px; }
+
+.inicio-hero {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  align-items: center;
+  gap: var(--space-10);
+  background: var(--zaris-dark);
+  color: var(--zaris-cream);
+  border-radius: var(--radius-lg);
+  padding: var(--space-12);
+  margin-bottom: var(--space-10);
+  overflow: hidden;
+}
+.inicio-hola {
+  font-size: var(--size-caption);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(242, 241, 237, 0.6);
+  margin: 0 0 var(--space-3);
+}
+.inicio-titulo {
+  font-size: var(--size-title);
+  font-weight: 700;
+  letter-spacing: var(--track-title);
+  margin: 0 0 var(--space-5);
+  line-height: 1.1;
+}
+.inicio-titulo span { color: var(--zaris-orange); }
+.inicio-lema {
+  color: rgba(242, 241, 237, 0.78);
+  font-size: var(--size-btn);
+  max-width: 46ch;
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* ---- gráfica abstracta animada (órbitas + marca) ---- */
+.hero-orbita { position: relative; width: 320px; height: 320px; justify-self: center; }
+.hero-orbita .orbitas { width: 100%; height: 100%; display: block; }
+.hero-marca {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--zaris-cream);
+  animation: hero-respira 6s ease-in-out infinite;
+}
+.anillo {
+  fill: none;
+  stroke: rgba(242, 241, 237, 0.16);
+  stroke-width: 1.5;
+}
+.anillo-punteado { stroke-dasharray: 3 7; }
+.satelite { transform-box: fill-box; }
+.sat-orange { fill: var(--zaris-orange); }
+.sat-gold { fill: var(--zaris-gold); }
+.sat-dark { fill: rgba(242, 241, 237, 0.5); }
+
+/* cada órbita gira sobre el centro del lienzo a distinta velocidad/sentido */
+.orbita { transform-origin: 160px 160px; }
+.orbita-1 { animation: orbita-giro 14s linear infinite; }
+.orbita-2 { animation: orbita-giro 22s linear infinite reverse; }
+.orbita-3 { animation: orbita-giro 34s linear infinite; }
+
+@keyframes orbita-giro {
+  to { transform: rotate(360deg); }
+}
+@keyframes hero-respira {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+/* ---- tarjetas de indicadores ---- */
+.inicio-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-6);
+  margin-bottom: var(--space-12);
+}
+.kpi-card {
+  background: var(--zaris-white);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-7);
+}
+.kpi-label {
+  font-size: var(--size-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin-bottom: var(--space-4);
+}
+.kpi-valor {
+  font-size: var(--size-title-sm);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-1);
+}
+.kpi-hint { font-size: var(--size-caption); color: var(--fg-4); margin-top: var(--space-2); }
+.kpi-valor.skeleton {
+  color: transparent;
+  background: linear-gradient(90deg, var(--surface-200, #e9e7e0) 25%, var(--surface-100) 50%, var(--surface-200, #e9e7e0) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  animation: kpi-shimmer 1.6s ease-in-out infinite;
+  width: 60%;
+}
+@keyframes kpi-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- accesos a módulos ---- */
+.inicio-seccion {
+  font-size: var(--size-caption);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin: 0 0 var(--space-6);
+}
+.inicio-modulos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-5);
+}
+.modulo-card {
+  position: relative;
+  display: block;
+  background: var(--zaris-white);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-6) var(--space-7);
+  color: var(--fg-1);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.modulo-card:hover { border-color: var(--zaris-orange); transform: translateY(-2px); }
+.modulo-nombre { font-weight: 600; font-size: var(--size-btn); margin-bottom: var(--space-2); }
+.modulo-desc { color: var(--fg-3); font-size: var(--size-caption); line-height: 1.45; max-width: 34ch; }
+.modulo-flecha {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-7);
+  color: var(--zaris-orange);
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.modulo-card:hover .modulo-flecha { opacity: 1; transform: translateX(3px); }
+
+@media (max-width: 760px) {
+  .inicio-hero { grid-template-columns: 1fr; text-align: center; padding: var(--space-10) var(--space-8); }
+  .hero-orbita { width: 240px; height: 240px; }
+  .inicio-lema { margin-inline: auto; }
+}
+
+/* accesibilidad: quien pide menos movimiento no ve giros ni respiración */
+@media (prefers-reduced-motion: reduce) {
+  .orbita-1, .orbita-2, .orbita-3, .hero-marca, .kpi-valor.skeleton { animation: none; }
+  .modulo-card:hover { transform: none; }
 }

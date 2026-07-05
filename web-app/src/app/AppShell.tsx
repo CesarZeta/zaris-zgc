@@ -1,7 +1,8 @@
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { clearSesion, getSesion } from "../lib/auth";
+import ZarisLogo from "./ZarisLogo";
 
-const MODULOS_PROXIMOS = ["Inicio", "Bancos y Cheques"];
+const MODULOS_PROXIMOS = ["Bancos y Cheques"];
 
 export default function AppShell() {
   const navigate = useNavigate();
@@ -17,8 +18,12 @@ export default function AppShell() {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-logo">
-          Z<span>GC</span>
+          <ZarisLogo size={24} />
+          <span className="sidebar-logo-txt">ZARIS</span>
         </div>
+        <NavLink to="/inicio" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          Inicio
+        </NavLink>
         <NavLink to="/clientes" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
           Clientes
         </NavLink>

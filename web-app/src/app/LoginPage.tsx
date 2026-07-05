@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ApiError, apiPost } from "../lib/api";
 import { setSesion } from "../lib/auth";
 import type { Sesion } from "../lib/types";
+import ZarisLogo from "./ZarisLogo";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function LoginPage() {
     try {
       const sesion = await apiPost<Sesion>("/auth/login", { email, password });
       setSesion(sesion);
-      navigate("/clientes");
+      navigate("/inicio");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo conectar con el servidor");
     } finally {
@@ -29,10 +30,11 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1 className="login-logo">
-          Z<span>GC</span>
-        </h1>
-        <p className="login-sub">ZARIS Gestión Comercial</p>
+        <div className="login-marca">
+          <ZarisLogo size={40} />
+          <h1 className="login-logo">ZARIS</h1>
+        </div>
+        <p className="login-sub">Gestión Comercial</p>
 
         {error && <div className="login-error">{error}</div>}
 
