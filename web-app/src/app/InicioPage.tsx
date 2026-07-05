@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSesion } from "../lib/auth";
 import HeroOrbita from "./HeroOrbita";
@@ -25,24 +26,94 @@ const MODULOS = [
   { to: "/configuracion", nombre: "Configuración", desc: "Empresa, rubro, usuarios y ajustes" },
 ];
 
+/** Nivel de acceso legible (semántica ZGE: 1=admin, 2=supervisor). Los permisos
+ *  por módulo llegan con la Fase 6.5 (RBAC); hasta entonces el acceso es total. */
+function nivelTexto(n: number): string {
+  if (n <= 1) return "Administrador";
+  if (n === 2) return "Supervisor";
+  return "Operador";
+}
+
+/** Formatea una duración en ms como "2 h 14 min 07 s". */
+function duracion(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const seg = s % 60;
+  const pad = (x: number) => String(x).padStart(2, "0");
+  if (h > 0) return `${h} h ${pad(m)} min ${pad(seg)} s`;
+  if (m > 0) return `${m} min ${pad(seg)} s`;
+  return `${seg} s`;
+}
+
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
 export default function InicioPage() {
   const sesion = getSesion();
   const nombre = sesion?.user.nombre ?? "";
   const primerNombre = nombre.split(" ")[0] || nombre;
+  const nivel = sesion?.user.nivel_acceso ?? 1;
+  const loginAt = sesion?.login_at ? new Date(sesion.login_at) : null;
+
+  // reloj en vivo: se actualiza cada segundo → la sesión "respira"
+  const [ahora, setAhora] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const hh = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const fechaLarga = `${DIAS[ahora.getDay()]} ${ahora.getDate()} de ${MESES[ahora.getMonth()]} de ${ahora.getFullYear()}`;
+  const relojFull = `${hh(ahora)}:${String(ahora.getSeconds()).padStart(2, "0")}`;
+  const enSesion = loginAt ? duracion(ahora.getTime() - loginAt.getTime()) : "—";
 
   return (
     <div className="inicio">
       <section className="inicio-hero">
-        <HeroOrbita />
-        <div className="inicio-bienvenida">
-          <p className="inicio-hola">Bienvenido{primerNombre ? `, ${primerNombre}` : ""}</p>
-          <h1 className="inicio-titulo">
-            ZARIS <span>Gestión Comercial</span>
-          </h1>
-          <p className="inicio-lema">
-            Tu ciclo comercial completo —ventas, compras, stock, caja e IVA— en un solo
-            lugar, con facturación electrónica argentina nativa.
-          </p>
+        <div className="hero-izq">
+          <HeroOrbita />
+        </div>
+
+        <div className="hero-der">
+          <div className="hero-vivo">
+            <span className="pulso" aria-hidden="true" />
+            Sesión activa · monitoreada
+          </div>
+          <p className="inicio-hola">Bienvenido</p>
+          <h1 className="inicio-titulo">{nombre || "Usuario"}</h1>
+
+          {/* reloj grande en vivo */}
+          <div className="hero-reloj">
+            <span className="reloj-hora">{relojFull}</span>
+            <span className="reloj-fecha">{fechaLarga}</span>
+          </div>
+
+          {/* datos de sesión */}
+          <dl className="hero-datos">
+            <div>
+              <dt>Inicio de sesión</dt>
+              <dd>{loginAt ? hh(loginAt) : "—"} h</dd>
+            </div>
+            <div>
+              <dt>Tiempo en sesión</dt>
+              <dd className="mono">{enSesion}</dd>
+            </div>
+            <div>
+              <dt>Nivel de acceso</dt>
+              <dd>{nivelTexto(nivel)}</dd>
+            </div>
+            <div>
+              <dt>Módulos habilitados</dt>
+              <dd>
+                {MODULOS.length} de {MODULOS.length}
+              </dd>
+            </div>
+          </dl>
         </div>
       </section>
 
@@ -56,7 +127,9 @@ export default function InicioPage() {
         ))}
       </section>
 
-      <h2 className="inicio-seccion">Módulos</h2>
+      <h2 className="inicio-seccion">
+        Módulos <span className="inicio-seccion-nota">· acceso de {primerNombre}</span>
+      </h2>
       <section className="inicio-modulos">
         {MODULOS.map((m) => (
           <Link to={m.to} className="modulo-card" key={m.to}>

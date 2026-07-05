@@ -10,6 +10,8 @@ export interface Usuario {
 export interface Sesion {
   access_token: string;
   user: Usuario;
+  /** ISO timestamp del inicio de sesión (lo sella el cliente al loguear). */
+  login_at?: string;
 }
 
 export interface Entidad {

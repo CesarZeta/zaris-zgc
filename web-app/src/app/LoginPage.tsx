@@ -18,7 +18,7 @@ export default function LoginPage() {
     setCargando(true);
     try {
       const sesion = await apiPost<Sesion>("/auth/login", { email, password });
-      setSesion(sesion);
+      setSesion({ ...sesion, login_at: new Date().toISOString() });
       navigate("/inicio");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo conectar con el servidor");
