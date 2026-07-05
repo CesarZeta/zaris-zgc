@@ -80,15 +80,27 @@ export default function InicioPage() {
     }
     const r = btnModulosRef.current?.getBoundingClientRect();
     if (r) {
-      // ancho estimado del popover (2 columnas). Si no entra a la derecha del
-      // botón, lo alineamos por su borde derecho para que no se salga.
-      const ancho = Math.min(360, window.innerWidth - 32);
       const margen = 16;
+      // ancho estimado (2 columnas). Si no entra a la derecha del botón, lo
+      // alineamos por su borde derecho para que no se salga.
+      const ancho = Math.min(360, window.innerWidth - 2 * margen);
       let left = r.left;
       if (left + ancho > window.innerWidth - margen) {
         left = Math.max(margen, r.right - ancho);
       }
-      setPopPos({ top: r.bottom + 8, left });
+      // alto estimado (título + 5 filas). Preferimos abrir hacia abajo; si no
+      // entra, hacia arriba; si tampoco (ventana muy baja), lo pegamos al tope
+      // con margen y el max-height del CSS activa scroll interno.
+      const alto = 190;
+      let top = r.bottom + 8;
+      if (top + alto > window.innerHeight - margen) {
+        const arriba = r.top - alto - 8;
+        top = arriba >= margen ? arriba : margen;
+      }
+      // clamp final: nunca dejar que el borde inferior se salga (el max-height
+      // del CSS activa scroll interno si aun así no entra).
+      top = Math.min(top, Math.max(margen, window.innerHeight - alto - margen));
+      setPopPos({ top, left });
     }
     setVerModulos(true);
   }
