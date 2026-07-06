@@ -254,6 +254,51 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Convive con `nivel_acceso` del POS sin tocarlo (aditivo). Sin permisos que migrar del legacy (`PERMISOS.DBF` tiene 0 registros; solo sembrar roles base).
 - Smoke E2E: crear rol limitado, asignarlo, verificar 403 en backend y sidebar recortado.
 
+## LOTE TÉCNICO — Optimización de endpoints y consistencia de UI (auditoría 2026-07-05)
+
+**Entregable: la misma app, más rápida y más consistente — sin features nuevas.**
+
+> Sesión de diseño 2026-07-05: auditoría completa del backend (18 routers + 9
+> migraciones) y del frontend (36 componentes). Veredicto: la base es sana
+> (paginación server-side en todos los listados, sin N+1 groseros, sistema visual
+> coherente) — esto es afinado, no rescate. No bloquea a la 6.5 ni depende de ella;
+> puede hacerse antes, junto o inmediatamente después. Detalle completo de hallazgos
+> con archivo:línea en la transcripción de esa sesión.
+
+- [ ] **Migración de índices de performance** (todos `CREATE INDEX IF NOT EXISTS`,
+  segura de aplicar sola): `comprobante_items(comprobante_id)` y
+  `compra_items(compra_id)` — los selectin de items no pueden usar los índices
+  actuales `(tenant_id, *)` y escanean la tabla en cada listado —; GIN pg_trgm sobre
+  `entidades(razon_social)` y `articulos(descripcion)` (búsquedas `ILIKE '%…%'` de
+  maestros, typeahead y POS; requiere `CREATE EXTENSION pg_trgm`, disponible en
+  Supabase); `recibos(tenant_id, fecha)` y `ordenes_pago(tenant_id, fecha)` +
+  `recibo_medios(recibo_id)` / `orden_pago_medios(orden_pago_id)` (planilla de caja);
+  parcial `comprobantes(comprobante_asociado_id) WHERE NOT NULL` (anuladas del POS).
+  ⚠️ Numeración: la 010 estaba reservada para RBAC en `DISENO-USUARIOS-Y-PERMISOS.md`
+  — el que se implemente primero toma el número y el otro doc se corrige.
+- [ ] **Backend transversal** (bajo esfuerzo / alto impacto): `deferred()` en
+  `Comprobante.arca_request/arca_response` (hoy el XML completo de WSFEv1 viaja en
+  CADA select de comprobantes: listados, cta. cte., libros, POS);
+  `expose_headers=["X-Total-Count"]` en el CORSMiddleware (hoy la paginación es
+  invisible para el browser en ventas/compras/cobranzas/pagos); COUNT de artículos
+  sin la subquery de stock_total (hoy suma el stock de todo el catálogo solo para
+  contar); N+1 de cajeros en `GET /pos/sesiones`; cta. cte. con filtro de fechas en
+  SQL + proyección (hoy carga TODA la historia del cliente con hijos y XML y filtra
+  en Python — espejo en pagos); modelos de listado livianos sin items/alícuotas/
+  vencimientos para las grillas de comprobantes (payload ~10x menor).
+- [ ] **UI prioridad alta**: confirmación antes de descartar un form con datos (hoy
+  un click en el backdrop tira una factura de 15 ítems); búsqueda de texto + rango
+  de fechas en Ventas y Compras (hoy no se puede encontrar una factura puntual);
+  vista de detalle del comprobante emitido (hoy solo se puede imprimir); paginado y
+  búsqueda reales en Cobranzas/Pagos (hoy `limit=100` fijo: el recibo 101 desaparece).
+- [ ] **UI consistencia**: crear `src/components/` compartidos — `Paginado` (6 copias
+  hoy), `Buscador` autocomplete (4 reinventos), `ChipEstado`, `AlertError/Ok`,
+  `ConfirmModal`/`PromptModal` (reemplaza los 12 `window.confirm/prompt` nativos que
+  rompen la identidad visual) — y `EntidadFields` BUE común a ClienteForm/
+  ProveedorForm (~120 líneas duplicadas; agregar ahí validación de CUIT con dígito
+  verificador en el cliente). Exponer `condicion_venta_id`/`zona_id` en ClienteForm
+  (el form de venta ya los consume y no se pueden cargar).
+
 ---
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
@@ -267,12 +312,13 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 
 | # | Fase | Contenido | Condición de activación |
 |---|---|---|---|
-| 7 | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal) | Post-MVP inmediato |
+| 7 | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal); **domicilios normalizados OSM** (estándar de suite heredado de ZGE: proxy Nominatim + AddressSearch + lat/lon en entidades/sucursales + `entidad_domicilios` — ver `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1; hacerlo ANTES de cargar entidades masivamente); **ABM de sucursales** (la tabla existe desde la 001, falta la UI) + sucursal en cajas POS | Post-MVP inmediato |
 | 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
 | 9 | **Contabilidad** (módulo activable) | Plan de cuentas, asientos automáticos desde ventas/compras/caja/OP (ya registran todo), libro diario, balances; **activos fijos + amortizaciones**; **export al software del contador** (formaliza los CSV de F5) | **FOSO** — primer cliente de referencia pagando. *Adelantada de F11→F9 (decisión César 2026-07-05): mejor relación valor/mantenimiento (principios estables), palanca de plan pago, habilita F10* |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 | Vendedores y comisiones | Liquidación por venta / por cobranza | — |
-| 12 | POS Supermercado | Pesables, envases, venta por departamento, multi-caja | Demanda ex clientes RevoSolution |
+| 12 | **POS por perfiles** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | Demanda ex clientes RevoSolution; por perfil: ≥1 piloto del rubro. Balanza y despiece son **adelantables sueltos** (el despiece es stock puro, no depende del POS) |
+| 12-bis | Logística de entregas | Rol transportista (BUE), `entregas` por remito/factura con domicilio snapshot + estados (pendiente→en reparto→entregada/rechazada), **hojas de ruta** imprimibles, rendición del reparto, mapa opcional. Diseño en `DISENO-LOGISTICA-Y-DOMICILIOS.md` §2. Crecimiento hacia adentro (operativiza el remito que ya existe) | Requiere domicilios OSM (F7). Activación: primer cliente que reparte (distribuidora/mayorista/corralón) |
 | 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |
 | 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |
 | 15 | **Sueldos y cargas sociales** | Alcance si se construye: legajos, liquidación por convenio, F.931/SICOSS, Libro de Sueldos Digital, ART. **Build-vs-integrar ABIERTO** (ver Decisiones abiertas) | **FOSO MÁXIMO, el más condicional**: F9+F10 maduros + N clientes pagos estables + **asesoría laboral contratada**. Mantenimiento MUY ALTO (paritarias, escalas), riesgo legal ALTO |

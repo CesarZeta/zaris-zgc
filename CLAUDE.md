@@ -36,6 +36,13 @@ con EAN y stock propios por combinación). El rubro cambia presets/UI, **nunca b
 modelo de datos**. Ver `docs/DISENO-RUBROS-Y-VARIANTES.md` antes de tocar el maestro de
 artículos, ventas o POS.
 
+Mandato 2026-07-05: los POS tienen **tres configuraciones** — estándar/súper (pesables),
+carnicería (despiece de media res EN GESTIÓN + POS pesable) y resto (mesas/comandas que
+NUNCA se trasladan a la gestión) — y cada caja pertenece a una **sucursal**. Diseño en
+`docs/DISENO-POS-PERFILES.md`. Domicilios normalizados OSM (estándar ZGE) y módulo de
+logística: `docs/DISENO-LOGISTICA-Y-DOMICILIOS.md`. Manual del POS actual (instalación,
+configuración, operación): `docs/MANUAL-POS.md`.
+
 ## 1-bis. Base Única de Entidades (BUE) — regla de arquitectura
 
 **"El cliente es el núcleo del sistema"** (César, 2026-07-03). Toda persona física o jurídica existe **una sola vez** en `entidades` (datos maestros: nombre/razón social, CUIT/DNI, condición IVA, domicilios, contactos). Los roles comerciales (`clientes`, `proveedores`, `vendedores`, `transportistas`) son tablas satélite que referencian `id_entidad` y solo agregan lo específico del rol. **Prohibido** duplicar datos maestros de personas en tablas de rol. Análogo a la BUC de ZGE (§2 de su CLAUDE.md). Todo registro lleva `tenant_id`; RLS de Supabase como segunda línea de defensa.
@@ -132,6 +139,19 @@ ZGC/
   expone la fecha) → para un kardex con fechas históricas hay que hacer un `UPDATE`
   post-generación por SQL, matcheando por el TEXTO del campo `comprobante`
   (`TIPO 0001-00000123`), no hay FK a comprobantes/compras.
+- **`X-Total-Count` cross-origin necesita `Access-Control-Expose-Headers`** — y el
+  **proxy de Vite en dev lo enmascara** (same-origin: el CORS no aplica y todo "funciona").
+  Auditoría 2026-07-05: clientes/proveedores/articulos/stock lo setean a mano y
+  ventas/compras/cobranzas/pagos NO → sus paginados no ven el total EN PROD. Fix canónico
+  pendiente (LOTE TÉCNICO): `expose_headers=["X-Total-Count"]` en el CORSMiddleware.
+  Regla: toda verificación de headers/CORS se hace contra prod o sin proxy, no en dev.
+- **Índices para relaciones `selectin`**: el loader emite `WHERE fk IN (...)` SIN
+  `tenant_id` → un índice compuesto `(tenant_id, fk)` NO le sirve (mordió en
+  `comprobante_items`/`compra_items`, migraciones 006/007). Toda tabla hija nueva lleva
+  índice por el FK solo (los UNIQUE que arrancan por el FK ya lo cubren).
+- **Columnas TEXT pesadas nacen `deferred`** (XML de WSFEv1, blobs): si no, viajan en
+  CADA select del modelo — listados, cta. cte., libros, POS (caso real:
+  `arca_request/arca_response`, pendiente en LOTE TÉCNICO).
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 

@@ -62,6 +62,23 @@ se sirve a las cajas — los POS sí son full orientados al rubro. El habilitado
 técnico es el **modelo de variantes** (talle/color/gusto/capacidad con stock y EAN
 propios). Diseño, estadística de mercado y evaluación en `DISENO-RUBROS-Y-VARIANTES.md`.
 
+**Adenda 2026-07-05 (mandato César)**: se suman dos rubros con POS orientado —
+**carnicería** (ingreso por media res y despiece a kilos por corte; lo específico es
+la transformación de stock en gestión, el POS es el estándar con pesables) y
+**restaurante** (sucesor del RestoDelivery del legacy: mesas/mozos/comandas viven EN
+el POS, a la gestión llega solo la venta final). Los POS quedan definidos en **tres
+configuraciones**: estándar/súper (mercaderías y pesables), carnicería y resto, cada
+caja con su perfil y su **sucursal**. Diseño completo en `DISENO-POS-PERFILES.md`.
+
+### 2-ter. Estándares de suite adoptados de ZGE (2026-07-05)
+
+- **Normalización de domicilios con OpenStreetMap/Nominatim**, con las mismas
+  condiciones y encuadramientos de ZGE (proxy backend único, filtro de POIs, regla
+  de las dos vías, campos completados solo desde OSM en la BUE) y tres adaptaciones
+  (User-Agent propio, viewbox opcional por tenant sin exclusión, mitigación de rate
+  limit en serverless). Se implementa en F7, antes de la carga masiva de entidades.
+  Diseño de porteo en `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1.
+
 ## 3. Alcance del MVP
 
 El corazón del MVP es el **ciclo comercial completo en versión simple**:
@@ -80,7 +97,8 @@ El corazón del MVP es el **ciclo comercial completo en versión simple**:
 | Capacidad | Nota de diseño para no cerrarse la puerta |
 |---|---|
 | Nodo de sucursal LAN (facturar sin internet) | UUIDs en origen, `sucursal_id` en todo, colas de sync — ya en CLAUDE.md |
-| POS supermercado (pesables, envases, venta por depto., supervisor) | Los flags ya existen en el esquema de artículos |
+| POS por perfiles: súper (pesables/balanza, envases, venta por depto.), carnicería (despiece) y resto (mesas/comandas) | Los flags ya existen en el esquema de artículos; diseño 2026-07-05 en `DISENO-POS-PERFILES.md` (ROADMAP F12) |
+| Logística de entregas (transportistas, hojas de ruta, estados) | Requiere domicilios OSM + `entidad_domicilios` (F7); diseño en `DISENO-LOGISTICA-Y-DOMICILIOS.md` (ROADMAP F12-bis) |
 | Controlador fiscal físico (Hasar/Epson) y transmisión a balanzas | Requieren software puente local en Windows |
 | **Contabilidad completa** (plan de cuentas, asientos, balances) | **Módulo independiente activable/desactivable por tenant** — decisión de César; potencial diferenciador de plan pago |
 | Cheques, bancos, retenciones, comisiones de vendedores | Módulos de gestión fase 2 |
