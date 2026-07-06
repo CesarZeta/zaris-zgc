@@ -29,8 +29,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Cliente,
     Compra,
@@ -284,7 +284,7 @@ async def _libro_compras(db: AsyncSession, tenant_id: uuid.UUID, periodo: str) -
 @router.get("/iva-ventas", response_model=LibroOut)
 async def libro_iva_ventas(
     periodo: str,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return await _libro_ventas(db, usuario.tenant_id, periodo)
@@ -293,7 +293,7 @@ async def libro_iva_ventas(
 @router.get("/iva-compras", response_model=LibroOut)
 async def libro_iva_compras(
     periodo: str,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return await _libro_compras(db, usuario.tenant_id, periodo)
@@ -354,7 +354,7 @@ def _libro_a_csv(libro: LibroOut, nombre: str) -> Response:
 @router.get("/iva-ventas.csv")
 async def libro_iva_ventas_csv(
     periodo: str,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     libro = await _libro_ventas(db, usuario.tenant_id, periodo)
@@ -364,7 +364,7 @@ async def libro_iva_ventas_csv(
 @router.get("/iva-compras.csv")
 async def libro_iva_compras_csv(
     periodo: str,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     libro = await _libro_compras(db, usuario.tenant_id, periodo)
@@ -484,7 +484,7 @@ def _citi_compras(
 @router.get("/citi")
 async def export_citi(
     periodo: str,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     desde, hasta = _periodo_rango(periodo)
@@ -577,7 +577,7 @@ async def listar_retenciones(
     tipo: str | None = None,
     limit: int = 100,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(Retencion).where(Retencion.tenant_id == usuario.tenant_id)
@@ -595,7 +595,7 @@ async def listar_retenciones(
 @router.post("/retenciones", response_model=RetencionOut, status_code=status.HTTP_201_CREATED)
 async def crear_retencion(
     body: RetencionIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if body.tipo == "sufrida" and (body.proveedor_id or body.orden_pago_id):
@@ -639,7 +639,7 @@ async def crear_retencion(
 @router.delete("/retenciones/{retencion_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def eliminar_retencion(
     retencion_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     retencion = await db.scalar(
@@ -658,7 +658,7 @@ async def eliminar_retencion(
 async def resumen_retenciones(
     desde: date | None = None,
     hasta: date | None = None,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy import func as sqlfunc
@@ -683,7 +683,7 @@ async def resumen_retenciones(
 async def retenciones_csv(
     desde: date | None = None,
     hasta: date | None = None,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     filas_db = await listar_retenciones(

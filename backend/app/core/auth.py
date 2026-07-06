@@ -31,6 +31,7 @@ def create_access_token(usuario: Usuario) -> str:
         "sub": str(usuario.id),
         "tenant_id": str(usuario.tenant_id),
         "nivel": usuario.nivel_acceso,
+        "rol_id": str(usuario.rol_id) if usuario.rol_id else None,
         "exp": datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")

@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Compra,
     CompraVencimiento,
@@ -139,7 +139,7 @@ async def _deuda_bloqueada(
 @router.post("/ordenes-pago", response_model=OrdenPagoOut, status_code=status.HTTP_201_CREATED)
 async def crear_orden_pago(
     body: OrdenPagoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     proveedor = await _proveedor(db, usuario.tenant_id, body.proveedor_id)
@@ -213,7 +213,7 @@ async def listar_ordenes_pago(
     hasta: date | None = None,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(OrdenPago).where(OrdenPago.tenant_id == usuario.tenant_id)
@@ -236,7 +236,7 @@ async def listar_ordenes_pago(
 @router.post("/ordenes-pago/{op_id}/anular", response_model=OrdenPagoOut)
 async def anular_orden_pago(
     op_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     op = await db.scalar(
@@ -275,7 +275,7 @@ async def anular_orden_pago(
 @router.post("/imputaciones", status_code=status.HTTP_201_CREATED)
 async def imputar(
     body: ImputarCreditoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if (body.orden_pago_id is None) == (body.credito_id is None):
@@ -358,7 +358,7 @@ async def cuenta_corriente(
     proveedor_id: uuid.UUID,
     desde: date | None = None,
     hasta: date | None = None,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Movimientos históricos (debe/haber) + saldo actual con el proveedor.
@@ -470,7 +470,7 @@ async def _saldo_proveedor(
 @router.get("/saldos")
 async def saldos_por_proveedor(
     solo_con_deuda: bool = True,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Listado de saldos: cuánto le debemos a cada proveedor."""
@@ -535,7 +535,7 @@ async def saldos_por_proveedor(
 @router.get("/vencimientos")
 async def vencimientos_a_pagar(
     dias: int = 30,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Cuentas a pagar: cuotas de compras con saldo, vencidas o por vencer

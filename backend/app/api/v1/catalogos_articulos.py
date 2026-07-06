@@ -11,8 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere, requiere_alguno
 from app.models import (
     Atributo,
     AtributoValor,
@@ -122,7 +122,7 @@ async def _obtener(db: AsyncSession, modelo, tenant_id: uuid.UUID, id_: uuid.UUI
 
 @router.get("/familias", response_model=list[FamiliaOut])
 async def listar_familias(
-    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    usuario: Usuario = Depends(requiere("articulos", "ver")), db: AsyncSession = Depends(get_db)
 ):
     familias = (
         await db.scalars(
@@ -135,7 +135,7 @@ async def listar_familias(
 @router.post("/familias", response_model=FamiliaOut, status_code=status.HTTP_201_CREATED)
 async def crear_familia(
     body: NombreIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     familia = Familia(tenant_id=usuario.tenant_id, nombre=body.nombre.strip())
@@ -153,7 +153,7 @@ async def crear_familia(
 async def actualizar_familia(
     familia_id: uuid.UUID,
     body: NombreUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     familia = await _obtener(db, Familia, usuario.tenant_id, familia_id)
@@ -178,7 +178,7 @@ class SubfamiliaIn(BaseModel):
 @router.post("/subfamilias", response_model=SubfamiliaOut, status_code=status.HTTP_201_CREATED)
 async def crear_subfamilia(
     body: SubfamiliaIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     await _obtener(db, Familia, usuario.tenant_id, body.familia_id)
@@ -198,7 +198,7 @@ async def crear_subfamilia(
 async def actualizar_subfamilia(
     subfamilia_id: uuid.UUID,
     body: NombreUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     sub = await _obtener(db, Subfamilia, usuario.tenant_id, subfamilia_id)
@@ -218,7 +218,7 @@ async def actualizar_subfamilia(
 
 @router.get("/marcas", response_model=list[MarcaOut])
 async def listar_marcas(
-    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    usuario: Usuario = Depends(requiere("articulos", "ver")), db: AsyncSession = Depends(get_db)
 ):
     marcas = (
         await db.scalars(
@@ -231,7 +231,7 @@ async def listar_marcas(
 @router.post("/marcas", response_model=MarcaOut, status_code=status.HTTP_201_CREATED)
 async def crear_marca(
     body: NombreIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     marca = Marca(tenant_id=usuario.tenant_id, nombre=body.nombre.strip())
@@ -248,7 +248,7 @@ async def crear_marca(
 async def actualizar_marca(
     marca_id: uuid.UUID,
     body: NombreUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     marca = await _obtener(db, Marca, usuario.tenant_id, marca_id)
@@ -268,7 +268,7 @@ async def actualizar_marca(
 
 @router.get("/unidades", response_model=list[UnidadOut])
 async def listar_unidades(
-    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    usuario: Usuario = Depends(requiere("articulos", "ver")), db: AsyncSession = Depends(get_db)
 ):
     unidades = (
         await db.scalars(
@@ -281,7 +281,7 @@ async def listar_unidades(
 @router.post("/unidades", response_model=UnidadOut, status_code=status.HTTP_201_CREATED)
 async def crear_unidad(
     body: UnidadIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     unidad = Unidad(
@@ -300,7 +300,7 @@ async def crear_unidad(
 
 @router.get("/depositos", response_model=list[DepositoOut])
 async def listar_depositos(
-    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    usuario: Usuario = Depends(requiere_alguno(["articulos", "stock", "compras"], "ver")), db: AsyncSession = Depends(get_db)
 ):
     depositos = (
         await db.scalars(
@@ -313,7 +313,7 @@ async def listar_depositos(
 @router.post("/depositos", response_model=DepositoOut, status_code=status.HTTP_201_CREATED)
 async def crear_deposito(
     body: DepositoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     deposito = Deposito(
@@ -335,7 +335,7 @@ async def crear_deposito(
 async def actualizar_deposito(
     deposito_id: uuid.UUID,
     body: DepositoUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     deposito = await _obtener(db, Deposito, usuario.tenant_id, deposito_id)
@@ -379,7 +379,7 @@ class ValorIn(BaseModel):
 
 @router.get("/atributos", response_model=list[AtributoOut])
 async def listar_atributos(
-    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    usuario: Usuario = Depends(requiere("articulos", "ver")), db: AsyncSession = Depends(get_db)
 ):
     atributos = (
         await db.scalars(
@@ -392,7 +392,7 @@ async def listar_atributos(
 @router.post("/atributos", response_model=AtributoOut, status_code=status.HTTP_201_CREATED)
 async def crear_atributo(
     body: AtributoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     total = len((await db.scalars(select(Atributo).where(Atributo.tenant_id == usuario.tenant_id))).all())
@@ -410,7 +410,7 @@ async def crear_atributo(
 @router.post("/atributos/valores", response_model=AtributoValorOut, status_code=status.HTTP_201_CREATED)
 async def crear_valor(
     body: ValorIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     atributo = await _obtener(db, Atributo, usuario.tenant_id, body.atributo_id)
@@ -431,7 +431,7 @@ async def crear_valor(
 
 @router.get("/cotizacion", response_model=CotizacionOut | None)
 async def cotizacion_vigente(
-    usuario: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    usuario: Usuario = Depends(requiere_alguno(["articulos", "ventas", "compras"], "ver")), db: AsyncSession = Depends(get_db)
 ):
     cot = await db.scalar(
         select(Cotizacion)
@@ -445,7 +445,7 @@ async def cotizacion_vigente(
 @router.post("/cotizacion", response_model=CotizacionOut, status_code=status.HTTP_201_CREATED)
 async def registrar_cotizacion(
     body: CotizacionIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     cot = Cotizacion(tenant_id=usuario.tenant_id, valor=body.valor, usuario_id=usuario.id)

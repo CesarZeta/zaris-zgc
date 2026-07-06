@@ -17,8 +17,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Articulo,
     ArticuloStock,
@@ -169,7 +169,7 @@ async def _stock_por_variante(db: AsyncSession, tenant_id: uuid.UUID, articulo_i
 @router.get("/{articulo_id}/variantes", response_model=list[VarianteOut])
 async def listar_variantes(
     articulo_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     await _articulo(db, usuario.tenant_id, articulo_id)
@@ -194,7 +194,7 @@ async def listar_variantes(
 async def crear_variante(
     articulo_id: uuid.UUID,
     body: VarianteIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     await _articulo(db, usuario.tenant_id, articulo_id)
@@ -231,7 +231,7 @@ async def crear_variante(
 async def generar_variantes(
     articulo_id: uuid.UUID,
     body: GenerarIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Genera el producto cartesiano de los valores elegidos (grilla talle×color).
@@ -302,7 +302,7 @@ async def generar_variantes(
 async def actualizar_variante(
     variante_id: uuid.UUID,
     body: VarianteUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     variante = await db.scalar(

@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.clientes import EntidadIn, _validar_entidad
 from app.api.v1.entidades import EntidadOut, aplicar_busqueda
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import Articulo, ArticuloProveedor, Entidad, Proveedor, Usuario
 
 router = APIRouter(prefix="/proveedores", tags=["proveedores"])
@@ -93,7 +93,7 @@ def costo_neto(ap: ArticuloProveedor) -> Decimal:
 @router.post("", response_model=ProveedorOut, status_code=status.HTTP_201_CREATED)
 async def crear_proveedor(
     body: ProveedorIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("proveedores", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if (body.entidad_id is None) == (body.entidad is None):
@@ -150,7 +150,7 @@ async def listar_proveedores(
     incluir_inactivos: bool = False,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("proveedores", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = (
@@ -174,7 +174,7 @@ async def listar_proveedores(
 @router.get("/{proveedor_id}", response_model=ProveedorOut)
 async def obtener_proveedor(
     proveedor_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("proveedores", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return ProveedorOut.model_validate(
@@ -186,7 +186,7 @@ async def obtener_proveedor(
 async def actualizar_proveedor(
     proveedor_id: uuid.UUID,
     body: ProveedorUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("proveedores", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     proveedor = await _obtener_proveedor(db, usuario.tenant_id, proveedor_id)
@@ -218,7 +218,7 @@ async def actualizar_proveedor(
 @router.get("/{proveedor_id}/articulos", response_model=list[ArticuloProveedorOut])
 async def articulos_del_proveedor(
     proveedor_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("proveedores", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Artículos que provee, con su costo de lista y bonificaciones."""

@@ -6,9 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.cuit import solo_digitos
 from app.core.db import get_db
+from app.core.permisos import requiere_alguno
 from app.models import Entidad, Usuario
 
 router = APIRouter(prefix="/entidades", tags=["entidades"])
@@ -72,7 +72,7 @@ async def buscar(
     q: str = "",
     limit: int = 20,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere_alguno(["clientes", "proveedores"], "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(Entidad).where(Entidad.tenant_id == usuario.tenant_id, Entidad.activo)

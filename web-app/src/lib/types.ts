@@ -4,14 +4,48 @@ export interface Usuario {
   email: string;
   nombre: string;
   nivel_acceso: number;
+  rol_id: string | null;
   sucursal_id: string | null;
 }
+
+/** Nivel máximo por módulo: "ver" | "editar" | "anular" (acumulativos). */
+export type PermisosMap = Record<string, string>;
 
 export interface Sesion {
   access_token: string;
   user: Usuario;
+  /** Permisos por módulo (Fase 6.5). Ausente en sesiones viejas = acceso total
+   *  en la UI (el backend igual controla cada endpoint). */
+  permisos?: PermisosMap;
   /** ISO timestamp del inicio de sesión (lo sella el cliente al loguear). */
   login_at?: string;
+}
+
+// ===== Usuarios, roles y permisos (Fase 6.5) =====
+
+export interface Rol {
+  id: string;
+  codigo: string;
+  nombre: string;
+  es_sistema: boolean;
+  activo: boolean;
+  permisos: PermisosMap;
+  usuarios: number;
+}
+
+export interface UsuarioAdmin {
+  id: string;
+  email: string;
+  nombre: string;
+  nivel_acceso: number;
+  rol_id: string | null;
+  sucursal_id: string | null;
+  activo: boolean;
+}
+
+export interface CatalogoPermisos {
+  modulos: { codigo: string; nombre: string }[];
+  acciones: string[];
 }
 
 export interface Entidad {

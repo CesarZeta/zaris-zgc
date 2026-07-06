@@ -17,8 +17,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Articulo,
     ArticuloProveedor,
@@ -408,7 +408,7 @@ def _calcular(body: CompraIn, items: list[dict], letra: str) -> dict:
 @router.post("/comprobantes", response_model=CompraOut, status_code=status.HTTP_201_CREATED)
 async def crear_compra(
     body: CompraIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     _validar_numeracion(body)
@@ -464,7 +464,7 @@ async def listar_compras(
     con_saldo: bool = False,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(Compra).where(Compra.tenant_id == usuario.tenant_id)
@@ -493,7 +493,7 @@ async def listar_compras(
 @router.get("/comprobantes/{compra_id}", response_model=CompraOut)
 async def ver_compra(
     compra_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return _out(await _cargar(db, usuario.tenant_id, compra_id))
@@ -503,7 +503,7 @@ async def ver_compra(
 async def actualizar_borrador(
     compra_id: uuid.UUID,
     body: CompraIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     compra = await _cargar(db, usuario.tenant_id, compra_id)
@@ -550,7 +550,7 @@ async def actualizar_borrador(
 @router.delete("/comprobantes/{compra_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def borrar_borrador(
     compra_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     compra = await _cargar(db, usuario.tenant_id, compra_id)
@@ -677,7 +677,7 @@ async def _generar_vencimientos(db: AsyncSession, compra: Compra) -> None:
 @router.post("/comprobantes/{compra_id}/registrar", response_model=CompraOut)
 async def registrar_compra(
     compra_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     compra = await _cargar(db, usuario.tenant_id, compra_id)
@@ -741,7 +741,7 @@ async def registrar_compra(
 @router.post("/comprobantes/{compra_id}/anular", response_model=CompraOut)
 async def anular_compra(
     compra_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     """Anula una compra registrada revirtiendo stock y cta. cte. El costo del
@@ -801,7 +801,7 @@ async def anular_compra(
 @router.get("/comparativo/{articulo_id}")
 async def comparativo_articulo(
     articulo_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Qué proveedor vende este artículo más barato (costo neto tras bonifs)."""
@@ -861,7 +861,7 @@ async def comparativo_articulo(
 @router.put("/articulo-proveedor", status_code=status.HTTP_201_CREATED)
 async def upsert_articulo_proveedor(
     body: ArticuloProveedorUpsert,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Carga manual de la relación artículo × proveedor (sin esperar una compra)."""
@@ -907,7 +907,7 @@ async def upsert_articulo_proveedor(
 @router.delete("/articulo-proveedor/{ap_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def borrar_articulo_proveedor(
     ap_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     ap = await db.scalar(

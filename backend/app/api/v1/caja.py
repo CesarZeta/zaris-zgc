@@ -24,8 +24,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     CajaCierre,
     CajaMovimiento,
@@ -348,7 +348,7 @@ async def _calcular_planilla(
 @router.get("/conceptos", response_model=list[ConceptoOut])
 async def listar_conceptos(
     incluir_inactivos: bool = False,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(ConceptoCaja).where(ConceptoCaja.tenant_id == usuario.tenant_id)
@@ -360,7 +360,7 @@ async def listar_conceptos(
 @router.post("/conceptos", response_model=ConceptoOut, status_code=status.HTTP_201_CREATED)
 async def crear_concepto(
     body: ConceptoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     concepto = ConceptoCaja(tenant_id=usuario.tenant_id, nombre=body.nombre.strip(), tipo=body.tipo)
@@ -378,7 +378,7 @@ async def crear_concepto(
 async def editar_concepto(
     concepto_id: uuid.UUID,
     body: ConceptoUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     concepto = await db.scalar(
@@ -409,7 +409,7 @@ async def listar_movimientos(
     sucursal_id: uuid.UUID | None = None,
     limit: int = 100,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(CajaMovimiento).where(CajaMovimiento.tenant_id == usuario.tenant_id)
@@ -427,7 +427,7 @@ async def listar_movimientos(
 @router.post("/movimientos", response_model=MovimientoOut, status_code=status.HTTP_201_CREATED)
 async def crear_movimiento(
     body: MovimientoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     concepto = await db.scalar(
@@ -461,7 +461,7 @@ async def crear_movimiento(
 @router.delete("/movimientos/{movimiento_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def eliminar_movimiento(
     movimiento_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     movimiento = await db.scalar(
@@ -483,7 +483,7 @@ async def eliminar_movimiento(
 async def planilla_diaria(
     fecha: date | None = None,
     sucursal_id: uuid.UUID | None = None,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return await _calcular_planilla(db, usuario.tenant_id, fecha or date.today(), sucursal_id)
@@ -495,7 +495,7 @@ async def listar_cierres(
     hasta: date | None = None,
     sucursal_id: uuid.UUID | None = None,
     limit: int = 60,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(CajaCierre).where(CajaCierre.tenant_id == usuario.tenant_id)
@@ -511,7 +511,7 @@ async def listar_cierres(
 @router.post("/cierres", response_model=CierreOut, status_code=status.HTTP_201_CREATED)
 async def cerrar_caja(
     body: CierreIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if await _cierre_de(db, usuario.tenant_id, body.fecha, body.sucursal_id) is not None:
@@ -546,7 +546,7 @@ async def cerrar_caja(
 @router.delete("/cierres/{cierre_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def reabrir_caja(
     cierre_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("caja", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     cierre = await db.scalar(

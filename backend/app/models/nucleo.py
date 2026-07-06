@@ -56,7 +56,35 @@ class Usuario(Base):
     nombre: Mapped[str] = mapped_column(String(80))
     password_hash: Mapped[str] = mapped_column(String(100))
     nivel_acceso: Mapped[int] = mapped_column(SmallInteger, default=1)
+    # rol_id NULL = acceso total (compat: usuarios creados por scripts/SQL).
+    # nivel_acceso sigue gobernando SOLO la autorización de supervisor del POS.
+    rol_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("roles.id"))
     sucursal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sucursales.id"))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Rol(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    codigo: Mapped[str] = mapped_column(String(30))
+    nombre: Mapped[str] = mapped_column(String(60))
+    es_sistema: Mapped[bool] = mapped_column(Boolean, default=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RolPermiso(Base):
+    __tablename__ = "rol_permisos"
+
+    rol_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    modulo: Mapped[str] = mapped_column(String(20), primary_key=True)
+    accion: Mapped[str] = mapped_column(String(10))

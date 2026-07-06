@@ -19,8 +19,8 @@ from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Articulo,
     ArticuloStock,
@@ -248,7 +248,7 @@ def _armar_out(articulo: Articulo, stock_total: Decimal | None) -> ArticuloOut:
 @router.post("", response_model=ArticuloOut, status_code=status.HTTP_201_CREATED)
 async def crear_articulo(
     body: ArticuloIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     datos = body.model_dump()
@@ -284,7 +284,7 @@ async def listar_articulos(
     incluir_inactivos: bool = False,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stock_total = _subquery_stock_total(usuario.tenant_id)
@@ -313,7 +313,7 @@ async def listar_articulos(
 @router.get("/{articulo_id}", response_model=ArticuloOut)
 async def obtener_articulo(
     articulo_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     articulo = await _obtener_articulo(db, usuario.tenant_id, articulo_id)
@@ -330,7 +330,7 @@ async def obtener_articulo(
 async def actualizar_articulo(
     articulo_id: uuid.UUID,
     body: ArticuloIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     articulo = await _obtener_articulo(db, usuario.tenant_id, articulo_id)
@@ -395,7 +395,7 @@ class CambioPreciosOut(BaseModel):
 @router.post("/cambio-precios", response_model=CambioPreciosOut)
 async def cambio_masivo_precios(
     body: CambioPreciosIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Legacy 'Cambios masivos de precios': porcentaje sobre precios (mantiene
@@ -502,7 +502,7 @@ def _celda_bool(valor) -> bool | None:
 @router.post("/importar-excel", response_model=ImportExcelOut)
 async def importar_excel(
     archivo: UploadFile,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Alta/actualización masiva desde .xlsx (feature heredada del legacy).

@@ -239,20 +239,39 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   (POS Súper, fase 12), descuento por línea/venta en el POS (el backend ya lo soporta
   vía `descuento_pct`), identificación CF ≥ umbral RG 5700 la exige el backend (422).
 
-## FASE 6.5 — Usuarios, Roles y Permisos por módulo (RBAC)
+## FASE 6.5 — Usuarios, Roles y Permisos por módulo (RBAC) ✅ (implementada 2026-07-05)
 
-**Entregable: cada tenant administra sus usuarios, define roles y controla qué módulo puede ver/editar/anular cada uno.**
+**Entregable: cada tenant administra sus usuarios, define roles y controla qué módulo puede ver/editar/anular cada uno.** ✔ verificado con 62 pruebas de API en vivo (0 fallos) + E2E en navegador.
 
-> Discovery 2026-07-05 (César). Diseño completo en `docs/DISENO-USUARIOS-Y-PERMISOS.md`
-> — leerlo antes de implementar. Va **después del POS** (no lo frena) y **antes** del
-> POST-MVP porque es transversal: todo módulo futuro debe nacer con guardas.
+> Discovery 2026-07-05 (César). Diseño completo en `docs/DISENO-USUARIOS-Y-PERMISOS.md`.
 
-- Modelo **roles + permisos por módulo**, granularidad **Ver / Editar / Anular** (acumulativas).
-- Migración 010: `roles`, `rol_permisos`, `usuarios.rol_id` + backfill (usuarios actuales → rol `admin`, no rompe nada de hoy) + seed de 5 roles base por tenant (admin, gerente, cajero, vendedor, consulta).
-- Backend: guarda declarativa `requiere(modulo, accion)` (dependency FastAPI) aplicada a los endpoints de escritura/anulación de los 10 módulos; `rol_id` en el JWT.
-- Frontend: gestor en Configuración (usuarios + roles + matriz de permisos) + sidebar filtrado por permisos.
-- Convive con `nivel_acceso` del POS sin tocarlo (aditivo). Sin permisos que migrar del legacy (`PERMISOS.DBF` tiene 0 registros; solo sembrar roles base).
-- Smoke E2E: crear rol limitado, asignarlo, verificar 403 en backend y sidebar recortado.
+- [x] Modelo **roles + permisos por módulo**, granularidad **Ver / Editar / Anular**
+  (acumulativas: fila única por (rol, módulo) con el nivel máximo; ausencia = sin acceso).
+- [x] Migración 010: `roles`, `rol_permisos` (con `tenant_id`, convención del proyecto),
+  `usuarios.rol_id` + seed de 5 roles base por tenant existente (admin, gerente, cajero,
+  vendedor, consulta) + backfill (usuarios actuales → `admin`) + RLS. Para tenants nuevos
+  el backend siembra lazy en `GET /roles`. **`rol_id NULL` = acceso total** (compat:
+  usuarios creados por scripts/SQL — seeds y smoke tenants siguen funcionando).
+- [x] Backend: `app/core/permisos.py` — guarda `requiere(modulo, accion)` + `requiere_alguno`
+  (catálogos compartidos: entidades, depósitos, condiciones de venta, puntos de venta) con
+  cache TTL 60s por rol; aplicada a los ~118 endpoints de los 15 routers (GET→ver,
+  POST/PUT/PATCH→editar, anulaciones/borrados→anular). Config sensible (ARCA, puntos de
+  venta, cajas POS) exige `configuracion.editar` aunque viva en otros routers (es donde
+  la UI la muestra). `rol_id` en el JWT; login devuelve `permisos` para la UI. **403,
+  nunca 401** (regla §6 del CLAUDE.md, verificado: el 403 no desloguea).
+- [x] Gestor de Configuración (`/usuarios`, `/roles`, `/permisos/catalogo`): alta/edición
+  de usuarios con rol y nivel POS, reset de contraseña (se muestra UNA vez), roles propios
+  (crear/clonar de un rol de sistema/editar matriz/eliminar sin usuarios), roles de sistema
+  read-only. **Anti-lockout**: ninguna operación deja al tenant sin un usuario activo con
+  `configuracion.editar` (422).
+- [x] Frontend: sidebar e inicio filtrados por permisos (popover "N de 10" con permisos
+  reales), página Configuración con gestor completo y bloqueo por rol.
+- [x] Convive con `nivel_acceso` del POS sin tocarlo (sigue gobernando SOLO la
+  autorización de supervisor). Sin permisos que migrar del legacy (PERMISOS.DBF vacío).
+- [x] Verificado 2026-07-05: 62 pruebas de API en vivo (guardas por rol, matriz, clonado,
+  anti-lockout, reset, aislamiento de tenant) + E2E en navegador (alta de usuario rol
+  Consulta desde la UI → sidebar recortado, inicio "9 de 10", /configuracion bloqueada,
+  POST 403 sin deslogueo).
 
 ## LOTE TÉCNICO — Optimización de endpoints y consistencia de UI (auditoría 2026-07-05)
 
@@ -274,8 +293,8 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   Supabase); `recibos(tenant_id, fecha)` y `ordenes_pago(tenant_id, fecha)` +
   `recibo_medios(recibo_id)` / `orden_pago_medios(orden_pago_id)` (planilla de caja);
   parcial `comprobantes(comprobante_asociado_id) WHERE NOT NULL` (anuladas del POS).
-  ⚠️ Numeración: la 010 estaba reservada para RBAC en `DISENO-USUARIOS-Y-PERMISOS.md`
-  — el que se implemente primero toma el número y el otro doc se corrige.
+  Numeración: la 010 la tomó RBAC (implementada 2026-07-05) — esta migración de
+  índices es la **011**.
 - [ ] **Backend transversal** (bajo esfuerzo / alto impacto): `deferred()` en
   `Comprobante.arca_request/arca_response` (hoy el XML completo de WSFEv1 viaja en
   CADA select de comprobantes: listados, cta. cte., libros, POS);

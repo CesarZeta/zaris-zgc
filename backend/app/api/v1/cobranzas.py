@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Cliente,
     Comprobante,
@@ -141,7 +141,7 @@ async def _deuda_bloqueada(
 @router.post("/recibos", response_model=ReciboOut, status_code=status.HTTP_201_CREATED)
 async def crear_recibo(
     body: ReciboIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     pv = await db.scalar(
@@ -225,7 +225,7 @@ async def listar_recibos(
     hasta: date | None = None,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(Recibo).where(Recibo.tenant_id == usuario.tenant_id)
@@ -248,7 +248,7 @@ async def listar_recibos(
 @router.post("/recibos/{recibo_id}/anular", response_model=ReciboOut)
 async def anular_recibo(
     recibo_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     recibo = await db.scalar(
@@ -289,7 +289,7 @@ async def anular_recibo(
 @router.post("/imputaciones", status_code=status.HTTP_201_CREATED)
 async def imputar(
     body: ImputarCreditoIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if (body.recibo_id is None) == (body.credito_id is None):
@@ -368,7 +368,7 @@ async def cuenta_corriente(
     cliente_id: uuid.UUID,
     desde: date | None = None,
     hasta: date | None = None,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Movimientos históricos (debe/haber) + saldo actual del cliente."""
@@ -479,7 +479,7 @@ async def _saldo_cliente(
 @router.get("/saldos")
 async def saldos_por_cliente(
     solo_deudores: bool = True,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Listado de saldos (morosidad-lite): saldo total y vencido por cliente."""

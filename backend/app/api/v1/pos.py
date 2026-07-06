@@ -25,8 +25,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.core.auth import get_current_user, verify_password
+from app.core.auth import verify_password
 from app.core.db import get_db
+from app.core.permisos import requiere, requiere_alguno
 from app.models import (
     ArcaConfig,
     Articulo,
@@ -481,7 +482,7 @@ async def _sesion_out(db: AsyncSession, sesion: PosSesion) -> SesionOut:
 @router.get("/cajas", response_model=list[CajaOut])
 async def listar_cajas(
     incluir_inactivas: bool = False,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere_alguno(["pos", "configuracion"], "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(PosCaja, PuntoVenta.numero).join(
@@ -551,7 +552,7 @@ async def _validar_refs_caja(
 @router.post("/cajas", response_model=CajaOut, status_code=status.HTTP_201_CREATED)
 async def crear_caja(
     body: CajaIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     await _validar_refs_caja(db, usuario.tenant_id, body)
@@ -589,7 +590,7 @@ async def crear_caja(
 async def editar_caja(
     caja_id: uuid.UUID,
     body: CajaUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     caja = await db.scalar(
@@ -633,7 +634,7 @@ async def editar_caja(
 @router.post("/sesiones", response_model=SesionOut, status_code=status.HTTP_201_CREATED)
 async def abrir_sesion(
     body: SesionAbrirIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     caja = await _caja_de(db, usuario.tenant_id, body.caja_id)
@@ -665,7 +666,7 @@ async def abrir_sesion(
 
 @router.get("/sesiones/actual", response_model=SesionOut | None)
 async def sesion_actual(
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     sesion = await db.scalar(
@@ -682,7 +683,7 @@ async def sesion_actual(
 async def listar_sesiones(
     caja_id: uuid.UUID | None = None,
     limit: int = 30,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(PosSesion).where(PosSesion.tenant_id == usuario.tenant_id)
@@ -697,7 +698,7 @@ async def listar_sesiones(
 @router.get("/sesiones/{sesion_id}/resumen", response_model=ResumenOut)
 async def resumen_sesion(
     sesion_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     sesion = await _sesion_de(db, usuario.tenant_id, sesion_id)
@@ -708,7 +709,7 @@ async def resumen_sesion(
 async def ventas_de_sesion(
     sesion_id: uuid.UUID,
     limit: int = 50,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     sesion = await _sesion_de(db, usuario.tenant_id, sesion_id)
@@ -758,7 +759,7 @@ async def ventas_de_sesion(
 async def cerrar_sesion(
     sesion_id: uuid.UUID,
     body: SesionCerrarIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     sesion = await _sesion_de(db, usuario.tenant_id, sesion_id)
@@ -801,7 +802,7 @@ async def cerrar_sesion(
 async def buscar(
     q: str,
     caja_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Lookup de mostrador: código de barras de variante → código de barras
@@ -938,7 +939,7 @@ async def buscar(
 @router.post("/ventas/calcular", response_model=CalculoOut)
 async def calcular_venta(
     body: VentaCalcularIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Dry-run: totales EXACTOS (redondeo fiscal por alícuota) antes de cobrar.
@@ -954,7 +955,7 @@ async def calcular_venta(
 @router.post("/ventas", response_model=ComprobanteOut, status_code=status.HTTP_201_CREATED)
 async def crear_venta(
     body: VentaIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Venta de mostrador en un paso: factura + CAE + stock + medios + sesión,
@@ -1019,7 +1020,7 @@ async def crear_venta(
 async def anular_venta(
     comp_id: uuid.UUID,
     body: AnularIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("pos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Anulación de un ticket emitido con autorización de SUPERVISOR (patrón

@@ -825,6 +825,11 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
   color: var(--fg-1);
 }
 .modulos-pop-lista .tilde { color: var(--color-success); font-weight: 700; }
+.modulos-pop-lista li.deshabilitado { color: var(--fg-4); }
+.modulos-pop-lista li.deshabilitado .tilde { color: var(--fg-4); font-weight: 400; }
+
+/* fila seleccionada (matriz de roles en Configuración) */
+.tabla tbody tr.fila-sel { background: var(--surface-200); }
 
 .inicio-seccion-nota { color: var(--fg-4); font-weight: 400; text-transform: none; letter-spacing: 0; }
 

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import Atributo, AtributoValor, Tenant, Usuario
 
 router = APIRouter(prefix="/empresa", tags=["empresa"])
@@ -101,7 +102,7 @@ async def listar_rubros():
 @router.put("/rubro", response_model=EmpresaOut)
 async def cambiar_rubro(
     body: RubroIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if body.rubro not in RUBROS:

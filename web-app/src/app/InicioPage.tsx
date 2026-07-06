@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { getSesion } from "../lib/auth";
+import { getSesion, tienePermiso } from "../lib/auth";
 import HeroOrbita from "./HeroOrbita";
 
 /** Tarjetas de indicadores. Los valores reales se conectan en la Fase 7
@@ -12,22 +12,22 @@ const KPIS = [
   { label: "Saldo de caja", hint: "efectivo del día" },
 ];
 
-/** Accesos directos a los módulos del sistema. */
+/** Accesos directos a los módulos del sistema, con su código de permisos. */
 const MODULOS = [
-  { to: "/clientes", nombre: "Clientes", desc: "Cartera, cuentas corrientes y cobranzas" },
-  { to: "/ventas", nombre: "Ventas", desc: "Presupuestos, facturación y notas de crédito" },
-  { to: "/proveedores", nombre: "Proveedores", desc: "Proveedores y comparativo de precios" },
-  { to: "/compras", nombre: "Compras", desc: "Facturas de compra y órdenes de pago" },
-  { to: "/articulos", nombre: "Artículos", desc: "Catálogo, listas de precios y variantes" },
-  { to: "/stock", nombre: "Stock", desc: "Existencias, kardex y ajustes" },
-  { to: "/caja", nombre: "Caja", desc: "Planilla diaria, movimientos y arqueo" },
-  { to: "/pos", nombre: "Punto de Venta", desc: "Mostrador con lector y ticket térmico" },
-  { to: "/libros", nombre: "Libros IVA", desc: "Ventas, compras, retenciones y CITI" },
-  { to: "/configuracion", nombre: "Configuración", desc: "Empresa, rubro, usuarios y ajustes" },
+  { to: "/clientes", modulo: "clientes", nombre: "Clientes", desc: "Cartera, cuentas corrientes y cobranzas" },
+  { to: "/ventas", modulo: "ventas", nombre: "Ventas", desc: "Presupuestos, facturación y notas de crédito" },
+  { to: "/proveedores", modulo: "proveedores", nombre: "Proveedores", desc: "Proveedores y comparativo de precios" },
+  { to: "/compras", modulo: "compras", nombre: "Compras", desc: "Facturas de compra y órdenes de pago" },
+  { to: "/articulos", modulo: "articulos", nombre: "Artículos", desc: "Catálogo, listas de precios y variantes" },
+  { to: "/stock", modulo: "stock", nombre: "Stock", desc: "Existencias, kardex y ajustes" },
+  { to: "/caja", modulo: "caja", nombre: "Caja", desc: "Planilla diaria, movimientos y arqueo" },
+  { to: "/pos", modulo: "pos", nombre: "Punto de Venta", desc: "Mostrador con lector y ticket térmico" },
+  { to: "/libros", modulo: "libros_iva", nombre: "Libros IVA", desc: "Ventas, compras, retenciones y CITI" },
+  { to: "/configuracion", modulo: "configuracion", nombre: "Configuración", desc: "Empresa, rubro, usuarios y ajustes" },
 ];
 
-/** Nivel de acceso legible (semántica ZGE: 1=admin, 2=supervisor). Los permisos
- *  por módulo llegan con la Fase 6.5 (RBAC); hasta entonces el acceso es total. */
+/** Nivel de acceso legible (semántica ZGE: 1=admin, 2=supervisor; gobierna la
+ *  autorización de supervisor del POS — el acceso a módulos lo dan los roles). */
 function nivelTexto(n: number): string {
   if (n <= 1) return "Administrador";
   if (n === 2) return "Supervisor";
@@ -58,6 +58,8 @@ export default function InicioPage() {
   const primerNombre = nombre.split(" ")[0] || nombre;
   const nivel = sesion?.user.nivel_acceso ?? 1;
   const loginAt = sesion?.login_at ? new Date(sesion.login_at) : null;
+  // permisos reales (Fase 6.5): módulos con al menos `ver`
+  const habilitados = MODULOS.filter((m) => tienePermiso(m.modulo));
 
   // reloj en vivo: se actualiza cada segundo → la sesión "respira"
   const [ahora, setAhora] = useState(() => new Date());
@@ -150,7 +152,7 @@ export default function InicioPage() {
               <div className="hero-modulos-dato">
                 <dt>Módulos habilitados</dt>
                 <dd>
-                  {MODULOS.length} de {MODULOS.length}
+                  {habilitados.length} de {MODULOS.length}
                   <button
                     type="button"
                     className="ver-detalle"
@@ -205,7 +207,7 @@ export default function InicioPage() {
         Módulos <span className="inicio-seccion-nota">· acceso de {primerNombre}</span>
       </h2>
       <section className="inicio-modulos">
-        {MODULOS.map((m) => (
+        {habilitados.map((m) => (
           <Link to={m.to} className="modulo-card" key={m.to}>
             <div className="modulo-nombre">{m.nombre}</div>
             <div className="modulo-desc">{m.desc}</div>
@@ -228,16 +230,21 @@ export default function InicioPage() {
             aria-label="Módulos habilitados"
             style={{ top: popPos.top, left: popPos.left }}
           >
-            <div className="modulos-pop-titulo">Acceso a {MODULOS.length} módulos</div>
+            <div className="modulos-pop-titulo">
+              Acceso a {habilitados.length} de {MODULOS.length} módulos
+            </div>
             <ul className="modulos-pop-lista">
-              {MODULOS.map((m) => (
-                <li key={m.to}>
-                  <span className="tilde" aria-hidden="true">
-                    ✓
-                  </span>
-                  {m.nombre}
-                </li>
-              ))}
+              {MODULOS.map((m) => {
+                const con = tienePermiso(m.modulo);
+                return (
+                  <li key={m.to} className={con ? undefined : "deshabilitado"}>
+                    <span className="tilde" aria-hidden="true">
+                      {con ? "✓" : "–"}
+                    </span>
+                    {m.nombre}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </>

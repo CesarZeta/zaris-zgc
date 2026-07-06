@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     Articulo,
     ArticuloStock,
@@ -252,7 +252,7 @@ async def listar_stock(
     solo_bajo_minimo: bool = False,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("stock", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = (
@@ -305,7 +305,7 @@ async def listar_stock(
 @router.get("/articulo/{articulo_id}", response_model=list[StockFilaOut])
 async def stock_de_articulo(
     articulo_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("stock", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     articulo = await _validar_articulo(db, usuario.tenant_id, articulo_id)
@@ -343,7 +343,7 @@ async def stock_de_articulo(
 @router.post("/ajuste", response_model=MovimientoOut, status_code=status.HTTP_201_CREATED)
 async def ajustar_stock(
     body: AjusteIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("stock", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     articulo = await _validar_articulo(db, usuario.tenant_id, body.articulo_id)
@@ -379,7 +379,7 @@ async def ajustar_stock(
 @router.post("/transferencia", response_model=list[MovimientoOut], status_code=status.HTTP_201_CREATED)
 async def transferir_stock(
     body: TransferenciaIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("stock", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Interdepósito del legacy: una salida y una entrada atadas por grupo_id."""
@@ -410,7 +410,7 @@ async def transferir_stock(
 @router.put("/config", response_model=StockOut)
 async def configurar_stock(
     body: StockConfigIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("stock", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Mínimo y ubicación por artículo/depósito (legacy STOCK.MINIMO/UBICACION)."""
@@ -437,7 +437,7 @@ async def kardex(
     variante_id: uuid.UUID | None = None,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("stock", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     await _validar_articulo(db, usuario.tenant_id, articulo_id)

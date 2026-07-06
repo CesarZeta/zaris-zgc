@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPut } from "../../lib/api";
+import { tienePermiso } from "../../lib/auth";
 import type { Empresa, Rubro } from "../../lib/types";
 import CajasSection from "../pos/CajasSection";
 import ArcaConfigSection from "../ventas/ArcaConfigSection";
+import UsuariosSection from "./UsuariosSection";
 
 const DETALLE: Record<string, string> = {
   general: "Sin presets especiales: todas las opciones visibles.",
@@ -19,6 +21,8 @@ export default function ConfiguracionPage() {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const puedeVer = tienePermiso("configuracion", "ver");
+  const puedeEditar = tienePermiso("configuracion", "editar");
 
   useEffect(() => {
     void (async () => {
@@ -49,6 +53,14 @@ export default function ConfiguracionPage() {
     }
   }
 
+  if (!puedeVer)
+    return (
+      <>
+        <h1 className="page-title">Configuración</h1>
+        <p className="page-sub">Tu rol no tiene acceso a este módulo.</p>
+      </>
+    );
+
   if (!empresa) return <p className="page-sub">Cargando…</p>;
 
   return (
@@ -71,7 +83,7 @@ export default function ConfiguracionPage() {
             <button
               key={r.codigo}
               className={`rubro-card${empresa.rubro === r.codigo ? " activo" : ""}`}
-              disabled={guardando}
+              disabled={guardando || !puedeEditar}
               onClick={() => void cambiarRubro(r.codigo)}
             >
               <span className="rubro-nombre">{r.nombre}</span>
@@ -80,6 +92,8 @@ export default function ConfiguracionPage() {
           ))}
         </div>
       </div>
+
+      <UsuariosSection />
 
       <CajasSection />
 

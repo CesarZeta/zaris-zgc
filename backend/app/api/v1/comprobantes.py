@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import (
     ArcaConfig,
     Articulo,
@@ -389,7 +389,7 @@ async def _validar_asociado(
 @router.post("", response_model=ComprobanteOut, status_code=status.HTTP_201_CREATED)
 async def crear_comprobante(
     body: ComprobanteIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     tenant = await db.scalar(select(Tenant).where(Tenant.id == usuario.tenant_id))
@@ -471,7 +471,7 @@ async def listar_comprobantes(
     con_saldo: bool = False,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(Comprobante).where(Comprobante.tenant_id == usuario.tenant_id)
@@ -500,7 +500,7 @@ async def listar_comprobantes(
 @router.get("/{comp_id}", response_model=ComprobanteOut)
 async def ver_comprobante(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return _out(await _cargar(db, usuario.tenant_id, comp_id))
@@ -510,7 +510,7 @@ async def ver_comprobante(
 async def actualizar_borrador(
     comp_id: uuid.UUID,
     body: ComprobanteIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     comp = await _cargar(db, usuario.tenant_id, comp_id)
@@ -557,7 +557,7 @@ async def actualizar_borrador(
 @router.delete("/{comp_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def borrar_borrador(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     comp = await _cargar(db, usuario.tenant_id, comp_id)
@@ -782,7 +782,7 @@ async def emitir_core(
 @router.post("/{comp_id}/emitir", response_model=ComprobanteOut)
 async def emitir_comprobante(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     comp = await _cargar(db, usuario.tenant_id, comp_id)
@@ -798,7 +798,7 @@ async def emitir_comprobante(
 @router.post("/{comp_id}/anular", response_model=ComprobanteOut)
 async def anular_interno(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
     """Anula un documento INTERNO emitido (presupuesto/remito). Los fiscales
@@ -896,7 +896,7 @@ async def crear_nc_espejo_core(
 @router.post("/{comp_id}/nota-credito", response_model=ComprobanteOut)
 async def crear_nc_espejo(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Crea la NC borrador espejo de una factura emitida (reversión total)."""
@@ -909,7 +909,7 @@ async def crear_nc_espejo(
 @router.post("/{comp_id}/facturar", response_model=ComprobanteOut)
 async def facturar_presupuesto(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     """Convierte un presupuesto emitido en factura BORRADOR (letra y totales
@@ -965,7 +965,7 @@ async def facturar_presupuesto(
 @router.get("/{comp_id}/impresion")
 async def datos_impresion(
     comp_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("ventas", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     """Payload completo para el HTML imprimible (FACTURACION-ARCA.md §7):

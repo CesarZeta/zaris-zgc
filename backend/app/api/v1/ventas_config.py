@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
 from app.core.cuit import validar_cuit
 from app.core.db import get_db
+from app.core.permisos import requiere, requiere_alguno
 from app.models import ArcaConfig, Comprobante, CondicionVenta, PuntoVenta, Usuario
 
 router = APIRouter(prefix="/ventas", tags=["ventas-config"])
@@ -36,7 +36,7 @@ class CondicionVentaOut(BaseModel):
 
 @router.get("/condiciones-venta", response_model=list[CondicionVentaOut])
 async def listar_condiciones_venta(
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere_alguno(["clientes", "ventas", "compras", "proveedores"], "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     filas = await db.scalars(
@@ -52,7 +52,7 @@ async def listar_condiciones_venta(
 )
 async def crear_condicion_venta(
     body: CondicionVentaIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere_alguno(["clientes", "ventas", "compras"], "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     cond = CondicionVenta(
@@ -93,7 +93,7 @@ class PuntoVentaOut(BaseModel):
 
 @router.get("/puntos-venta", response_model=list[PuntoVentaOut])
 async def listar_puntos_venta(
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere_alguno(["ventas", "pos", "configuracion"], "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     filas = await db.scalars(
@@ -107,7 +107,7 @@ async def listar_puntos_venta(
 @router.post("/puntos-venta", response_model=PuntoVentaOut, status_code=status.HTTP_201_CREATED)
 async def crear_punto_venta(
     body: PuntoVentaIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     pv = PuntoVenta(tenant_id=usuario.tenant_id, **body.model_dump())
@@ -127,7 +127,7 @@ async def crear_punto_venta(
 async def actualizar_punto_venta(
     pv_id: uuid.UUID,
     body: PuntoVentaUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     pv = await db.scalar(
@@ -214,7 +214,7 @@ async def _emitidos_fiscales(db: AsyncSession, tenant_id: uuid.UUID) -> int:
 
 @router.get("/arca-config", response_model=ArcaConfigOut)
 async def ver_arca_config(
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     config = await db.scalar(
@@ -226,7 +226,7 @@ async def ver_arca_config(
 @router.put("/arca-config", response_model=ArcaConfigOut)
 async def guardar_arca_config(
     body: ArcaConfigIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if body.cuit:

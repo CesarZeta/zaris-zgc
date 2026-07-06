@@ -34,7 +34,7 @@ from app.models.compras import (
     TipoComprobanteCompra,
 )
 from app.models.caja import CajaCierre, CajaMovimiento, ConceptoCaja, Retencion
-from app.models.nucleo import Sucursal, Tenant, Usuario
+from app.models.nucleo import Rol, RolPermiso, Sucursal, Tenant, Usuario
 from app.models.pos import PosCaja, PosSesion, VentaMedio
 from app.models.ventas import (
     ArcaConfig,
@@ -56,6 +56,8 @@ __all__ = [
     "Tenant",
     "Sucursal",
     "Usuario",
+    "Rol",
+    "RolPermiso",
     "Entidad",
     "EntidadContacto",
     "Provincia",

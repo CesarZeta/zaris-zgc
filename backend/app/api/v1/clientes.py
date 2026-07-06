@@ -8,9 +8,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.entidades import EntidadOut, aplicar_busqueda
-from app.core.auth import get_current_user
 from app.core.cuit import validar_documento
 from app.core.db import get_db
+from app.core.permisos import requiere
 from app.models import Cliente, Entidad, Usuario
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
@@ -96,7 +96,7 @@ async def _obtener_cliente(db: AsyncSession, tenant_id: uuid.UUID, cliente_id: u
 @router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
 async def crear_cliente(
     body: ClienteIn,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     if (body.entidad_id is None) == (body.entidad is None):
@@ -151,7 +151,7 @@ async def listar_clientes(
     incluir_inactivos: bool = False,
     limit: int = 50,
     offset: int = 0,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = (
@@ -175,7 +175,7 @@ async def listar_clientes(
 @router.get("/{cliente_id}", response_model=ClienteOut)
 async def obtener_cliente(
     cliente_id: uuid.UUID,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
     return ClienteOut.model_validate(await _obtener_cliente(db, usuario.tenant_id, cliente_id))
@@ -185,7 +185,7 @@ async def obtener_cliente(
 async def actualizar_cliente(
     cliente_id: uuid.UUID,
     body: ClienteUpdate,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(requiere("clientes", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     cliente = await _obtener_cliente(db, usuario.tenant_id, cliente_id)

@@ -16,6 +16,7 @@ from app.api.v1.pagos import router as pagos_router
 from app.api.v1.pos import router as pos_router
 from app.api.v1.proveedores import router as proveedores_router
 from app.api.v1.stock import router as stock_router
+from app.api.v1.usuarios import router as usuarios_router
 from app.api.v1.variantes import router as variantes_router
 from app.api.v1.ventas_config import router as ventas_config_router
 from app.core.config import settings
@@ -42,6 +43,7 @@ app.include_router(pagos_router, prefix="/api/v1")
 app.include_router(caja_router, prefix="/api/v1")
 app.include_router(libros_router, prefix="/api/v1")
 app.include_router(pos_router, prefix="/api/v1")
+app.include_router(usuarios_router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,
