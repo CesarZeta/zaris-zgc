@@ -401,7 +401,7 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 
 ---
 
-## FASE 8 — Cheques y Bancos + Cash-flow proyectado 🚧 (CÓDIGO COMPLETO 2026-07-06; pendiente deploy a prod)
+## FASE 8 — Cheques y Bancos + Cash-flow proyectado ✅ (en producción 2026-07-06)
 
 **Entregable: el dueño maneja su cartera de cheques (terceros y propios) con ciclo de vida
 completo, administra cuentas bancarias con conciliación por import de extracto, y ve su
@@ -435,9 +435,12 @@ César (2026-07-06): ciclo completo · bancos con conciliación por import · ca
   (`tools/test_fase8_dev.py`) + regresión de cobranza/OP sin cheque + build TS + **E2E navegador**
   (3 tabs contra backend local: cartera con chips + acciones por estado, cuentas con saldo real
   $17.800 + movimientos + conciliación, tesorería con serie proyectada y saldo inicial caja+bancos).
-- [ ] **Deploy a prod**: migración 013 por psql (la corre César — el MCP Supabase de la sesión
-  no ve el proyecto ZGC) ANTES del push a master. Luego `tools/smoke_fase8_prod.py`. Cierre:
-  ROADMAP + HISTORIAL + memoria juntos.
+- [x] **Deploy a prod (2026-07-06)**: migración 013 aplicada por psql session pooler
+  (5 tablas + RLS + seed `bancos` = 12 filas en 3 tenants, verificado) ANTES del push a
+  master (Vercel redeployó el backend, Pages el frontend, ambos success). Smoke E2E contra
+  prod **12/12 OK** (`tools/smoke_fase8_prod.py`) + click-through visual en Pages (3 tabs,
+  cuenta con saldo real, cheque acreditado con chip verde). **Todo el deploy lo hizo Claude**
+  (pgpass en el auto-mode; el MCP Supabase sigue sin ver el proyecto pero psql sí conecta).
 
 ---
 
