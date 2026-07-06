@@ -35,6 +35,7 @@ MODULOS: dict[str, str] = {
     "caja": "Caja",
     "libros_iva": "Libros IVA",
     "pos": "POS",
+    "bancos": "Bancos y Cheques",
     "configuracion": "Configuración",
 }
 
@@ -59,6 +60,7 @@ ROLES_BASE: list[tuple[str, str, dict[str, str]]] = [
             "caja": "editar",
             "pos": "editar",
             "clientes": "editar",
+            "bancos": "editar",
             "articulos": "ver",
             "stock": "ver",
         },

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.permisos import requiere
 from app.models import (
+    Cheque,
     Compra,
     CompraVencimiento,
     Entidad,
@@ -29,6 +30,7 @@ from app.models import (
     TipoComprobanteCompra,
     Usuario,
 )
+from app.services import cheques_core as cc
 from app.services import compras as sc
 
 router = APIRouter(prefix="/compras/pagos", tags=["pagos"])
@@ -36,10 +38,22 @@ router = APIRouter(prefix="/compras/pagos", tags=["pagos"])
 
 # ===== Schemas =====
 
+class ChequePropioIn(BaseModel):
+    """Datos de un cheque propio a emitir contra una cuenta (medio='cheque')."""
+    cuenta_id: uuid.UUID
+    numero: str = Field(min_length=1, max_length=20)
+    fecha_pago: date
+    fecha_emision: date | None = None
+
+
 class MedioIn(BaseModel):
     medio: str = Field(pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
     importe: Decimal = Field(gt=0)
     referencia: str | None = Field(None, max_length=60)
+    # medio='cheque': endosar uno de cartera (endosar_cheque_id) O emitir propio
+    # (cheque_propio). Exactamente uno, o ninguno (queda como etiqueta, compat).
+    endosar_cheque_id: uuid.UUID | None = None
+    cheque_propio: ChequePropioIn | None = None
 
 
 class ImputacionIn(BaseModel):
@@ -176,6 +190,50 @@ async def crear_orden_pago(
                 referencia=(m.referencia or "").strip() or None,
             )
         )
+        if m.medio == "cheque":
+            if m.endosar_cheque_id and m.cheque_propio:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Un medio cheque endosa uno de cartera O emite uno propio, no ambos",
+                )
+            # (a) Endosar un cheque de tercero en cartera
+            if m.endosar_cheque_id:
+                cheque = await db.scalar(
+                    select(Cheque)
+                    .where(
+                        Cheque.id == m.endosar_cheque_id,
+                        Cheque.tenant_id == usuario.tenant_id,
+                    )
+                    .with_for_update(of=Cheque)
+                )
+                if cheque is None:
+                    raise HTTPException(status_code=404, detail="Cheque a endosar no encontrado")
+                if cheque.importe != m.importe:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"El importe del medio (${m.importe}) no coincide con el "
+                        f"del cheque (${cheque.importe})",
+                    )
+                await cc.endosar(
+                    db, cheque=cheque, proveedor_id=proveedor.id,
+                    orden_pago_id=op.id, fecha=op.fecha, usuario_id=usuario.id,
+                )
+            # (b) Emitir un cheque propio contra una cuenta
+            elif m.cheque_propio:
+                await cc.emitir_propio(
+                    db,
+                    tenant_id=usuario.tenant_id,
+                    datos={
+                        "numero": m.cheque_propio.numero.strip(),
+                        "fecha_emision": m.cheque_propio.fecha_emision or op.fecha,
+                        "fecha_pago": m.cheque_propio.fecha_pago,
+                        "importe": m.importe,
+                    },
+                    cuenta_id=m.cheque_propio.cuenta_id,
+                    proveedor_id=proveedor.id,
+                    orden_pago_id=op.id,
+                    usuario_id=usuario.id,
+                )
     for imp in body.imputaciones:
         deuda = await _deuda_bloqueada(db, usuario.tenant_id, imp.compra_id)
         if deuda.proveedor_id != proveedor.id:

@@ -378,11 +378,66 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Diferido documentado: mapa Leaflet (con Logística F12-bis), export .xlsx nativo (el CSV
   lo cubre), export CSV de clientes/proveedores/artículos (el patrón queda armado), padrón
   con cache de resultados (hoy solo cachea el TA).
-- **Verificación pendiente (César)**: el E2E de navegador se hizo contra DEV; en prod el
-  smoke cubrió los endpoints (14/14) pero falta el click-through visual del frontend F7 en
-  Pages — entrar a `/inicio` y ver KPIs con números, probar el buscador OSM en un alta de
-  cliente, el botón padrón, y el ABM de sucursales en Configuración. Además, verificar los
-  niveles de permisos entrando con los 5 usuarios de prueba (menú recortado por rol).
+- **Verificación en prod (Pages) — HECHA 2026-07-06** (César + click-through de Claude
+  navegando `cesarzeta.github.io/zaris-zgc` contra la API de Vercel):
+  - `/inicio`: los 4 KPIs renderizan con valores reales (ventas $1.812,22 · cobros
+    pendientes $4.639,37 · stock valorizado $77.009,91 · saldo caja $0,00), diseño
+    «ZARIS Heredado» OK.
+  - OSM: el buscador de un alta de cliente pega al proxy de prod
+    (`GET /geo/buscar` → 200) y trae sugerencias reales de Nominatim (Av. Corrientes 1000
+    CABA + variante Misiones); Localidad/Provincia readOnly hasta elegir del buscador
+    (criterio BUC) con escape "cargar a mano".
+  - Padrón ARCA: `GET /padron/33693450239` → 200 (modo simulado, RI/persona J) y
+    `GET /padron/<DV malo>` → 422 "dígito verificador no coincide". El botón "ARCA" se
+    habilita solo con CUIT/CUIL de DV válido.
+  - ABM sucursales en Configuración: lista "Casa Central — Rosario — activa" con
+    Editar/Inactivar (sin DELETE); el alta embebe el mismo AddressSearch + campos fiscales.
+  - RBAC por rol (login real contra prod de los 5 usuarios): el menú se recorta según el
+    mapa `permisos` del login. Vendedor (el más acotado) ve solo Inicio/Clientes/Ventas/
+    Artículos/Stock; navegar a `/configuracion` muestra "Tu rol no tiene acceso a este
+    módulo" **sin desloguear** (403, no 401). Gerente ve todo con Configuración solo `ver`;
+    Cajero suma Caja/POS; Consulta ve todo en solo-lectura sin Configuración.
+  - Bonus: el ítem "Bancos y Cheques" ya figura en el sidebar como `soon` (slot de Fase 8).
+
+---
+
+## FASE 8 — Cheques y Bancos + Cash-flow proyectado 🚧 (CÓDIGO COMPLETO 2026-07-06; pendiente deploy a prod)
+
+**Entregable: el dueño maneja su cartera de cheques (terceros y propios) con ciclo de vida
+completo, administra cuentas bancarias con conciliación por import de extracto, y ve su
+tesorería proyectada.** Diseño en `docs/DISENO-CHEQUES-Y-BANCOS.md`. Alcance decidido por
+César (2026-07-06): ciclo completo · bancos con conciliación por import · cash-flow SÍ en F8.
+
+- [x] **Migración 013** (aditiva, greenfield — no existía modelo de cheques/bancos):
+  `cuentas_bancarias`, `banco_movimientos`, `cheques` (máquina de estados), `cheque_eventos`
+  (bitácora), `extracto_imports`. Todo con `tenant_id` + RLS. Va a prod ANTES del backend.
+  Aplicada e idempotente en dev.
+- [x] **Módulo de permisos `bancos`** (ESPEJO `permisos.py` + seed en la 013 con INSERT
+  ON CONFLICT para roles de sistema existentes): admin/gerente `anular`, cajero `editar`,
+  consulta `ver`, vendedor sin acceso. Guardas `requiere("bancos", …)` en todo endpoint.
+- [x] **`cheques_core.py`** (transiciones sin commit, patrón `emitir_core`): recibir tercero,
+  depositar, acreditar, endosar, rechazar (reabre cta.cte. cliente), anular; emitir/debitar propio.
+- [x] **Cheques**: cartera + endpoints de transición + resumen + export CSV (helper F7). Chips
+  de estado (color, nunca naranja=brand). Legacy de referencia: `cheques.DBF` (PROP_TER/CART_PAS/
+  RECHAZADO/PASADO_A) — modernizado con estados explícitos y FKs.
+- [x] **Bancos**: ABM cuentas (sin DELETE, se inactivan) + movimientos (signo por tipo) +
+  conciliación por **import de extracto CSV** (preview con matcheo propuesto → confirmar).
+  Saldo calculado (saldo_inicial + Σ movimientos con signo).
+- [x] **Integración sin romper el núcleo**: cobranza de ventas (`recibo_medios` medio=cheque)
+  materializa cheque en cartera; OP de compras endosa un cheque de cartera o emite uno propio
+  contra una cuenta. Compat total: sin datos de cheque se comporta como hoy (regresión verificada).
+  El cheque NO es efectivo (no entra a la planilla de caja F5).
+- [x] **Cash-flow proyectado** (`/tesoreria/cashflow`, reporte no tabla): saldo día a día sobre
+  vencimientos de cta.cte. ventas/compras + cheques por fecha de pago. `.select_from()` explícito.
+- [x] **Frontend** módulo `bancos/` (tabs Cartera · Cuentas · Tesorería); ítem del sidebar
+  activado con `modulo: "bancos"`. `useDialogos`, `tabular-nums`, `Intl` es-AR. Build TS limpio.
+- [x] Verificado 2026-07-06: **31/31 pruebas de API en vivo** (dev) del ciclo completo
+  (`tools/test_fase8_dev.py`) + regresión de cobranza/OP sin cheque + build TS + **E2E navegador**
+  (3 tabs contra backend local: cartera con chips + acciones por estado, cuentas con saldo real
+  $17.800 + movimientos + conciliación, tesorería con serie proyectada y saldo inicial caja+bancos).
+- [ ] **Deploy a prod**: migración 013 por psql (la corre César — el MCP Supabase de la sesión
+  no ve el proyecto ZGC) ANTES del push a master. Luego `tools/smoke_fase8_prod.py`. Cierre:
+  ROADMAP + HISTORIAL + memoria juntos.
 
 ---
 

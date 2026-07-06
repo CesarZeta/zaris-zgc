@@ -86,6 +86,7 @@
 .btn-ghost { border: 1px solid var(--border-medium); color: var(--fg-2); background: var(--zaris-white); }
 .btn-ghost:hover { border-color: var(--border-strong); color: var(--fg-1); }
 .btn-block { width: 100%; justify-content: center; }
+.btn-chico { padding: var(--space-2) var(--space-4); font-size: var(--size-caption); }
 
 /* ---------- Shell ---------- */
 .shell { display: grid; grid-template-columns: 224px 1fr; min-height: 100%; }

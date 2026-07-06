@@ -29,6 +29,8 @@ from app.models import (
     TipoComprobante,
     Usuario,
 )
+from app.core.cuit import validar_cuit
+from app.services import cheques_core as cc
 from app.services import ventas as sv
 
 router = APIRouter(prefix="/cobranzas", tags=["cobranzas"])
@@ -38,10 +40,24 @@ MEDIOS = ("efectivo", "transferencia", "cheque", "tarjeta", "mercadopago", "otro
 
 # ===== Schemas =====
 
+class ChequeMedioIn(BaseModel):
+    """Datos del cheque de tercero recibido en la cobranza (medio='cheque').
+    Opcional: si no viene, el medio queda como hoy (solo etiqueta, sin cartera)."""
+    numero: str = Field(min_length=1, max_length=20)
+    banco: str = Field(min_length=1, max_length=60)
+    fecha_pago: date
+    fecha_emision: date | None = None
+    titular: str | None = Field(None, max_length=80)
+    cuit_firmante: str | None = Field(None, max_length=13)
+    plaza: str | None = Field(None, max_length=60)
+    es_echeq: bool = False
+
+
 class MedioIn(BaseModel):
     medio: str = Field(pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
     importe: Decimal = Field(gt=0)
     referencia: str | None = Field(None, max_length=60)
+    cheque: ChequeMedioIn | None = None
 
 
 class ImputacionIn(BaseModel):
@@ -188,6 +204,29 @@ async def crear_recibo(
                 referencia=(m.referencia or "").strip() or None,
             )
         )
+        # Cheque de tercero → materializa en cartera (Fase 8). Si el medio es
+        # cheque pero no manda datos, se comporta como antes (solo etiqueta).
+        if m.medio == "cheque" and m.cheque is not None:
+            if m.cheque.cuit_firmante and not validar_cuit(m.cheque.cuit_firmante):
+                raise HTTPException(status_code=422, detail="CUIT del firmante inválido")
+            await cc.recibir_tercero(
+                db,
+                tenant_id=usuario.tenant_id,
+                datos={
+                    "numero": m.cheque.numero.strip(),
+                    "banco": m.cheque.banco.strip(),
+                    "plaza": (m.cheque.plaza or "").strip() or None,
+                    "titular": (m.cheque.titular or "").strip() or None,
+                    "cuit_firmante": (m.cheque.cuit_firmante or "").strip() or None,
+                    "fecha_emision": m.cheque.fecha_emision,
+                    "fecha_pago": m.cheque.fecha_pago,
+                    "importe": m.importe,
+                    "es_echeq": m.cheque.es_echeq,
+                },
+                cliente_id=cliente.id,
+                recibo_id=recibo.id,
+                usuario_id=usuario.id,
+            )
     for imp in body.imputaciones:
         deuda = await _deuda_bloqueada(db, usuario.tenant_id, imp.comprobante_id)
         if deuda.cliente_id != cliente.id:

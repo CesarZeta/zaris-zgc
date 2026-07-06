@@ -2,7 +2,7 @@ import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { clearSesion, getSesion, tienePermiso } from "../lib/auth";
 import ZarisLogo from "./ZarisLogo";
 
-const MODULOS_PROXIMOS = ["Bancos y Cheques"];
+const MODULOS_PROXIMOS: string[] = [];
 
 /** Ítems del menú con su módulo de permisos (Fase 6.5): sin `ver` sobre el
  *  módulo, el ítem no aparece (además del 403 del backend). */
@@ -15,6 +15,7 @@ const NAV: { to: string; label: string; modulo: string | null }[] = [
   { to: "/articulos", label: "Artículos", modulo: "articulos" },
   { to: "/stock", label: "Stock", modulo: "stock" },
   { to: "/caja", label: "Caja", modulo: "caja" },
+  { to: "/bancos", label: "Bancos y Cheques", modulo: "bancos" },
   { to: "/pos", label: "Punto de Venta", modulo: "pos" },
   { to: "/libros", label: "Libros IVA", modulo: "libros_iva" },
   { to: "/configuracion", label: "Configuración", modulo: "configuracion" },

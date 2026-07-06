@@ -12,6 +12,13 @@ from app.models.articulos import (
     Subfamilia,
     Unidad,
 )
+from app.models.bancos import (
+    BancoMovimiento,
+    Cheque,
+    ChequeEvento,
+    CuentaBancaria,
+    ExtractoImport,
+)
 from app.models.base import Base
 from app.models.bue import (
     Cliente,
@@ -107,4 +114,9 @@ __all__ = [
     "PosCaja",
     "PosSesion",
     "VentaMedio",
+    "CuentaBancaria",
+    "Cheque",
+    "ExtractoImport",
+    "BancoMovimiento",
+    "ChequeEvento",
 ]

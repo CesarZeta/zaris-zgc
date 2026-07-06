@@ -3,6 +3,7 @@ import AppShell from "./app/AppShell";
 import InicioPage from "./app/InicioPage";
 import LoginPage from "./app/LoginPage";
 import ArticulosPage from "./modules/articulos/ArticulosPage";
+import BancosPage from "./modules/bancos/BancosPage";
 import CajaPage from "./modules/caja/CajaPage";
 import ClientesPage from "./modules/clientes/ClientesPage";
 import ComprasPage from "./modules/compras/ComprasPage";
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/caja" element={<CajaPage />} />
+          <Route path="/bancos" element={<BancosPage />} />
           <Route path="/libros" element={<LibrosPage />} />
           <Route path="/configuracion" element={<ConfiguracionPage />} />
         </Route>
