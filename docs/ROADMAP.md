@@ -318,9 +318,9 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   submit). ClienteForm expone `condicion_venta_id` y `zona_id` (endpoints nuevos
   `GET/POST /clientes/zonas` con alta rápida idempotente).
 
-## FASE 7 — Dashboard + calidad de datos (OSM/padrón) + ABM sucursales 🔶 (código completo 2026-07-06)
+## FASE 7 — Dashboard + calidad de datos (OSM/padrón) + ABM sucursales ✅ (en producción 2026-07-06)
 
-**Entregable: el dueño ve sus números al entrar, carga entidades con datos limpios (padrón ARCA + domicilios OSM), administra sus sucursales y exporta cualquier listado.** ✔ verificado con 45 pruebas de API en vivo (0 fallos) + regresión + build + E2E en navegador. **Falta el deploy a prod.**
+**Entregable: el dueño ve sus números al entrar, carga entidades con datos limpios (padrón ARCA + domicilios OSM), administra sus sucursales y exporta cualquier listado.** ✔ verificado con 45 pruebas de API en vivo (0 fallos) + regresión + build + E2E en navegador. **EN PRODUCCIÓN**: migración 012 aplicada en Supabase por César (psql session pooler) + push a master (Vercel + Pages), smoke E2E contra prod **14/14 OK**.
 
 > Primer post-MVP. Las dos patas de calidad de datos (padrón ARCA + OSM) van en el
 > mismo formulario de entidad, ANTES de cargar entidades masivamente. Diseño de OSM
@@ -369,8 +369,12 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   + E2E en navegador (KPIs reales, AddressSearch → Av. Corrientes con mapeo a CABA + coords
   + readOnly, padrón trae razón social/cond. IVA, sucursal creada con domicilio normalizado,
   CSV 200 con 151 filas).
-- [ ] **Deploy a prod**: migración 012 por psql via session pooler ANTES del push +
-  re-aplicar 005; luego push (Vercel + Pages); smoke E2E contra prod.
+- [x] **Deploy a prod (2026-07-06)**: migración 012 por psql session pooler (la corrió
+  César) + push a master (Vercel redeployó el backend, Pages el frontend). Smoke E2E
+  contra prod **14/14 OK** (`tools/smoke_fase7_prod.py`): migración 012 verificada
+  (entidades expone latitud), ABM sucursales, dashboard KPIs, padrón, geo, export CSV.
+  Se sembraron 5 usuarios de prueba (uno por rol: admin=César + gerente/cajero/vendedor/
+  consulta en `@zgc.dev`, clave genérica dev) para probar los niveles de permisos.
 - Diferido documentado: mapa Leaflet (con Logística F12-bis), export .xlsx nativo (el CSV
   lo cubre), export CSV de clientes/proveedores/artículos (el patrón queda armado), padrón
   con cache de resultados (hoy solo cachea el TA).
@@ -410,6 +414,7 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 | Multi-moneda completa (mayor multimoneda) | **OUT salvo demanda de exportadores** — se mantiene precios USD + factura DOL (diferida F3); WSFEX ya estaba fuera |
 | Factura recurrente / abonos (Concepto 2/3) | **IN feature menor de Ventas**, gated por pedido de cliente real (el cliente WSFEv1 ya lo soporta parametrizado) |
 | Producción/MRP, proyectos/obras, gestión de servicios, localización internacional | **FUERA PERMANENTE** (regla hacia-afuera) |
+| Recuperación de contraseña en el login ("olvidé mi clave") | **IN diferido** (pendiente 2026-07-06, César) — hoy solo hay reset por admin (`POST /usuarios/{id}/reset-password`, F6.5); falta autoservicio desde el login. Requiere decidir el canal: envío de email (la app aún NO tiene SMTP configurado) o solo reset asistido. Sin pistas/leyendas de clave (mala práctica de seguridad). Gated por: primer usuario que se autobloquee sin otro admin, o pedido de piloto |
 
 ### Decisiones abiertas (César)
 
