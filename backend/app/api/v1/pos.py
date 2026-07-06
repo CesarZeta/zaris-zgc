@@ -451,15 +451,19 @@ async def _resumen_sesion(db: AsyncSession, sesion: PosSesion) -> ResumenOut:
     )
 
 
-async def _sesion_out(db: AsyncSession, sesion: PosSesion) -> SesionOut:
-    cajero = await db.scalar(select(Usuario).where(Usuario.id == sesion.cajero_id))
+async def _sesion_out(
+    db: AsyncSession, sesion: PosSesion, cajero_nombre: str | None = None
+) -> SesionOut:
+    if cajero_nombre is None:
+        cajero = await db.scalar(select(Usuario).where(Usuario.id == sesion.cajero_id))
+        cajero_nombre = cajero.nombre if cajero else ""
     return SesionOut(
         id=sesion.id,
         caja_id=sesion.caja_id,
         caja_nombre=sesion.caja.nombre,
         ancho_ticket=sesion.caja.ancho_ticket,
         cajero_id=sesion.cajero_id,
-        cajero_nombre=cajero.nombre if cajero else "",
+        cajero_nombre=cajero_nombre,
         estado=sesion.estado,
         fondo_inicial=sesion.fondo_inicial,
         abierta_at=sesion.abierta_at,
@@ -692,7 +696,14 @@ async def listar_sesiones(
     filas = (
         await db.scalars(stmt.order_by(PosSesion.abierta_at.desc()).limit(min(limit, 100)))
     ).all()
-    return [await _sesion_out(db, s) for s in filas]
+    # Los cajeros de toda la página en UN select (antes: uno por sesión).
+    nombres: dict[uuid.UUID, str] = {}
+    if filas:
+        cajeros = await db.scalars(
+            select(Usuario).where(Usuario.id.in_({s.cajero_id for s in filas}))
+        )
+        nombres = {u.id: u.nombre for u in cajeros}
+    return [await _sesion_out(db, s, nombres.get(s.cajero_id, "")) for s in filas]
 
 
 @router.get("/sesiones/{sesion_id}/resumen", response_model=ResumenOut)

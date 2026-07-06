@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ApiError, apiPost, apiPut } from "../../lib/api";
 import type { Articulo, Familia, Marca, Rubro, Unidad } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 import VariantesSection from "./VariantesSection";
 
 interface Props {
@@ -55,6 +56,7 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
   });
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { pedirTexto, dialogos } = useDialogos();
 
   function set<K extends keyof typeof form>(campo: K, valor: (typeof form)[K]) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -101,7 +103,7 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
   }
 
   async function crearCatalogo(tipo: "familia" | "subfamilia" | "marca" | "unidad") {
-    const nombre = window.prompt(`Nombre de la nueva ${tipo}:`);
+    const nombre = await pedirTexto(`Nombre de la nueva ${tipo}:`);
     if (!nombre?.trim()) return;
     try {
       if (tipo === "familia") {
@@ -460,6 +462,7 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
             {guardando ? "Guardando…" : a ? "Guardar cambios" : "Crear artículo"}
           </button>
         </div>
+        {dialogos}
       </form>
     </div>
   );

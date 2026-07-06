@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiDescargar, apiGet, apiPost } from "../../lib/api";
 import type { ResumenRetencion, Retencion } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -15,6 +16,7 @@ export default function RetencionesTab() {
   const [resumen, setResumen] = useState<ResumenRetencion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const { confirmar, dialogos } = useDialogos();
 
   const [tipo, setTipo] = useState<"sufrida" | "practicada">("sufrida");
   const [regimen, setRegimen] = useState("IVA");
@@ -65,7 +67,7 @@ export default function RetencionesTab() {
   }
 
   async function borrar(r: Retencion) {
-    if (!window.confirm(`¿Eliminar la retención de ${fmt.format(Number(r.importe))}?`)) return;
+    if (!(await confirmar(`¿Eliminar la retención de ${fmt.format(Number(r.importe))}?`))) return;
     setOcupado(true);
     try {
       await apiDelete(`/libros/retenciones/${r.id}`);
@@ -183,6 +185,7 @@ export default function RetencionesTab() {
         </table>
         {filas.length === 0 && <div className="vacio">Sin retenciones registradas</div>}
       </div>
+      {dialogos}
     </>
   );
 }

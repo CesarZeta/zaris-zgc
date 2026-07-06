@@ -16,7 +16,7 @@ export function imprimirComprobante(p: ImpresionPayload): void {
   const c = p.comprobante;
   const discrimina = p.discrimina_iva;
 
-  const filas = c.items
+  const filas = (c.items ?? [])
     .map(
       (i) => `<tr>
         <td class="mono">${esc(i.codigo) || "—"}</td>
@@ -31,7 +31,7 @@ export function imprimirComprobante(p: ImpresionPayload): void {
     .join("");
 
   const alicuotas = discrimina
-    ? c.alicuotas
+    ? (c.alicuotas ?? [])
         .map(
           (a) =>
             `<div class="tot-linea"><span>IVA ${a.tasa}% (base ${n(a.base)})</span><span class="mono">${n(a.importe)}</span></div>`,
@@ -57,8 +57,8 @@ export function imprimirComprobante(p: ImpresionPayload): void {
     .join("");
 
   const vencimientos =
-    c.vencimientos.length > 0
-      ? `<div class="vtos"><b>Vencimientos:</b> ${c.vencimientos
+    (c.vencimientos ?? []).length > 0
+      ? `<div class="vtos"><b>Vencimientos:</b> ${(c.vencimientos ?? [])
           .map((v) => `cuota ${v.nro_cuota}: ${esc(v.fecha_vto)} $ ${n(v.importe)}`)
           .join(" · ")}</div>`
       : "";

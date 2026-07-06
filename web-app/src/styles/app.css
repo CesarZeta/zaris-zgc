@@ -318,6 +318,10 @@
 .modal-ancho { width: min(860px, calc(100% - var(--space-8))); }
 .drawer-backdrop:has(.modal) { justify-content: center; align-items: center; }
 
+/* diálogo chico (confirmar / pedir texto — reemplaza window.confirm/prompt) */
+.modal-dialogo { width: min(440px, calc(100% - var(--space-8))); }
+.dialogo-mensaje { margin: 0 0 var(--space-6); font-size: var(--size-ui); white-space: pre-line; }
+
 .listas-checks { display: flex; gap: var(--space-6); padding-top: var(--space-3); }
 .previa {
   background: var(--zaris-white);

@@ -287,10 +287,7 @@ async def listar_articulos(
     usuario: Usuario = Depends(requiere("articulos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    stock_total = _subquery_stock_total(usuario.tenant_id)
-    stmt = select(Articulo, stock_total.label("stock_total")).where(
-        Articulo.tenant_id == usuario.tenant_id
-    )
+    stmt = select(Articulo).where(Articulo.tenant_id == usuario.tenant_id)
     if not incluir_inactivos:
         stmt = stmt.where(Articulo.activo)
     if familia_id:
@@ -301,10 +298,13 @@ async def listar_articulos(
         stmt = stmt.where(Articulo.marca_id == marca_id)
     stmt = aplicar_busqueda_articulos(stmt, q)
 
+    # El COUNT va sin la subquery de stock: sumar el stock del catálogo
+    # entero solo para contar filas es O(stock) inútil.
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
+    stock_total = _subquery_stock_total(usuario.tenant_id)
+    stmt = stmt.add_columns(stock_total.label("stock_total"))
     stmt = stmt.order_by(Articulo.descripcion).limit(min(limit, 200)).offset(offset)
     filas = (await db.execute(stmt)).all()
     return [_armar_out(articulo, st) for articulo, st in filas]

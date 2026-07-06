@@ -30,7 +30,7 @@ export function imprimirTicket(
   const discrimina = p.discrimina_iva;
   const util = ancho === 58 ? 48 : 72; // mm imprimibles típicos
 
-  const filas = c.items
+  const filas = (c.items ?? [])
     .map((i) => {
       const cant = Number(i.cantidad);
       // Sin discriminación (B/C) el unitario que ve el cliente es el FINAL;
@@ -49,7 +49,7 @@ export function imprimirTicket(
 
   const totales = discrimina
     ? `<div class="linea"><span>Neto gravado</span><span>${n(c.neto_gravado)}</span></div>` +
-      c.alicuotas
+      (c.alicuotas ?? [])
         .map((a) => `<div class="linea"><span>IVA ${a.tasa}%</span><span>${n(a.importe)}</span></div>`)
         .join("")
     : "";

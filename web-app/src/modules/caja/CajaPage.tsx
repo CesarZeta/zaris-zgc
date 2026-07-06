@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
 import type { Planilla } from "../../lib/types";
 import { MEDIOS_PAGO } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 import ConceptosTab from "./ConceptosTab";
 import MovimientosTab from "./MovimientosTab";
 
@@ -24,6 +25,7 @@ export default function CajaPage() {
   const [cerrando, setCerrando] = useState(false);
   const [arqueo, setArqueo] = useState("");
   const [obsCierre, setObsCierre] = useState("");
+  const { confirmar, dialogos } = useDialogos();
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -65,7 +67,7 @@ export default function CajaPage() {
 
   async function reabrirCaja() {
     if (!planilla?.cierre) return;
-    if (!window.confirm(`¿Reabrir la caja del ${fecha}? El cierre se elimina.`)) return;
+    if (!(await confirmar(`¿Reabrir la caja del ${fecha}? El cierre se elimina.`))) return;
     setOcupado(true);
     setError(null);
     try {
@@ -255,6 +257,7 @@ export default function CajaPage() {
           </div>
         </div>
       )}
+      {dialogos}
     </>
   );
 }

@@ -6,14 +6,16 @@ nota de crédito (docs/FACTURACION-ARCA.md §6). La letra y los totales los
 calcula SIEMPRE el servidor (services/ventas.py).
 """
 
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.core.db import get_db
 from app.core.permisos import requiere
@@ -110,7 +112,10 @@ class VencimientoOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ComprobanteOut(BaseModel):
+class ComprobanteListaOut(BaseModel):
+    """Fila de grilla: el comprobante sin hijos (items/alícuotas/vencimientos).
+    El detalle completo se pide por id (GET /{comp_id})."""
+
     id: uuid.UUID
     clase: str
     tipo_codigo: str
@@ -141,6 +146,9 @@ class ComprobanteOut(BaseModel):
     comprobante_asociado_id: uuid.UUID | None
     origen_id: uuid.UUID | None
     observaciones: str | None
+
+
+class ComprobanteOut(ComprobanteListaOut):
     items: list[ItemOut]
     alicuotas: list[AlicuotaOut]
     vencimientos: list[VencimientoOut]
@@ -152,8 +160,8 @@ def _fmt_numero(pv: int, numero: int | None) -> str | None:
     return f"{pv:04d}-{numero:08d}" if numero is not None else None
 
 
-def _out(comp: Comprobante) -> ComprobanteOut:
-    return ComprobanteOut(
+def _campos_base(comp: Comprobante) -> dict:
+    return dict(
         id=comp.id,
         clase=comp.tipo.clase,
         tipo_codigo=comp.tipo_codigo,
@@ -184,9 +192,35 @@ def _out(comp: Comprobante) -> ComprobanteOut:
         comprobante_asociado_id=comp.comprobante_asociado_id,
         origen_id=comp.origen_id,
         observaciones=comp.observaciones,
+    )
+
+
+def _out_lista(comp: Comprobante) -> ComprobanteListaOut:
+    return ComprobanteListaOut(**_campos_base(comp))
+
+
+def _out(comp: Comprobante) -> ComprobanteOut:
+    return ComprobanteOut(
+        **_campos_base(comp),
         items=[ItemOut.model_validate(i) for i in comp.items],
         alicuotas=[AlicuotaOut.model_validate(a) for a in comp.alicuotas],
         vencimientos=[VencimientoOut.model_validate(v) for v in comp.vencimientos],
+    )
+
+
+def _aplicar_busqueda(stmt, q: str):
+    """q numérico (con o sin guiones) = número del comprobante; texto =
+    AND multi-palabra sobre el nombre del receptor."""
+    q = q.strip()
+    if not q:
+        return stmt
+    solo_digitos = re.sub(r"\D", "", q)
+    if solo_digitos and not re.sub(r"[\d\s\-]", "", q):
+        # "0001-00000123" → 123 (se ignora el PV; el número puro alcanza)
+        numero = int(solo_digitos[-8:]) if len(solo_digitos) > 8 else int(solo_digitos)
+        return stmt.where(Comprobante.numero == numero)
+    return stmt.where(
+        and_(*(Comprobante.receptor_nombre.ilike(f"%{tok}%") for tok in q.split()))
     )
 
 
@@ -460,9 +494,10 @@ async def crear_comprobante(
     return _out(comp)
 
 
-@router.get("", response_model=list[ComprobanteOut])
+@router.get("", response_model=list[ComprobanteListaOut])
 async def listar_comprobantes(
     response: Response,
+    q: str = "",
     clase: str | None = None,
     estado: str | None = None,
     cliente_id: uuid.UUID | None = None,
@@ -487,14 +522,22 @@ async def listar_comprobantes(
         stmt = stmt.where(Comprobante.fecha <= hasta)
     if con_saldo:
         stmt = stmt.where(Comprobante.saldo != 0)
+    stmt = _aplicar_busqueda(stmt, q)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
     filas = await db.scalars(
-        stmt.order_by(Comprobante.fecha.desc(), Comprobante.created_at.desc())
+        # noload: la grilla no muestra hijos — sin esto el selectin dispara
+        # 3 queries extra y carga TODOS los renglones de la página
+        stmt.options(
+            noload(Comprobante.items),
+            noload(Comprobante.alicuotas),
+            noload(Comprobante.vencimientos),
+        )
+        .order_by(Comprobante.fecha.desc(), Comprobante.created_at.desc())
         .limit(min(limit, 200))
         .offset(offset)
     )
-    return [_out(c) for c in filas]
+    return [_out_lista(c) for c in filas]
 
 
 @router.get("/{comp_id}", response_model=ComprobanteOut)

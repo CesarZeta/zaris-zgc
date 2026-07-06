@@ -6,13 +6,14 @@ registradas generan crédito que también se imputa. El saldo vive en
 compras.saldo y ordenes_pago.total - aplicado (a cuenta).
 """
 
+import re
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -208,6 +209,7 @@ async def crear_orden_pago(
 @router.get("/ordenes-pago", response_model=list[OrdenPagoOut])
 async def listar_ordenes_pago(
     response: Response,
+    q: str = "",
     proveedor_id: uuid.UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
@@ -219,6 +221,16 @@ async def listar_ordenes_pago(
     stmt = select(OrdenPago).where(OrdenPago.tenant_id == usuario.tenant_id)
     if proveedor_id:
         stmt = stmt.where(OrdenPago.proveedor_id == proveedor_id)
+    q = q.strip()
+    if q:
+        solo_digitos = re.sub(r"\D", "", q)
+        if solo_digitos and not re.sub(r"[\d\s\-]", "", q.replace("OP", "").replace("op", "")):
+            numero = int(solo_digitos[-8:]) if len(solo_digitos) > 8 else int(solo_digitos)
+            stmt = stmt.where(OrdenPago.numero == numero)
+        else:
+            stmt = stmt.where(
+                and_(*(OrdenPago.proveedor_nombre.ilike(f"%{tok}%") for tok in q.split()))
+            )
     if desde:
         stmt = stmt.where(OrdenPago.fecha >= desde)
     if hasta:
@@ -366,44 +378,65 @@ async def cuenta_corriente(
     nos acreditan (OP/NC)."""
     await _proveedor(db, usuario.tenant_id, proveedor_id)
 
-    compras = (
-        await db.execute(
-            select(Compra, TipoComprobanteCompra)
-            .join(TipoComprobanteCompra, Compra.tipo_codigo == TipoComprobanteCompra.codigo)
-            .where(
-                Compra.tenant_id == usuario.tenant_id,
-                Compra.proveedor_id == proveedor_id,
-                Compra.estado == "registrado",
-                TipoComprobanteCompra.fiscal.is_(True),
-            )
+    # Proyección de columnas + filtro de fechas en SQL (espejo de cobranzas):
+    # antes cargaba los ORM completos de TODA la historia (items/vencimientos
+    # por selectin) y filtraba en Python.
+    stmt_c = (
+        select(
+            Compra.fecha,
+            Compra.created_at,
+            TipoComprobanteCompra.descripcion,
+            Compra.punto_venta,
+            Compra.numero,
+            Compra.total,
+            Compra.saldo,
+            Compra.contado,
+            TipoComprobanteCompra.signo_cta_cte,
         )
-    ).all()
-    ops = (
-        await db.scalars(
-            select(OrdenPago).where(
-                OrdenPago.tenant_id == usuario.tenant_id,
-                OrdenPago.proveedor_id == proveedor_id,
-                OrdenPago.estado == "emitida",
-            )
+        .join(TipoComprobanteCompra, Compra.tipo_codigo == TipoComprobanteCompra.codigo)
+        .where(
+            Compra.tenant_id == usuario.tenant_id,
+            Compra.proveedor_id == proveedor_id,
+            Compra.estado == "registrado",
+            TipoComprobanteCompra.fiscal.is_(True),
         )
-    ).all()
+    )
+    stmt_o = select(
+        OrdenPago.fecha,
+        OrdenPago.created_at,
+        OrdenPago.numero,
+        OrdenPago.total,
+        OrdenPago.aplicado,
+    ).where(
+        OrdenPago.tenant_id == usuario.tenant_id,
+        OrdenPago.proveedor_id == proveedor_id,
+        OrdenPago.estado == "emitida",
+    )
+    if desde:
+        stmt_c = stmt_c.where(Compra.fecha >= desde)
+        stmt_o = stmt_o.where(OrdenPago.fecha >= desde)
+    if hasta:
+        stmt_c = stmt_c.where(Compra.fecha <= hasta)
+        stmt_o = stmt_o.where(OrdenPago.fecha <= hasta)
+    compras = (await db.execute(stmt_c)).all()
+    ops = (await db.execute(stmt_o)).all()
 
     movimientos = []
-    for compra, tipo in compras:
+    for c in compras:
         # compras contado no mueven la cta. cte. (pagadas en el acto)
-        if compra.contado and tipo.signo_cta_cte == 1:
+        if c.contado and c.signo_cta_cte == 1:
             continue
-        debe = compra.total if tipo.signo_cta_cte == 1 else Decimal("0")
-        haber = compra.total if tipo.signo_cta_cte == -1 else Decimal("0")
+        debe = c.total if c.signo_cta_cte == 1 else Decimal("0")
+        haber = c.total if c.signo_cta_cte == -1 else Decimal("0")
         movimientos.append(
             {
-                "fecha": compra.fecha.isoformat(),
-                "orden": compra.created_at.isoformat(),
-                "tipo": tipo.descripcion,
-                "numero": f"{compra.punto_venta:04d}-{compra.numero:08d}",
+                "fecha": c.fecha.isoformat(),
+                "orden": c.created_at.isoformat(),
+                "tipo": c.descripcion,
+                "numero": f"{c.punto_venta:04d}-{c.numero:08d}",
                 "debe": str(debe),
                 "haber": str(haber),
-                "pendiente": str(compra.saldo),
+                "pendiente": str(c.saldo),
             }
         )
     for op in ops:
@@ -419,10 +452,6 @@ async def cuenta_corriente(
             }
         )
     movimientos.sort(key=lambda m: (m["fecha"], m["orden"]))
-    if desde:
-        movimientos = [m for m in movimientos if m["fecha"] >= desde.isoformat()]
-    if hasta:
-        movimientos = [m for m in movimientos if m["fecha"] <= hasta.isoformat()]
 
     acumulado = Decimal("0")
     for m in movimientos:

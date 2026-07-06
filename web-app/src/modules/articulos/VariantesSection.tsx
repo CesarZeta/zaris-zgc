@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import type { Atributo, Variante } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const fmtCant = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 });
 
@@ -14,6 +15,7 @@ export default function VariantesSection({ articuloId }: Props) {
   const [seleccion, setSeleccion] = useState<Record<string, Set<string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
+  const { pedirTexto, dialogos } = useDialogos();
 
   const cargar = useCallback(async () => {
     const [a, v] = await Promise.all([
@@ -67,7 +69,7 @@ export default function VariantesSection({ articuloId }: Props) {
   }
 
   async function crearValor(atributo: Atributo) {
-    const valor = window.prompt(`Nuevo valor para ${atributo.nombre}:`);
+    const valor = await pedirTexto(`Nuevo valor para ${atributo.nombre}:`);
     if (!valor?.trim()) return;
     try {
       await apiPost("/catalogos-articulos/atributos/valores", {
@@ -81,7 +83,7 @@ export default function VariantesSection({ articuloId }: Props) {
   }
 
   async function crearAtributo() {
-    const nombre = window.prompt("Nombre del nuevo atributo (ej: Talle, Color, Gusto):");
+    const nombre = await pedirTexto("Nombre del nuevo atributo (ej: Talle, Color, Gusto):");
     if (!nombre?.trim()) return;
     try {
       await apiPost("/catalogos-articulos/atributos", { nombre });
@@ -98,7 +100,7 @@ export default function VariantesSection({ articuloId }: Props) {
       {atributos.length === 0 ? (
         <p className="config-ayuda">
           No hay atributos definidos.{" "}
-          <button type="button" className="mini-btn" onClick={crearAtributo}>
+          <button type="button" className="mini-btn" onClick={() => void crearAtributo()}>
             + crear atributo
           </button>{" "}
           (o elegí un rubro en Configuración para sembrar los sugeridos)
@@ -128,7 +130,7 @@ export default function VariantesSection({ articuloId }: Props) {
             </div>
           ))}
           <div className="variantes-acciones">
-            <button type="button" className="mini-btn" onClick={crearAtributo}>
+            <button type="button" className="mini-btn" onClick={() => void crearAtributo()}>
               + atributo
             </button>
             <button
@@ -200,6 +202,7 @@ export default function VariantesSection({ articuloId }: Props) {
           </tbody>
         </table>
       )}
+      {dialogos}
     </div>
   );
 }

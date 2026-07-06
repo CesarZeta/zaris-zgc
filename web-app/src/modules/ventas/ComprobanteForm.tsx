@@ -13,6 +13,7 @@ import type {
   PuntoVenta,
   Variante,
 } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 
@@ -270,6 +271,19 @@ export default function ComprobanteForm({
   const [items, setItems] = useState<ItemDraft[]>([itemVacio()]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { confirmar, dialogos } = useDialogos();
+
+  // un click en el backdrop no tira una factura a medio cargar (LOTE TÉCNICO)
+  const hayDatos =
+    cliente !== null ||
+    obs.trim() !== "" ||
+    items.some((it) => it.articulo || it.descripcion.trim() || it.precio);
+
+  async function intentarCerrar() {
+    if (hayDatos && !(await confirmar("Hay datos sin guardar. ¿Descartar el comprobante?")))
+      return;
+    onCerrar(false);
+  }
 
   useEffect(() => {
     void apiGet<CondicionVentaCatalogo[]>("/ventas/condiciones-venta").then(({ data }) =>
@@ -347,7 +361,7 @@ export default function ComprobanteForm({
   }
 
   return (
-    <div className="drawer-backdrop" onClick={() => onCerrar(false)}>
+    <div className="drawer-backdrop" onClick={() => void intentarCerrar()}>
       <div className="modal modal-ancho" onClick={(ev) => ev.stopPropagation()}>
         <h2>
           {clase === "factura" ? "Nueva venta" : clase === "presupuesto" ? "Nuevo presupuesto" : "Nuevo remito"}
@@ -479,7 +493,7 @@ export default function ComprobanteForm({
         </div>
 
         <div className="drawer-acciones">
-          <button type="button" className="btn btn-ghost" onClick={() => onCerrar(false)}>
+          <button type="button" className="btn btn-ghost" onClick={() => void intentarCerrar()}>
             Cancelar
           </button>
           <button
@@ -500,6 +514,7 @@ export default function ComprobanteForm({
           </button>
         </div>
       </div>
+      {dialogos}
     </div>
   );
 }

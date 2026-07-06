@@ -5,7 +5,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
 import type { Comprobante, ImpresionPayload, PuntoVenta } from "../../lib/types";
+import { AlertError, AlertOk } from "../../components/Alertas";
+import ChipEstado from "../../components/ChipEstado";
+import Paginado from "../../components/Paginado";
+import { useDialogos } from "../../components/dialogos";
 import CobranzasTab from "./CobranzasTab";
+import ComprobanteDetalle from "./ComprobanteDetalle";
 import ComprobanteForm from "./ComprobanteForm";
 import CtaCteTab from "./CtaCteTab";
 import { imprimirComprobante } from "./impresion";
@@ -22,19 +27,15 @@ const CLASES: Record<string, string> = {
   remito: "Remitos",
 };
 
-function ChipEstado({ c }: { c: Comprobante }) {
-  if (c.estado === "borrador") return <span className="chip chip-borrador">borrador</span>;
-  if (c.estado === "anulado") return <span className="chip chip-anulado">anulado</span>;
-  if (c.arca_resultado === "S") return <span className="chip chip-prueba">CAE prueba</span>;
-  if (c.cae) return <span className="chip chip-ok">CAE ✓</span>;
-  return <span className="chip">emitido</span>;
-}
-
 export default function VentasPage() {
   const [tab, setTab] = useState<"comprobantes" | "cobranzas" | "ctacte">("comprobantes");
   const [puntosVenta, setPuntosVenta] = useState<PuntoVenta[]>([]);
   const [clase, setClase] = useState("");
   const [estado, setEstado] = useState("");
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [pagina, setPagina] = useState(0);
   const [filas, setFilas] = useState<Comprobante[]>([]);
   const [total, setTotal] = useState(0);
@@ -42,13 +43,24 @@ export default function VentasPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [formAbierto, setFormAbierto] = useState(false);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const { confirmar, pedirTexto, dialogos } = useDialogos();
 
   useEffect(() => {
     void apiGet<PuntoVenta[]>("/ventas/puntos-venta").then(({ data }) =>
       setPuntosVenta(data.filter((pv) => pv.activo)),
     );
   }, []);
+
+  // debounce del buscador: se aplica 350 ms después de dejar de tipear
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQ(qInput.trim());
+      setPagina(0);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [qInput]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -60,6 +72,9 @@ export default function VentasPage() {
       });
       if (clase) params.set("clase", clase);
       if (estado) params.set("estado", estado);
+      if (q) params.set("q", q);
+      if (desde) params.set("desde", desde);
+      if (hasta) params.set("hasta", hasta);
       const { data, headers } = await apiGet<Comprobante[]>(`/ventas/comprobantes?${params}`);
       setFilas(data);
       setTotal(Number(headers.get("X-Total-Count") ?? data.length));
@@ -68,14 +83,14 @@ export default function VentasPage() {
     } finally {
       setCargando(false);
     }
-  }, [clase, estado, pagina]);
+  }, [clase, estado, q, desde, hasta, pagina]);
 
   useEffect(() => {
     if (tab === "comprobantes") void cargar();
   }, [cargar, tab]);
 
   async function crearPuntoVentaInicial() {
-    const numero = window.prompt(
+    const numero = await pedirTexto(
       "Número del punto de venta (el habilitado en ARCA para Web Services):",
       "1",
     );
@@ -124,16 +139,23 @@ export default function VentasPage() {
     });
   }
 
-  function notaCredito(c: Comprobante) {
+  async function notaCredito(c: Comprobante) {
     if (
-      !window.confirm(
+      !(await confirmar(
         `Se crea la nota de crédito espejo (borrador) de ${c.tipo_codigo} ${c.numero_formateado}. ¿Continuar?`,
-      )
+      ))
     )
       return;
     void accion(async () => {
       await apiPost(`/ventas/comprobantes/${c.id}/nota-credito`, {});
       setMensaje("Nota de crédito creada como borrador: revisala y emitila.");
+    });
+  }
+
+  async function anular(c: Comprobante) {
+    if (!(await confirmar(`¿Anular ${c.tipo_descripcion} ${c.numero_formateado}?`))) return;
+    void accion(async () => {
+      await apiPost(`/ventas/comprobantes/${c.id}/anular`, {});
     });
   }
 
@@ -144,15 +166,8 @@ export default function VentasPage() {
     });
   }
 
-  function anular(c: Comprobante) {
-    if (!window.confirm(`¿Anular ${c.tipo_descripcion} ${c.numero_formateado}?`)) return;
-    void accion(async () => {
-      await apiPost(`/ventas/comprobantes/${c.id}/anular`, {});
-    });
-  }
-
-  function borrarBorrador(c: Comprobante) {
-    if (!window.confirm("¿Eliminar este borrador?")) return;
+  async function borrarBorrador(c: Comprobante) {
+    if (!(await confirmar("¿Eliminar este borrador?"))) return;
     void accion(async () => {
       await apiDelete(`/ventas/comprobantes/${c.id}`);
     });
@@ -170,6 +185,7 @@ export default function VentasPage() {
             </button>
           </p>
         </div>
+        {dialogos}
       </>
     );
   }
@@ -195,12 +211,41 @@ export default function VentasPage() {
         ))}
       </div>
 
-      {error && <div className="login-error">{error}</div>}
-      {mensaje && <div className="import-resultado">{mensaje}</div>}
+      <AlertError>{error}</AlertError>
+      <AlertOk onCerrar={() => setMensaje(null)}>{mensaje}</AlertOk>
 
       {tab === "comprobantes" && (
         <>
           <div className="toolbar">
+            <input
+              className="input"
+              style={{ maxWidth: 260 }}
+              placeholder="Cliente o número…"
+              value={qInput}
+              onChange={(ev) => setQInput(ev.target.value)}
+            />
+            <input
+              className="input mono"
+              type="date"
+              style={{ maxWidth: 160 }}
+              title="Desde"
+              value={desde}
+              onChange={(ev) => {
+                setDesde(ev.target.value);
+                setPagina(0);
+              }}
+            />
+            <input
+              className="input mono"
+              type="date"
+              style={{ maxWidth: 160 }}
+              title="Hasta"
+              value={hasta}
+              onChange={(ev) => {
+                setHasta(ev.target.value);
+                setPagina(0);
+              }}
+            />
             <select
               className="select toolbar-select"
               value={clase}
@@ -244,7 +289,7 @@ export default function VentasPage() {
                   <th className="num">Total</th>
                   <th className="num">Saldo</th>
                   <th>Estado</th>
-                  <th style={{ width: 200 }}></th>
+                  <th style={{ width: 230 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -260,9 +305,12 @@ export default function VentasPage() {
                       {Number(c.saldo) !== 0 ? fmt.format(Number(c.saldo)) : "—"}
                     </td>
                     <td>
-                      <ChipEstado c={c} />
+                      <ChipEstado estado={c.estado} cae={c.cae} arcaResultado={c.arca_resultado} />
                     </td>
                     <td className="acciones">
+                      <button className="mini-btn" onClick={() => setDetalleId(c.id)}>
+                        ver
+                      </button>
                       {c.estado === "borrador" && (
                         <>
                           <button className="mini-btn" disabled={ocupado} onClick={() => emitir(c)}>
@@ -271,7 +319,7 @@ export default function VentasPage() {
                           <button
                             className="mini-btn"
                             disabled={ocupado}
-                            onClick={() => borrarBorrador(c)}
+                            onClick={() => void borrarBorrador(c)}
                           >
                             borrar
                           </button>
@@ -286,7 +334,7 @@ export default function VentasPage() {
                         <button
                           className="mini-btn"
                           disabled={ocupado}
-                          onClick={() => notaCredito(c)}
+                          onClick={() => void notaCredito(c)}
                         >
                           NC
                         </button>
@@ -302,7 +350,11 @@ export default function VentasPage() {
                       )}
                       {c.estado === "emitido" &&
                         (c.clase === "presupuesto" || c.clase === "remito") && (
-                          <button className="mini-btn" disabled={ocupado} onClick={() => anular(c)}>
+                          <button
+                            className="mini-btn"
+                            disabled={ocupado}
+                            onClick={() => void anular(c)}
+                          >
                             anular
                           </button>
                         )}
@@ -312,36 +364,22 @@ export default function VentasPage() {
               </tbody>
             </table>
             {!cargando && filas.length === 0 && (
-              <div className="vacio">Sin comprobantes: creá la primera venta</div>
+              <div className="vacio">
+                {q || desde || hasta
+                  ? "Sin resultados para esa búsqueda"
+                  : "Sin comprobantes: creá la primera venta"}
+              </div>
             )}
           </div>
 
-          {total > POR_PAGINA && (
-            <div className="paginado">
-              <button
-                className="btn btn-ghost"
-                disabled={pagina === 0}
-                onClick={() => setPagina(pagina - 1)}
-              >
-                ← Anterior
-              </button>
-              <span>
-                {pagina * POR_PAGINA + 1}–{Math.min((pagina + 1) * POR_PAGINA, total)} de {total}
-              </span>
-              <button
-                className="btn btn-ghost"
-                disabled={(pagina + 1) * POR_PAGINA >= total}
-                onClick={() => setPagina(pagina + 1)}
-              >
-                Siguiente →
-              </button>
-            </div>
-          )}
+          <Paginado pagina={pagina} porPagina={POR_PAGINA} total={total} onPagina={setPagina} />
         </>
       )}
 
       {tab === "cobranzas" && <CobranzasTab puntosVenta={puntosVenta} />}
       {tab === "ctacte" && <CtaCteTab />}
+
+      {detalleId && <ComprobanteDetalle id={detalleId} onCerrar={() => setDetalleId(null)} />}
 
       {formAbierto && (
         <ComprobanteForm
@@ -358,6 +396,7 @@ export default function VentasPage() {
           }}
         />
       )}
+      {dialogos}
     </>
   );
 }

@@ -320,9 +320,10 @@ export interface Comprobante {
   comprobante_asociado_id: string | null;
   origen_id: string | null;
   observaciones: string | null;
-  items: ComprobanteItem[];
-  alicuotas: ComprobanteAlicuota[];
-  vencimientos: ComprobanteVencimiento[];
+  /** Solo en el detalle (GET por id): el listado viaja liviano, sin hijos. */
+  items?: ComprobanteItem[];
+  alicuotas?: ComprobanteAlicuota[];
+  vencimientos?: ComprobanteVencimiento[];
 }
 
 export interface ReciboMedio {
@@ -450,8 +451,9 @@ export interface Compra {
   estado: string;
   compra_asociada_id: string | null;
   observaciones: string | null;
-  items: CompraItem[];
-  vencimientos: ComprobanteVencimiento[];
+  /** Solo en el detalle (GET por id): el listado viaja liviano, sin hijos. */
+  items?: CompraItem[];
+  vencimientos?: ComprobanteVencimiento[];
 }
 
 export interface OrdenPago {

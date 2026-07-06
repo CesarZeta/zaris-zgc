@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
 import type { CajaMovimiento, ConceptoCaja } from "../../lib/types";
 import { MEDIOS_PAGO } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -16,6 +17,7 @@ export default function MovimientosTab() {
   const [conceptos, setConceptos] = useState<ConceptoCaja[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const { confirmar, dialogos } = useDialogos();
 
   // alta
   const [fecha, setFecha] = useState(hoy());
@@ -71,7 +73,7 @@ export default function MovimientosTab() {
   }
 
   async function borrar(m: CajaMovimiento) {
-    if (!window.confirm(`¿Eliminar el movimiento de ${fmt.format(Number(m.importe))}?`)) return;
+    if (!(await confirmar(`¿Eliminar el movimiento de ${fmt.format(Number(m.importe))}?`))) return;
     setOcupado(true);
     setError(null);
     try {
@@ -190,6 +192,7 @@ export default function MovimientosTab() {
         </table>
         {filas.length === 0 && <div className="vacio">Sin movimientos en el rango</div>}
       </div>
+      {dialogos}
     </>
   );
 }

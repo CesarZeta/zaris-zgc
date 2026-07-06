@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiGet, apiPut } from "../../lib/api";
 import type { Articulo, Comparativo, Proveedor } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 import { BuscadorProveedor } from "./CompraForm";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
@@ -67,6 +68,7 @@ export default function ComparativoTab() {
   const [agregando, setAgregando] = useState(false);
   const [nuevoProv, setNuevoProv] = useState<Proveedor | null>(null);
   const [nuevo, setNuevo] = useState({ codigo_proveedor: "", costo: "", b1: "", b2: "", b3: "" });
+  const { confirmar, dialogos } = useDialogos();
 
   const cargar = useCallback(async (articuloId: string) => {
     setError(null);
@@ -106,7 +108,7 @@ export default function ComparativoTab() {
   }
 
   async function quitar(apId: string) {
-    if (!articulo || !window.confirm("¿Quitar este proveedor del comparativo?")) return;
+    if (!articulo || !(await confirmar("¿Quitar este proveedor del comparativo?"))) return;
     try {
       await apiDelete(`/compras/articulo-proveedor/${apId}`);
       void cargar(articulo.id);
@@ -267,6 +269,7 @@ export default function ComparativoTab() {
           </div>
         </div>
       )}
+      {dialogos}
     </>
   );
 }

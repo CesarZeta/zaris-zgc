@@ -279,7 +279,6 @@ async def listar_stock(
 
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
     stmt = stmt.order_by(Articulo.descripcion, Deposito.codigo).limit(min(limit, 200)).offset(offset)
     filas = (await db.execute(stmt)).all()
@@ -452,7 +451,6 @@ async def kardex(
 
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
     stmt = (
         stmt.order_by(StockMovimiento.fecha.desc(), StockMovimiento.created_at.desc())

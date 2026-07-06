@@ -7,15 +7,17 @@ anulable con reversión mientras no tenga pagos imputados.
 Incluye el comparativo de precios por proveedor (ART_PROV del legacy).
 """
 
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.core.db import get_db
 from app.core.permisos import requiere
@@ -107,7 +109,10 @@ class VencimientoOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CompraOut(BaseModel):
+class CompraListaOut(BaseModel):
+    """Fila de grilla: la compra sin hijos (items/vencimientos). El detalle
+    completo se pide por id (GET /comprobantes/{compra_id})."""
+
     id: uuid.UUID
     clase: str
     tipo_codigo: str
@@ -140,6 +145,9 @@ class CompraOut(BaseModel):
     estado: str
     compra_asociada_id: uuid.UUID | None
     observaciones: str | None
+
+
+class CompraOut(CompraListaOut):
     items: list[ItemOut]
     vencimientos: list[VencimientoOut]
 
@@ -167,8 +175,8 @@ def _tipo_codigo_para(clase: str, letra: str) -> str:
     return "REMP"
 
 
-def _out(compra: Compra) -> CompraOut:
-    return CompraOut(
+def _campos_base(compra: Compra) -> dict:
+    return dict(
         id=compra.id,
         clase=compra.tipo.clase,
         tipo_codigo=compra.tipo_codigo,
@@ -201,8 +209,33 @@ def _out(compra: Compra) -> CompraOut:
         estado=compra.estado,
         compra_asociada_id=compra.compra_asociada_id,
         observaciones=compra.observaciones,
+    )
+
+
+def _out_lista(compra: Compra) -> CompraListaOut:
+    return CompraListaOut(**_campos_base(compra))
+
+
+def _out(compra: Compra) -> CompraOut:
+    return CompraOut(
+        **_campos_base(compra),
         items=[ItemOut.model_validate(i) for i in compra.items],
         vencimientos=[VencimientoOut.model_validate(v) for v in compra.vencimientos],
+    )
+
+
+def _aplicar_busqueda(stmt, q: str):
+    """q numérico (con o sin guiones) = número del papel; texto = AND
+    multi-palabra sobre el nombre del proveedor (patrón de ventas)."""
+    q = q.strip()
+    if not q:
+        return stmt
+    solo_digitos = re.sub(r"\D", "", q)
+    if solo_digitos and not re.sub(r"[\d\s\-]", "", q):
+        numero = int(solo_digitos[-8:]) if len(solo_digitos) > 8 else int(solo_digitos)
+        return stmt.where(Compra.numero == numero)
+    return stmt.where(
+        and_(*(Compra.proveedor_nombre.ilike(f"%{tok}%") for tok in q.split()))
     )
 
 
@@ -453,9 +486,10 @@ async def crear_compra(
     return _out(await _cargar(db, usuario.tenant_id, compra.id))
 
 
-@router.get("/comprobantes", response_model=list[CompraOut])
+@router.get("/comprobantes", response_model=list[CompraListaOut])
 async def listar_compras(
     response: Response,
+    q: str = "",
     clase: str | None = None,
     estado: str | None = None,
     proveedor_id: uuid.UUID | None = None,
@@ -480,14 +514,17 @@ async def listar_compras(
         stmt = stmt.where(Compra.fecha <= hasta)
     if con_saldo:
         stmt = stmt.where(Compra.saldo != 0)
+    stmt = _aplicar_busqueda(stmt, q)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
     filas = await db.scalars(
-        stmt.order_by(Compra.fecha.desc(), Compra.created_at.desc())
+        # noload: la grilla no muestra hijos (patrón de ventas)
+        stmt.options(noload(Compra.items), noload(Compra.vencimientos))
+        .order_by(Compra.fecha.desc(), Compra.created_at.desc())
         .limit(min(limit, 200))
         .offset(offset)
     )
-    return [_out(c) for c in filas]
+    return [_out_lista(c) for c in filas]
 
 
 @router.get("/comprobantes/{compra_id}", response_model=CompraOut)

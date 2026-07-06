@@ -51,6 +51,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Sin esto el browser NO puede leer X-Total-Count cross-origin (Pages →
+    # Vercel); el proxy de Vite en dev lo enmascara (regla §6 del CLAUDE.md).
+    expose_headers=["X-Total-Count"],
 )
 
 

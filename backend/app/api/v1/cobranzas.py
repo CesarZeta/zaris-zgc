@@ -6,13 +6,14 @@ crédito que también se imputa. El saldo vive en comprobantes.saldo (deuda o
 crédito según la clase) y recibos.total - recibos.aplicado (a cuenta).
 """
 
+import re
 import uuid
 from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -220,6 +221,7 @@ async def crear_recibo(
 @router.get("/recibos", response_model=list[ReciboOut])
 async def listar_recibos(
     response: Response,
+    q: str = "",
     cliente_id: uuid.UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
@@ -231,6 +233,16 @@ async def listar_recibos(
     stmt = select(Recibo).where(Recibo.tenant_id == usuario.tenant_id)
     if cliente_id:
         stmt = stmt.where(Recibo.cliente_id == cliente_id)
+    q = q.strip()
+    if q:
+        solo_digitos = re.sub(r"\D", "", q)
+        if solo_digitos and not re.sub(r"[\d\s\-]", "", q):
+            numero = int(solo_digitos[-8:]) if len(solo_digitos) > 8 else int(solo_digitos)
+            stmt = stmt.where(Recibo.numero == numero)
+        else:
+            stmt = stmt.where(
+                and_(*(Recibo.receptor_nombre.ilike(f"%{tok}%") for tok in q.split()))
+            )
     if desde:
         stmt = stmt.where(Recibo.fecha >= desde)
     if hasta:
@@ -374,45 +386,72 @@ async def cuenta_corriente(
     """Movimientos históricos (debe/haber) + saldo actual del cliente."""
     await _cliente(db, usuario.tenant_id, cliente_id)
 
-    comps = (
-        await db.execute(
-            select(Comprobante, TipoComprobante)
-            .join(TipoComprobante, Comprobante.tipo_codigo == TipoComprobante.codigo)
-            .where(
-                Comprobante.tenant_id == usuario.tenant_id,
-                Comprobante.cliente_id == cliente_id,
-                Comprobante.estado == "emitido",
-                TipoComprobante.fiscal.is_(True),
-            )
+    # Proyección de columnas + filtro de fechas en SQL: antes cargaba los ORM
+    # completos de TODA la historia (con items/alícuotas/vencimientos por
+    # selectin) y filtraba en Python. El acumulado sigue arrancando en 0 en
+    # la ventana filtrada (semántica original).
+    stmt_c = (
+        select(
+            Comprobante.fecha,
+            Comprobante.created_at,
+            TipoComprobante.descripcion,
+            PuntoVenta.numero.label("pv_numero"),
+            Comprobante.numero,
+            Comprobante.total,
+            Comprobante.saldo,
+            Comprobante.contado,
+            TipoComprobante.signo_cta_cte,
         )
-    ).all()
-    recibos = (
-        await db.scalars(
-            select(Recibo).where(
-                Recibo.tenant_id == usuario.tenant_id,
-                Recibo.cliente_id == cliente_id,
-                Recibo.estado == "emitido",
-            )
+        .join(TipoComprobante, Comprobante.tipo_codigo == TipoComprobante.codigo)
+        .join(PuntoVenta, Comprobante.punto_venta_id == PuntoVenta.id)
+        .where(
+            Comprobante.tenant_id == usuario.tenant_id,
+            Comprobante.cliente_id == cliente_id,
+            Comprobante.estado == "emitido",
+            TipoComprobante.fiscal.is_(True),
         )
-    ).all()
+    )
+    stmt_r = (
+        select(
+            Recibo.fecha,
+            Recibo.created_at,
+            PuntoVenta.numero.label("pv_numero"),
+            Recibo.numero,
+            Recibo.total,
+            Recibo.aplicado,
+        )
+        .join(PuntoVenta, Recibo.punto_venta_id == PuntoVenta.id)
+        .where(
+            Recibo.tenant_id == usuario.tenant_id,
+            Recibo.cliente_id == cliente_id,
+            Recibo.estado == "emitido",
+        )
+    )
+    if desde:
+        stmt_c = stmt_c.where(Comprobante.fecha >= desde)
+        stmt_r = stmt_r.where(Recibo.fecha >= desde)
+    if hasta:
+        stmt_c = stmt_c.where(Comprobante.fecha <= hasta)
+        stmt_r = stmt_r.where(Recibo.fecha <= hasta)
+    comps = (await db.execute(stmt_c)).all()
+    recibos = (await db.execute(stmt_r)).all()
 
     movimientos = []
-    saldo_total = Decimal("0")
-    for comp, tipo in comps:
+    for c in comps:
         # comprobantes contado no mueven la cta. cte. (pagados en el acto)
-        if comp.contado and tipo.signo_cta_cte == 1:
+        if c.contado and c.signo_cta_cte == 1:
             continue
-        debe = comp.total if tipo.signo_cta_cte == 1 else Decimal("0")
-        haber = comp.total if tipo.signo_cta_cte == -1 else Decimal("0")
+        debe = c.total if c.signo_cta_cte == 1 else Decimal("0")
+        haber = c.total if c.signo_cta_cte == -1 else Decimal("0")
         movimientos.append(
             {
-                "fecha": comp.fecha.isoformat(),
-                "orden": comp.created_at.isoformat(),
-                "tipo": tipo.descripcion,
-                "numero": f"{comp.punto_venta.numero:04d}-{comp.numero:08d}",
+                "fecha": c.fecha.isoformat(),
+                "orden": c.created_at.isoformat(),
+                "tipo": c.descripcion,
+                "numero": f"{c.pv_numero:04d}-{c.numero:08d}",
                 "debe": str(debe),
                 "haber": str(haber),
-                "pendiente": str(comp.saldo),
+                "pendiente": str(c.saldo),
             }
         )
     for r in recibos:
@@ -421,17 +460,13 @@ async def cuenta_corriente(
                 "fecha": r.fecha.isoformat(),
                 "orden": r.created_at.isoformat(),
                 "tipo": "Recibo",
-                "numero": f"{r.punto_venta.numero:04d}-{r.numero:08d}",
+                "numero": f"{r.pv_numero:04d}-{r.numero:08d}",
                 "debe": "0",
                 "haber": str(r.total),
                 "pendiente": str(r.total - r.aplicado),
             }
         )
     movimientos.sort(key=lambda m: (m["fecha"], m["orden"]))
-    if desde:
-        movimientos = [m for m in movimientos if m["fecha"] >= desde.isoformat()]
-    if hasta:
-        movimientos = [m for m in movimientos if m["fecha"] <= hasta.isoformat()]
 
     acumulado = Decimal("0")
     for m in movimientos:

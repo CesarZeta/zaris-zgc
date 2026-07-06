@@ -114,8 +114,11 @@ class Comprobante(Base):
     cae_vencimiento: Mapped[date | None] = mapped_column(Date)
     arca_resultado: Mapped[str | None] = mapped_column(String(1))
     arca_observaciones: Mapped[str | None] = mapped_column(Text)
-    arca_request: Mapped[str | None] = mapped_column(Text)
-    arca_response: Mapped[str | None] = mapped_column(Text)
+    # deferred: el XML completo de WSFEv1 no viaja en los SELECT de listados,
+    # cta. cte., libros ni POS (regla §6 del CLAUDE.md). Solo se escribe al
+    # emitir; nadie lo lee después (auditoría → recuperarlo exige undefer).
+    arca_request: Mapped[str | None] = mapped_column(Text, deferred=True)
+    arca_response: Mapped[str | None] = mapped_column(Text, deferred=True)
     comprobante_asociado_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("comprobantes.id")
     )

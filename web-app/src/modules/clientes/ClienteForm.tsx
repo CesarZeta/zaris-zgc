@@ -1,6 +1,21 @@
-import { useState } from "react";
-import { ApiError, apiPost, apiPut } from "../../lib/api";
-import { CONDICIONES_IVA, PROVINCIAS, type Cliente } from "../../lib/types";
+// Alta/edición de cliente: entidad BUE (campos compartidos con proveedores)
+// + rol comercial (lista, condición de venta habitual, zona, crédito).
+
+import { useEffect, useState } from "react";
+import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
+import type { Cliente, CondicionVentaCatalogo } from "../../lib/types";
+import EntidadFields, {
+  entidadDraft,
+  entidadPayload,
+  validarEntidad,
+} from "../../components/EntidadFields";
+import { AlertError } from "../../components/Alertas";
+import { useDialogos } from "../../components/dialogos";
+
+interface Zona {
+  id: string;
+  nombre: string;
+}
 
 interface Props {
   cliente: Cliente | null; // null = alta
@@ -8,67 +23,80 @@ interface Props {
 }
 
 export default function ClienteForm({ cliente, onCerrar }: Props) {
-  const e = cliente?.entidad;
-  const [form, setForm] = useState({
-    // entidad
-    tipo_persona: e?.tipo_persona ?? "F",
-    razon_social: e?.razon_social ?? "",
-    nombre_fantasia: e?.nombre_fantasia ?? "",
-    tipo_documento: e?.tipo_documento ?? "DNI",
-    nro_documento: e?.nro_documento ?? "",
-    condicion_iva: e?.condicion_iva ?? "CF",
-    email: e?.email ?? "",
-    telefono_1: e?.telefono_1 ?? "",
-    domicilio: e?.domicilio ?? "",
-    localidad: e?.localidad ?? "",
-    provincia_id: e?.provincia_id != null ? String(e.provincia_id) : "",
-    codigo_postal: e?.codigo_postal ?? "",
-    // rol cliente
+  const [entidad, setEntidad] = useState(
+    entidadDraft(cliente?.entidad, { tipo_persona: "F", tipo_documento: "DNI", condicion_iva: "CF" }),
+  );
+  const [rol, setRol] = useState({
     codigo: cliente?.codigo ?? "",
     lista_precios: cliente?.lista_precios ?? 1,
+    condicion_venta_id: cliente?.condicion_venta_id ?? "",
+    zona_id: cliente?.zona_id ?? "",
     descuento: cliente?.descuento ?? "0",
     limite_credito: cliente?.limite_credito ?? "",
     bloqueado: cliente?.bloqueado ?? false,
   });
+  const [condiciones, setCondiciones] = useState<CondicionVentaCatalogo[]>([]);
+  const [zonas, setZonas] = useState<Zona[]>([]);
+  const [modificado, setModificado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { confirmar, pedirTexto, dialogos } = useDialogos();
 
-  function set<K extends keyof typeof form>(campo: K, valor: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [campo]: valor }));
+  useEffect(() => {
+    void apiGet<CondicionVentaCatalogo[]>("/ventas/condiciones-venta").then(({ data }) =>
+      setCondiciones(data.filter((c) => c.activa)),
+    );
+    void apiGet<Zona[]>("/clientes/zonas").then(({ data }) => setZonas(data));
+  }, []);
+
+  function set<K extends keyof typeof rol>(campo: K, valor: (typeof rol)[K]) {
+    setRol((f) => ({ ...f, [campo]: valor }));
+    setModificado(true);
+  }
+
+  async function nuevaZona() {
+    const nombre = await pedirTexto("Nombre de la nueva zona:");
+    if (!nombre?.trim()) return;
+    try {
+      const zona = await apiPost<Zona>("/clientes/zonas", { nombre: nombre.trim() });
+      setZonas((zs) => (zs.some((z) => z.id === zona.id) ? zs : [...zs, zona]));
+      set("zona_id", zona.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la zona");
+    }
+  }
+
+  async function intentarCerrar() {
+    if (modificado && !(await confirmar("Hay cambios sin guardar. ¿Descartar?"))) return;
+    onCerrar(false);
   }
 
   async function guardar(ev: React.FormEvent) {
     ev.preventDefault();
     setError(null);
+    const errorDoc = validarEntidad(entidad);
+    if (errorDoc) {
+      setError(errorDoc);
+      return;
+    }
     setGuardando(true);
 
-    const entidad = {
-      tipo_persona: form.tipo_persona,
-      razon_social: form.razon_social.trim(),
-      nombre_fantasia: form.nombre_fantasia.trim() || null,
-      tipo_documento: form.tipo_documento,
-      nro_documento: form.nro_documento.trim() || null,
-      condicion_iva: form.condicion_iva,
-      email: form.email.trim() || null,
-      telefono_1: form.telefono_1.trim() || null,
-      domicilio: form.domicilio.trim() || null,
-      localidad: form.localidad.trim() || null,
-      provincia_id: form.provincia_id === "" ? null : Number(form.provincia_id),
-      codigo_postal: form.codigo_postal.trim() || null,
-    };
-    const rol = {
-      codigo: form.codigo.trim() || null,
-      lista_precios: Number(form.lista_precios),
-      descuento: form.descuento === "" ? 0 : Number(form.descuento),
-      limite_credito: form.limite_credito === "" ? null : Number(form.limite_credito),
-      bloqueado: form.bloqueado,
+    const body = {
+      codigo: rol.codigo.trim() || null,
+      lista_precios: Number(rol.lista_precios),
+      condicion_venta_id: rol.condicion_venta_id || null,
+      zona_id: rol.zona_id || null,
+      descuento: rol.descuento === "" ? 0 : Number(rol.descuento),
+      limite_credito: rol.limite_credito === "" ? null : Number(rol.limite_credito),
+      bloqueado: rol.bloqueado,
+      entidad: entidadPayload(entidad),
     };
 
     try {
       if (cliente) {
-        await apiPut(`/clientes/${cliente.id}`, { ...rol, entidad });
+        await apiPut(`/clientes/${cliente.id}`, body);
       } else {
-        await apiPost("/clientes", { ...rol, entidad });
+        await apiPost("/clientes", body);
       }
       onCerrar(true);
     } catch (err) {
@@ -78,138 +106,21 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
   }
 
   return (
-    <div className="drawer-backdrop" onClick={() => onCerrar(false)}>
+    <div className="drawer-backdrop" onClick={() => void intentarCerrar()}>
       <form className="drawer" onClick={(ev) => ev.stopPropagation()} onSubmit={guardar}>
         <h2>{cliente ? `Editar cliente ${cliente.codigo ?? ""}` : "Nuevo cliente"}</h2>
 
-        {error && <div className="login-error">{error}</div>}
+        <AlertError>{error}</AlertError>
 
         <div className="seccion">Datos de la entidad</div>
-        <div className="field">
-          <label>Razón social / Nombre completo *</label>
-          <input
-            className="input"
-            required
-            value={form.razon_social}
-            onChange={(ev) => set("razon_social", ev.target.value)}
-            autoFocus
-          />
-        </div>
-        <div className="fila">
-          <div className="field">
-            <label>Nombre de fantasía</label>
-            <input
-              className="input"
-              value={form.nombre_fantasia}
-              onChange={(ev) => set("nombre_fantasia", ev.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label>Tipo de persona</label>
-            <select
-              className="select"
-              value={form.tipo_persona}
-              onChange={(ev) => set("tipo_persona", ev.target.value)}
-            >
-              <option value="F">Física</option>
-              <option value="J">Jurídica</option>
-            </select>
-          </div>
-        </div>
-        <div className="fila-3">
-          <div className="field">
-            <label>Tipo doc.</label>
-            <select
-              className="select"
-              value={form.tipo_documento}
-              onChange={(ev) => set("tipo_documento", ev.target.value)}
-            >
-              <option value="CUIT">CUIT</option>
-              <option value="CUIL">CUIL</option>
-              <option value="DNI">DNI</option>
-              <option value="SD">Sin doc.</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Número</label>
-            <input
-              className="input mono"
-              value={form.nro_documento}
-              onChange={(ev) => set("nro_documento", ev.target.value)}
-              disabled={form.tipo_documento === "SD"}
-              placeholder={form.tipo_documento === "CUIT" ? "30-12345678-0" : ""}
-            />
-          </div>
-          <div className="field">
-            <label>Condición IVA</label>
-            <select
-              className="select"
-              value={form.condicion_iva}
-              onChange={(ev) => set("condicion_iva", ev.target.value)}
-            >
-              {Object.entries(CONDICIONES_IVA).map(([codigo, nombre]) => (
-                <option key={codigo} value={codigo}>
-                  {nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="fila">
-          <div className="field">
-            <label>Email</label>
-            <input className="input" value={form.email} onChange={(ev) => set("email", ev.target.value)} />
-          </div>
-          <div className="field">
-            <label>Teléfono</label>
-            <input
-              className="input"
-              value={form.telefono_1}
-              onChange={(ev) => set("telefono_1", ev.target.value)}
-            />
-          </div>
-        </div>
-        <div className="field">
-          <label>Domicilio</label>
-          <input
-            className="input"
-            value={form.domicilio}
-            onChange={(ev) => set("domicilio", ev.target.value)}
-          />
-        </div>
-        <div className="fila-3">
-          <div className="field">
-            <label>Localidad</label>
-            <input
-              className="input"
-              value={form.localidad}
-              onChange={(ev) => set("localidad", ev.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label>Provincia</label>
-            <select
-              className="select"
-              value={form.provincia_id}
-              onChange={(ev) => set("provincia_id", ev.target.value)}
-            >
-              <option value="">—</option>
-              {PROVINCIAS.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Cód. postal</label>
-            <input
-              className="input"
-              value={form.codigo_postal}
-              onChange={(ev) => set("codigo_postal", ev.target.value)}
-            />
-          </div>
-        </div>
+        <EntidadFields
+          valor={entidad}
+          onCambiar={(d) => {
+            setEntidad(d);
+            setModificado(true);
+          }}
+          labelRazonSocial="Razón social / Nombre completo *"
+        />
 
         <div className="seccion">Datos comerciales</div>
         <div className="fila-3">
@@ -217,7 +128,7 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
             <label>Código interno</label>
             <input
               className="input mono"
-              value={form.codigo}
+              value={rol.codigo}
               onChange={(ev) => set("codigo", ev.target.value)}
               maxLength={10}
             />
@@ -226,7 +137,7 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
             <label>Lista de precios</label>
             <select
               className="select"
-              value={String(form.lista_precios)}
+              value={String(rol.lista_precios)}
               onChange={(ev) => set("lista_precios", Number(ev.target.value))}
             >
               {[1, 2, 3, 4].map((n) => (
@@ -244,9 +155,46 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
               step="0.01"
               min="0"
               max="99.99"
-              value={form.descuento}
+              value={rol.descuento}
               onChange={(ev) => set("descuento", ev.target.value)}
             />
+          </div>
+        </div>
+        <div className="fila">
+          <div className="field">
+            <label>Condición de venta habitual</label>
+            <select
+              className="select"
+              value={rol.condicion_venta_id}
+              onChange={(ev) => set("condicion_venta_id", ev.target.value)}
+            >
+              <option value="">— (contado)</option>
+              {condiciones.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.descripcion}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>
+              Zona{" "}
+              <button type="button" className="mini-btn" onClick={() => void nuevaZona()}>
+                + nueva
+              </button>
+            </label>
+            <select
+              className="select"
+              value={rol.zona_id}
+              onChange={(ev) => set("zona_id", ev.target.value)}
+            >
+              <option value="">—</option>
+              {zonas.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.nombre}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="fila">
@@ -257,7 +205,7 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
               type="number"
               step="0.01"
               min="0"
-              value={form.limite_credito}
+              value={rol.limite_credito}
               onChange={(ev) => set("limite_credito", ev.target.value)}
               placeholder="Sin límite"
             />
@@ -267,7 +215,7 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
             <label className="check">
               <input
                 type="checkbox"
-                checked={form.bloqueado}
+                checked={rol.bloqueado}
                 onChange={(ev) => set("bloqueado", ev.target.checked)}
               />
               Cliente bloqueado
@@ -276,13 +224,14 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
         </div>
 
         <div className="drawer-acciones">
-          <button type="button" className="btn btn-ghost" onClick={() => onCerrar(false)}>
+          <button type="button" className="btn btn-ghost" onClick={() => void intentarCerrar()}>
             Cancelar
           </button>
           <button type="submit" className="btn btn-primary" disabled={guardando}>
             {guardando ? "Guardando…" : cliente ? "Guardar cambios" : "Crear cliente"}
           </button>
         </div>
+        {dialogos}
       </form>
     </div>
   );

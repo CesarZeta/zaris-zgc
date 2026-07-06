@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
 import type { Articulo, Cotizacion, Empresa, Familia, Marca, Rubro, Unidad } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 import ArticuloForm from "./ArticuloForm";
 import CambioPreciosModal from "./CambioPreciosModal";
 
@@ -32,6 +33,7 @@ export default function ArticulosPage() {
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { pedirTexto, dialogos } = useDialogos();
 
   const [familias, setFamilias] = useState<Familia[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -111,7 +113,7 @@ export default function ArticulosPage() {
   }
 
   async function actualizarCotizacion() {
-    const valor = window.prompt(
+    const valor = await pedirTexto(
       "Cotización del dólar (ARS por USD):",
       cotizacion ? String(Number(cotizacion.valor)) : "",
     );
@@ -319,6 +321,7 @@ export default function ArticulosPage() {
           }}
         />
       )}
+      {dialogos}
     </>
   );
 }

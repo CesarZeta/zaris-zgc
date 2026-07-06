@@ -12,6 +12,7 @@ import type {
   Proveedor,
   Variante,
 } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 const TASAS = ["0", "2.5", "5", "10.5", "21", "27"];
@@ -313,6 +314,20 @@ export default function CompraForm({
   const [items, setItems] = useState<ItemDraft[]>([itemVacio()]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { confirmar, dialogos } = useDialogos();
+
+  // un click en el backdrop no tira una compra a medio cargar (LOTE TÉCNICO)
+  const hayDatos =
+    proveedor !== null ||
+    numero.trim() !== "" ||
+    obs.trim() !== "" ||
+    items.some((it) => it.articulo || it.descripcion.trim() || it.costo);
+
+  async function intentarCerrar() {
+    if (hayDatos && !(await confirmar("Hay datos sin guardar. ¿Descartar el comprobante?")))
+      return;
+    onCerrar(false);
+  }
 
   const esRemito = clase === "remito";
   const esNCND = clase === "nota_credito" || clase === "nota_debito";
@@ -434,7 +449,7 @@ export default function CompraForm({
   };
 
   return (
-    <div className="drawer-backdrop" onClick={() => onCerrar(false)}>
+    <div className="drawer-backdrop" onClick={() => void intentarCerrar()}>
       <div className="modal modal-ancho" onClick={(ev) => ev.stopPropagation()}>
         <h2>{titulos[clase]}</h2>
         {error && <div className="login-error">{error}</div>}
@@ -624,7 +639,7 @@ export default function CompraForm({
         </div>
 
         <div className="drawer-acciones">
-          <button type="button" className="btn btn-ghost" onClick={() => onCerrar(false)}>
+          <button type="button" className="btn btn-ghost" onClick={() => void intentarCerrar()}>
             Cancelar
           </button>
           <button
@@ -645,6 +660,7 @@ export default function CompraForm({
           </button>
         </div>
       </div>
+      {dialogos}
     </div>
   );
 }

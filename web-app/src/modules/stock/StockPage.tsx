@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import type { Articulo, Deposito, Movimiento, StockFila, Variante } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const POR_PAGINA = 50;
 const fmtCant = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 });
@@ -479,6 +480,7 @@ export default function StockPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const { pedirTexto, dialogos } = useDialogos();
 
   const [ajusteAbierto, setAjusteAbierto] = useState(false);
   const [ajusteInicial, setAjusteInicial] = useState<StockFila | null>(null);
@@ -525,9 +527,12 @@ export default function StockPage() {
   }, [cargar]);
 
   async function crearDeposito() {
-    const nombre = window.prompt("Nombre del nuevo depósito:");
+    const nombre = await pedirTexto("Nombre del nuevo depósito:");
     if (!nombre?.trim()) return;
-    const codigo = window.prompt("Código corto (ej: 01, DEP2):", String(depositos.length + 1).padStart(2, "0"));
+    const codigo = await pedirTexto(
+      "Código corto (ej: 01, DEP2):",
+      String(depositos.length + 1).padStart(2, "0"),
+    );
     if (!codigo?.trim()) return;
     try {
       const d = await apiPost<Deposito>("/catalogos-articulos/depositos", { codigo, nombre });
@@ -545,7 +550,7 @@ export default function StockPage() {
       <h1 className="page-title">Stock</h1>
       <p className="page-sub">
         {cargando ? "Cargando…" : `${total} posiciones con datos`}
-        <button className="cotizacion" onClick={crearDeposito}>
+        <button className="cotizacion" onClick={() => void crearDeposito()}>
           + depósito
         </button>
       </p>
@@ -703,6 +708,7 @@ export default function StockPage() {
       {kardexFila && (
         <KardexModal fila={kardexFila} depositos={depositos} onCerrar={() => setKardexFila(null)} />
       )}
+      {dialogos}
     </>
   );
 }

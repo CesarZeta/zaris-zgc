@@ -164,7 +164,6 @@ async def listar_proveedores(
 
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
     stmt = stmt.order_by(Entidad.razon_social).limit(min(limit, 200)).offset(offset)
     proveedores = (await db.scalars(stmt)).unique().all()

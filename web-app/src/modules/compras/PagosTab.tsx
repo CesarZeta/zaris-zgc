@@ -5,8 +5,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import type { Compra, OrdenPago, Proveedor, VencimientoPagar } from "../../lib/types";
+import { AlertError } from "../../components/Alertas";
+import ChipEstado from "../../components/ChipEstado";
+import Paginado from "../../components/Paginado";
+import { useDialogos } from "../../components/dialogos";
 import { BuscadorProveedor } from "./CompraForm";
 
+const POR_PAGINA = 50;
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 
 const MEDIOS = [
@@ -28,6 +33,7 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
   const [obs, setObs] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { confirmar, dialogos } = useDialogos();
 
   useEffect(() => {
     if (!proveedor) {
@@ -44,6 +50,13 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
 
   const totalMedios = medios.reduce((a, m) => a + Number(m.importe || 0), 0);
   const totalImputado = Object.values(imputar).reduce((a, v) => a + Number(v || 0), 0);
+
+  const hayDatos = proveedor !== null || medios.some((m) => m.importe) || obs.trim() !== "";
+
+  async function intentarCerrar() {
+    if (hayDatos && !(await confirmar("Hay datos sin guardar. ¿Descartar el pago?"))) return;
+    onCerrar(false);
+  }
 
   async function guardar() {
     if (!proveedor) return;
@@ -72,10 +85,10 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
   }
 
   return (
-    <div className="drawer-backdrop" onClick={() => onCerrar(false)}>
+    <div className="drawer-backdrop" onClick={() => void intentarCerrar()}>
       <div className="modal modal-ancho" onClick={(ev) => ev.stopPropagation()}>
         <h2>Nueva orden de pago</h2>
-        {error && <div className="login-error">{error}</div>}
+        <AlertError>{error}</AlertError>
 
         <div className="field">
           <label>Proveedor *</label>
@@ -197,7 +210,7 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
         </div>
 
         <div className="drawer-acciones">
-          <button type="button" className="btn btn-ghost" onClick={() => onCerrar(false)}>
+          <button type="button" className="btn btn-ghost" onClick={() => void intentarCerrar()}>
             Cancelar
           </button>
           <button
@@ -210,45 +223,82 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
           </button>
         </div>
       </div>
+      {dialogos}
     </div>
   );
 }
 
 export default function PagosTab() {
   const [ordenes, setOrdenes] = useState<OrdenPago[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(0);
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [vencimientos, setVencimientos] = useState<VencimientoPagar[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const { confirmar, dialogos } = useDialogos();
 
-  const cargar = useCallback(async () => {
+  // debounce del buscador
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQ(qInput.trim());
+      setPagina(0);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  const cargarOrdenes = useCallback(async () => {
     setCargando(true);
     try {
-      const [ops, vtos] = await Promise.all([
-        apiGet<OrdenPago[]>("/compras/pagos/ordenes-pago?limit=100"),
-        apiGet<VencimientoPagar[]>("/compras/pagos/vencimientos?dias=30"),
-      ]);
-      setOrdenes(ops.data);
-      setVencimientos(vtos.data);
+      const params = new URLSearchParams({
+        limit: String(POR_PAGINA),
+        offset: String(pagina * POR_PAGINA),
+      });
+      if (q) params.set("q", q);
+      if (desde) params.set("desde", desde);
+      if (hasta) params.set("hasta", hasta);
+      const { data, headers } = await apiGet<OrdenPago[]>(`/compras/pagos/ordenes-pago?${params}`);
+      setOrdenes(data);
+      setTotal(Number(headers.get("X-Total-Count") ?? data.length));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar pagos");
     } finally {
       setCargando(false);
     }
+  }, [q, desde, hasta, pagina]);
+
+  const cargarVencimientos = useCallback(async () => {
+    try {
+      const { data } = await apiGet<VencimientoPagar[]>("/compras/pagos/vencimientos?dias=30");
+      setVencimientos(data);
+    } catch {
+      /* la grilla principal ya reporta errores */
+    }
   }, []);
 
   useEffect(() => {
-    void cargar();
-  }, [cargar]);
+    void cargarOrdenes();
+  }, [cargarOrdenes]);
+
+  useEffect(() => {
+    void cargarVencimientos();
+  }, [cargarVencimientos]);
 
   async function anular(op: OrdenPago) {
     if (
-      !window.confirm(`¿Anular la orden de pago ${op.numero_formateado}? Se revierten sus imputaciones.`)
+      !(await confirmar(
+        `¿Anular la orden de pago ${op.numero_formateado}? Se revierten sus imputaciones.`,
+      ))
     )
       return;
     try {
       await apiPost(`/compras/pagos/ordenes-pago/${op.id}/anular`, {});
-      void cargar();
+      void cargarOrdenes();
+      void cargarVencimientos();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo anular");
     }
@@ -257,15 +307,44 @@ export default function PagosTab() {
   return (
     <>
       <div className="toolbar">
-        <span className="page-sub" style={{ margin: 0 }}>
-          {cargando ? "Cargando…" : `${ordenes.length} órdenes de pago`}
+        <input
+          className="input"
+          style={{ maxWidth: 260 }}
+          placeholder="Proveedor o número…"
+          value={qInput}
+          onChange={(ev) => setQInput(ev.target.value)}
+        />
+        <input
+          className="input mono"
+          type="date"
+          style={{ maxWidth: 160 }}
+          title="Desde"
+          value={desde}
+          onChange={(ev) => {
+            setDesde(ev.target.value);
+            setPagina(0);
+          }}
+        />
+        <input
+          className="input mono"
+          type="date"
+          style={{ maxWidth: 160 }}
+          title="Hasta"
+          value={hasta}
+          onChange={(ev) => {
+            setHasta(ev.target.value);
+            setPagina(0);
+          }}
+        />
+        <span className="page-sub" style={{ margin: 0, alignSelf: "center" }}>
+          {cargando ? "Cargando…" : `${total} órdenes de pago`}
         </span>
         <div style={{ flex: 1 }} />
         <button className="btn btn-primary" onClick={() => setModalAbierto(true)}>
           + Nueva orden de pago
         </button>
       </div>
-      {error && <div className="login-error">{error}</div>}
+      <AlertError>{error}</AlertError>
 
       <div className="tabla-card">
         <table className="tabla">
@@ -293,7 +372,7 @@ export default function PagosTab() {
                 <td>{op.medios.map((m) => m.medio).join(", ")}</td>
                 <td>
                   {op.estado === "anulada" ? (
-                    <span className="chip chip-anulado">anulada</span>
+                    <ChipEstado estado={op.estado} />
                   ) : (
                     <button className="mini-btn" onClick={() => void anular(op)}>
                       anular
@@ -304,8 +383,13 @@ export default function PagosTab() {
             ))}
           </tbody>
         </table>
-        {!cargando && ordenes.length === 0 && <div className="vacio">Sin pagos registrados</div>}
+        {!cargando && ordenes.length === 0 && (
+          <div className="vacio">
+            {q || desde || hasta ? "Sin resultados para esa búsqueda" : "Sin pagos registrados"}
+          </div>
+        )}
       </div>
+      <Paginado pagina={pagina} porPagina={POR_PAGINA} total={total} onPagina={setPagina} />
 
       <div className="seccion" style={{ marginTop: 16 }}>
         Cuentas a pagar — vencimientos próximos (30 días)
@@ -348,10 +432,14 @@ export default function PagosTab() {
         <OrdenPagoModal
           onCerrar={(refrescar) => {
             setModalAbierto(false);
-            if (refrescar) void cargar();
+            if (refrescar) {
+              void cargarOrdenes();
+              void cargarVencimientos();
+            }
           }}
         />
       )}
+      {dialogos}
     </>
   );
 }

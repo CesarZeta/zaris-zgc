@@ -11,7 +11,7 @@ from app.api.v1.entidades import EntidadOut, aplicar_busqueda
 from app.core.cuit import validar_documento
 from app.core.db import get_db
 from app.core.permisos import requiere
-from app.models import Cliente, Entidad, Usuario
+from app.models import Cliente, Entidad, Usuario, Zona
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
@@ -93,6 +93,49 @@ async def _obtener_cliente(db: AsyncSession, tenant_id: uuid.UUID, cliente_id: u
     return cliente
 
 
+# ===== Zonas (catálogo del rol cliente; declaradas ANTES de /{cliente_id}) =====
+
+class ZonaOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    model_config = {"from_attributes": True}
+
+
+class ZonaIn(BaseModel):
+    nombre: str = Field(min_length=1, max_length=40)
+
+
+@router.get("/zonas", response_model=list[ZonaOut])
+async def listar_zonas(
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    filas = await db.scalars(
+        select(Zona).where(Zona.tenant_id == usuario.tenant_id).order_by(Zona.nombre)
+    )
+    return list(filas)
+
+
+@router.post("/zonas", response_model=ZonaOut, status_code=status.HTTP_201_CREATED)
+async def crear_zona(
+    body: ZonaIn,
+    usuario: Usuario = Depends(requiere("clientes", "editar")),
+    db: AsyncSession = Depends(get_db),
+):
+    nombre = body.nombre.strip()
+    existente = await db.scalar(
+        select(Zona).where(
+            Zona.tenant_id == usuario.tenant_id, func.lower(Zona.nombre) == nombre.lower()
+        )
+    )
+    if existente is not None:
+        return existente
+    zona = Zona(tenant_id=usuario.tenant_id, nombre=nombre)
+    db.add(zona)
+    await db.commit()
+    return zona
+
+
 @router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
 async def crear_cliente(
     body: ClienteIn,
@@ -165,7 +208,6 @@ async def listar_clientes(
 
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
     stmt = stmt.order_by(Entidad.razon_social).limit(min(limit, 200)).offset(offset)
     clientes = (await db.scalars(stmt)).unique().all()

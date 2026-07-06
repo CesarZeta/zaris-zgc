@@ -273,50 +273,50 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   Consulta desde la UI → sidebar recortado, inicio "9 de 10", /configuracion bloqueada,
   POST 403 sin deslogueo).
 
-## LOTE TÉCNICO — Optimización de endpoints y consistencia de UI (auditoría 2026-07-05)
+## LOTE TÉCNICO — Optimización de endpoints y consistencia de UI ✅ (implementado 2026-07-06)
 
-**Entregable: la misma app, más rápida y más consistente — sin features nuevas.**
+**Entregable: la misma app, más rápida y más consistente — sin features nuevas.** ✔ verificado con 32 pruebas de API en vivo (0 fallos) + build + E2E en navegador.
 
 > Sesión de diseño 2026-07-05: auditoría completa del backend (18 routers + 9
-> migraciones) y del frontend (36 componentes). Veredicto: la base es sana
-> (paginación server-side en todos los listados, sin N+1 groseros, sistema visual
-> coherente) — esto es afinado, no rescate. No bloquea a la 6.5 ni depende de ella;
-> puede hacerse antes, junto o inmediatamente después. Detalle completo de hallazgos
-> con archivo:línea en la transcripción de esa sesión.
+> migraciones) y del frontend (36 componentes). Veredicto: la base es sana —
+> esto fue afinado, no rescate.
 
-- [ ] **Migración de índices de performance** (todos `CREATE INDEX IF NOT EXISTS`,
-  segura de aplicar sola): `comprobante_items(comprobante_id)` y
-  `compra_items(compra_id)` — los selectin de items no pueden usar los índices
-  actuales `(tenant_id, *)` y escanean la tabla en cada listado —; GIN pg_trgm sobre
-  `entidades(razon_social)` y `articulos(descripcion)` (búsquedas `ILIKE '%…%'` de
-  maestros, typeahead y POS; requiere `CREATE EXTENSION pg_trgm`, disponible en
-  Supabase); `recibos(tenant_id, fecha)` y `ordenes_pago(tenant_id, fecha)` +
-  `recibo_medios(recibo_id)` / `orden_pago_medios(orden_pago_id)` (planilla de caja);
-  parcial `comprobantes(comprobante_asociado_id) WHERE NOT NULL` (anuladas del POS).
-  Numeración: la 010 la tomó RBAC (implementada 2026-07-05) — esta migración de
-  índices es la **011**.
-- [ ] **Backend transversal** (bajo esfuerzo / alto impacto): `deferred()` en
-  `Comprobante.arca_request/arca_response` (hoy el XML completo de WSFEv1 viaja en
-  CADA select de comprobantes: listados, cta. cte., libros, POS);
-  `expose_headers=["X-Total-Count"]` en el CORSMiddleware (hoy la paginación es
-  invisible para el browser en ventas/compras/cobranzas/pagos); COUNT de artículos
-  sin la subquery de stock_total (hoy suma el stock de todo el catálogo solo para
-  contar); N+1 de cajeros en `GET /pos/sesiones`; cta. cte. con filtro de fechas en
-  SQL + proyección (hoy carga TODA la historia del cliente con hijos y XML y filtra
-  en Python — espejo en pagos); modelos de listado livianos sin items/alícuotas/
-  vencimientos para las grillas de comprobantes (payload ~10x menor).
-- [ ] **UI prioridad alta**: confirmación antes de descartar un form con datos (hoy
-  un click en el backdrop tira una factura de 15 ítems); búsqueda de texto + rango
-  de fechas en Ventas y Compras (hoy no se puede encontrar una factura puntual);
-  vista de detalle del comprobante emitido (hoy solo se puede imprimir); paginado y
-  búsqueda reales en Cobranzas/Pagos (hoy `limit=100` fijo: el recibo 101 desaparece).
-- [ ] **UI consistencia**: crear `src/components/` compartidos — `Paginado` (6 copias
-  hoy), `Buscador` autocomplete (4 reinventos), `ChipEstado`, `AlertError/Ok`,
-  `ConfirmModal`/`PromptModal` (reemplaza los 12 `window.confirm/prompt` nativos que
-  rompen la identidad visual) — y `EntidadFields` BUE común a ClienteForm/
-  ProveedorForm (~120 líneas duplicadas; agregar ahí validación de CUIT con dígito
-  verificador en el cliente). Exponer `condicion_venta_id`/`zona_id` en ClienteForm
-  (el form de venta ya los consume y no se pueden cargar).
+- [x] **Migración 011 de índices de performance** (`sql/011_indices_performance.sql`,
+  solo `CREATE INDEX IF NOT EXISTS` + pg_trgm — segura de aplicar sola):
+  `comprobante_items(comprobante_id)` y `compra_items(compra_id)` (los selectin
+  emiten `WHERE fk IN (...)` sin tenant); GIN pg_trgm **multicolumna** sobre
+  `entidades(razon_social, nombre_fantasia, email)` y `articulos(descripcion,
+  codigo, codigo_barras)` — multicolumna porque los filtros son OR y el BitmapOr
+  necesita índice en TODAS las ramas (verificado con EXPLAIN ANALYZE: 0,9 ms sobre
+  12.208 artículos); `recibos/ordenes_pago(tenant_id, fecha)` +
+  `recibo_medios(recibo_id)` / `orden_pago_medios(orden_pago_id)` (planilla);
+  parcial `comprobantes(comprobante_asociado_id) WHERE NOT NULL` (anuladas POS).
+  `comprobante_alicuotas`/`*_vencimientos` ya estaban cubiertos por sus UNIQUE.
+- [x] **Backend transversal**: `deferred()` en `arca_request/arca_response` (el XML
+  de WSFEv1 ya no viaja en ningún listado; solo se escribe al emitir);
+  `expose_headers=["X-Total-Count"]` en el CORSMiddleware (fix canónico; se
+  quitaron los 5 sets manuales por endpoint); COUNT de artículos sin la subquery
+  de stock_total; N+1 de cajeros en `GET /pos/sesiones` (un solo SELECT por
+  página); cta. cte. de clientes y proveedores con **proyección de columnas +
+  fechas en SQL** (misma semántica, verificada por comparación); **listados
+  livianos**: `ComprobanteListaOut`/`CompraListaOut` sin hijos + `noload()` (el
+  detalle completo va por id); búsqueda `q` en ventas/compras/recibos/OPs
+  (texto = AND multi-palabra sobre el nombre; dígitos = número de comprobante).
+- [x] **UI prioridad alta**: confirmación antes de descartar forms con datos
+  (ComprobanteForm, CompraForm, ReciboModal, OrdenPagoModal, ClienteForm,
+  ProveedorForm — flag `modificado`/`hayDatos` + diálogo propio); búsqueda de
+  texto (debounce 350 ms) + rango de fechas en Ventas, Compras, Cobranzas y
+  Pagos; vista de detalle por id (`ComprobanteDetalle`/`CompraDetalle`: renglones,
+  totales, vencimientos, CAE, imprimir); paginado real con `X-Total-Count` en
+  Cobranzas/Pagos.
+- [x] **UI consistencia** — `src/components/` compartidos: `Paginado`, `Buscador`
+  (autocomplete genérico con debounce), `ChipEstado`, `AlertError/AlertOk`,
+  `useDialogos` (confirmar/pedirTexto con identidad visual — reemplazó los 20
+  `window.confirm/prompt` en 12 archivos; Enter acepta, Escape cancela) y
+  `EntidadFields` BUE común a ClienteForm/ProveedorForm con **validación de
+  CUIT/CUIL/DNI en el cliente** (espejo de `core/cuit.py`, inline + bloqueo de
+  submit). ClienteForm expone `condicion_venta_id` y `zona_id` (endpoints nuevos
+  `GET/POST /clientes/zonas` con alta rápida idempotente).
 
 ---
 

@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import type { ArcaConfig, PuntoVenta } from "../../lib/types";
+import { useDialogos } from "../../components/dialogos";
 
 const MODOS: [string, string, string][] = [
   ["deshabilitado", "Deshabilitado", "No se pueden emitir comprobantes fiscales."],
@@ -25,6 +26,7 @@ export default function ArcaConfigSection() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { pedirTexto, dialogos } = useDialogos();
 
   useEffect(() => {
     void (async () => {
@@ -69,9 +71,11 @@ export default function ArcaConfigSection() {
   }
 
   async function agregarPuntoVenta() {
-    const numero = window.prompt("Número de punto de venta (habilitado en ARCA como Web Services):");
+    const numero = await pedirTexto(
+      "Número de punto de venta (habilitado en ARCA como Web Services):",
+    );
     if (!numero) return;
-    const descripcion = window.prompt("Descripción:", "Principal") ?? "";
+    const descripcion = (await pedirTexto("Descripción:", "Principal")) ?? "";
     try {
       const pv = await apiPost<PuntoVenta>("/ventas/puntos-venta", {
         numero: Number(numero),
@@ -194,6 +198,7 @@ export default function ArcaConfigSection() {
           ))}
         </ul>
       )}
+      {dialogos}
     </div>
   );
 }
