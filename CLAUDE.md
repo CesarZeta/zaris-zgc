@@ -200,6 +200,15 @@ ZGC/
   celdas (comillas si el texto trae `;`/comillas/saltos — el helper viejo de `libros.py`
   no escapaba porque eran solo números). Los `.csv` de listados reusan el filtro del
   listado (`_filtro_comprobantes`/`_filtro_compras`), tope 5000 filas.
+- **Rutas ESTÁTICAS antes que las paramétricas en el mismo router** (bug real F8): un
+  `GET /export.csv` o `/resumen` declarado DESPUÉS de `GET /{id}` lo captura `/{id}` (intenta
+  parsear "export.csv" como UUID → 422). FastAPI matchea por orden de declaración: todos los
+  paths literales de un prefijo van ARRIBA del `/{id}`. Regla al escribir cualquier router.
+- **Campos DERIVADOS en schemas de salida: default, no required** (bug real F8): un campo que
+  NO existe en el modelo ORM pero se calcula después (ej. `signo` a partir de `tipo`) no puede
+  ser `required` si el `*Out` se arma con `model_validate(orm_obj)` — la validación corre ANTES
+  de poder setearlo y revienta con "Field required". Darle default y asignarlo tras validar
+  (`out = Out.model_validate(m); out.signo = ...`), o construir el dict completo antes de validar.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 
@@ -224,6 +233,15 @@ ZGC/
 - **psql local (dev)**: no está en el PATH — usar
   `"C:\Program Files\PostgreSQL\17\bin\psql.exe"`; la credencial de `zgc_dev` está en
   `backend/.env.local` (pasarla por `$env:PGPASSWORD`; el pgpass solo tiene la de prod).
+- **Levantar el backend local para probar en vivo** (gotcha Windows/Git Bash, F8): el config
+  (`app/core/config.py`) lee el archivo `ENV_FILE` (default `.env`), y en el repo solo existe
+  `.env.local` → sin `.env`, `JWT_SECRET` queda vacío y el LOGIN da 500 ("HMAC key must not be
+  empty"). Los `export VAR=...` / `ENV_FILE=... uvicorn &` NO se propagan al proceso backgroundeado
+  con `&` en este shell. Solución fiable: `cp backend/.env.local backend/.env` antes de levantar
+  uvicorn (y borrarlo al terminar). OJO: un uvicorn viejo puede quedar sirviendo el puerto y
+  responder con config vieja → `taskkill //F //IM python.exe` antes de relanzar si algo "no toma".
+  Para tener un login usable en dev: `python tools/demo_setup_tenant.py --clave X` fija la clave
+  de `demo@zaris.com.ar` y arma tenant+PV+depósito+arca. El proxy de Vite apunta a `localhost:8021`.
 - **El deploy de PROD lo hace Claude de punta a punta** (mandato de César 2026-07-06 en la
   Fase 8; NO volver a pedirle que deje el deploy): el MCP de Supabase de las sesiones ve las
   cuentas ZGE/news-bot pero **NO el proyecto ZGC** (cuenta separada, sa-east-1, ref
