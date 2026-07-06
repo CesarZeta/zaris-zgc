@@ -141,10 +141,9 @@ ZGC/
   (`TIPO 0001-00000123`), no hay FK a comprobantes/compras.
 - **`X-Total-Count` cross-origin necesita `Access-Control-Expose-Headers`** — y el
   **proxy de Vite en dev lo enmascara** (same-origin: el CORS no aplica y todo "funciona").
-  Auditoría 2026-07-05: clientes/proveedores/articulos/stock lo setean a mano y
-  ventas/compras/cobranzas/pagos NO → sus paginados no ven el total EN PROD. Fix canónico
-  pendiente (LOTE TÉCNICO): `expose_headers=["X-Total-Count"]` en el CORSMiddleware.
-  Regla: toda verificación de headers/CORS se hace contra prod o sin proxy, no en dev.
+  RESUELTO 2026-07-06 (LOTE TÉCNICO): `expose_headers=["X-Total-Count"]` en el
+  CORSMiddleware es el fix canónico — NO volver a setear el header a mano por endpoint.
+  Regla vigente: toda verificación de headers/CORS se hace contra prod o sin proxy, no en dev.
 - **Todo endpoint nuevo nace con guarda RBAC** (Fase 6.5, 2026-07-05): usar
   `Depends(requiere("modulo", accion))` en lugar de `Depends(get_current_user)` —
   GET=`ver`, escritura=`editar`, anulación/borrado=`anular`; catálogos compartidos entre
@@ -159,7 +158,16 @@ ZGC/
   índice por el FK solo (los UNIQUE que arrancan por el FK ya lo cubren).
 - **Columnas TEXT pesadas nacen `deferred`** (XML de WSFEv1, blobs): si no, viajan en
   CADA select del modelo — listados, cta. cte., libros, POS (caso real:
-  `arca_request/arca_response`, pendiente en LOTE TÉCNICO).
+  `arca_request/arca_response`, aplicado 2026-07-06 en el LOTE TÉCNICO). En async,
+  ASIGNAR a una columna deferred es seguro; LEERLA fuera de query exige `undefer`.
+- **Búsquedas `ILIKE '%…%'` con OR multi-columna**: el GIN pg_trgm debe ser
+  **multicolumna** cubriendo TODAS las ramas del OR — el planner arma un BitmapOr y si
+  una rama queda sin índice, cae a seqscan (migración 011: `entidades` y `articulos`).
+- **Los listados viajan livianos** (LOTE TÉCNICO): `GET /ventas/comprobantes` y
+  `GET /compras/comprobantes` NO devuelven items/alícuotas/vencimientos — el detalle
+  completo se pide por id. Scripts que consuman el listado esperando `items` deben
+  pedir el detalle. En el front, `useDialogos` reemplaza a window.confirm/prompt
+  (cero usos nativos; todo componente que lo use renderiza `{dialogos}`).
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 
