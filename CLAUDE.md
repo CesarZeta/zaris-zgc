@@ -224,6 +224,24 @@ ZGC/
 - **psql local (dev)**: no está en el PATH — usar
   `"C:\Program Files\PostgreSQL\17\bin\psql.exe"`; la credencial de `zgc_dev` está en
   `backend/.env.local` (pasarla por `$env:PGPASSWORD`; el pgpass solo tiene la de prod).
+- **La migración de PROD la aplica César, no Claude** (verificado 2026-07-06): el MCP de
+  Supabase de las sesiones ve las cuentas ZGE/news-bot pero **NO el proyecto ZGC** (cuenta
+  separada, sa-east-1, ref `lasjyuygcfqhwjdrkrkq`), y el pgpass con la password de prod queda
+  fuera del auto-mode (el clasificador bloquea leer el credential store). Flujo real: Claude
+  escribe el `.sql` y la guía; César lo corre. No intentar rodear el bloqueo de credenciales.
+- **psql a PROD por session pooler: flags SEPARADOS, no URL-string** (gotcha 2026-07-06): si
+  se le pasa la `DATABASE_URL` como un string y no trae la password embebida (o es un
+  placeholder), psql cae a conectar como el usuario del SO y pide *"Contraseña para usuario
+  Cesar"* (que NO es la de Windows ni ninguna válida). El fix es conectar con
+  `-h aws-1-sa-east-1.pooler.supabase.com -p 5432 -U postgres.<ref> -d postgres -f archivo.sql`
+  — los cuatro valores deben matchear EXACTO la línea del pgpass para que encuentre la password
+  sola. Y los meta-comandos de psql (`\dt`, `\d+`) NO corren en PowerShell: para verificar desde
+  afuera usar `psql ... -c "SELECT ..."` (una consulta, no la sesión interactiva).
+- **Alta de usuarios: por la API, no por SQL** (2026-07-06): `POST /usuarios` (con un admin del
+  tenant) respeta el hash bcrypt, el anti-lockout y las validaciones. El email valida con
+  `EmailStr` de Pydantic → **`.test` (y otros TLD reservados RFC 2606) dan 422**; para usuarios
+  de prueba usar `@zgc.dev`. `password` exige mín. 6 chars. Los 5 usuarios de prueba de prod
+  (uno por rol) están documentados en la memoria del proyecto.
 - **Suites en vivo: todo recurso NOMBRADO que crea el test lleva el sufijo único de la
   corrida** (uuid), no solo emails/CUITs — si la suite crashea a mitad, el cleanup no
   corre y los huérfanos rompen los conteos de la re-corrida (mordió en Fase 6.5 con un

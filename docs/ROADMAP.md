@@ -378,6 +378,11 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 - Diferido documentado: mapa Leaflet (con Logística F12-bis), export .xlsx nativo (el CSV
   lo cubre), export CSV de clientes/proveedores/artículos (el patrón queda armado), padrón
   con cache de resultados (hoy solo cachea el TA).
+- **Verificación pendiente (César)**: el E2E de navegador se hizo contra DEV; en prod el
+  smoke cubrió los endpoints (14/14) pero falta el click-through visual del frontend F7 en
+  Pages — entrar a `/inicio` y ver KPIs con números, probar el buscador OSM en un alta de
+  cliente, el botón padrón, y el ABM de sucursales en Configuración. Además, verificar los
+  niveles de permisos entrando con los 5 usuarios de prueba (menú recortado por rol).
 
 ---
 
