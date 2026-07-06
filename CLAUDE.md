@@ -145,6 +145,14 @@ ZGC/
   ventas/compras/cobranzas/pagos NO → sus paginados no ven el total EN PROD. Fix canónico
   pendiente (LOTE TÉCNICO): `expose_headers=["X-Total-Count"]` en el CORSMiddleware.
   Regla: toda verificación de headers/CORS se hace contra prod o sin proxy, no en dev.
+- **Todo endpoint nuevo nace con guarda RBAC** (Fase 6.5, 2026-07-05): usar
+  `Depends(requiere("modulo", accion))` en lugar de `Depends(get_current_user)` —
+  GET=`ver`, escritura=`editar`, anulación/borrado=`anular`; catálogos compartidos entre
+  módulos con `requiere_alguno([...])`; la config sensible (ARCA, puntos de venta, cajas
+  POS) exige `configuracion.editar` aunque el endpoint viva en otro router (es donde la
+  UI la muestra). El catálogo de módulos vive en `app/core/permisos.py` y es ESPEJO del
+  seed SQL de la migración 010 — cambiar uno exige cambiar el otro. `usuarios.rol_id
+  NULL` = acceso total (compat scripts/seeds). La guarda responde 403, nunca 401.
 - **Índices para relaciones `selectin`**: el loader emite `WHERE fk IN (...)` SIN
   `tenant_id` → un índice compuesto `(tenant_id, fk)` NO le sirve (mordió en
   `comprobante_items`/`compra_items`, migraciones 006/007). Toda tabla hija nueva lleva
@@ -173,6 +181,13 @@ ZGC/
 - **Setup de un tenant para poder facturar** (no existe como un solo comando): tenant +
   usuario + `arca_config` modo simulado + punto de venta + depósito activo. Lo orquesta
   `tools/demo_setup_tenant.py` (idempotente). Sin depósito activo, `emitir` da 422.
+- **psql local (dev)**: no está en el PATH — usar
+  `"C:\Program Files\PostgreSQL\17\bin\psql.exe"`; la credencial de `zgc_dev` está en
+  `backend/.env.local` (pasarla por `$env:PGPASSWORD`; el pgpass solo tiene la de prod).
+- **Suites en vivo: todo recurso NOMBRADO que crea el test lleva el sufijo único de la
+  corrida** (uuid), no solo emails/CUITs — si la suite crashea a mitad, el cleanup no
+  corre y los huérfanos rompen los conteos de la re-corrida (mordió en Fase 6.5 con un
+  rol "Depósito" huérfano de una corrida anterior).
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
@@ -180,10 +195,14 @@ ZGC/
   "Deployment failed, try again later", `error_count: 10`) con frecuencia ~50%. **No es el
   código** — verificar que el job `build` dio `success` y re-lanzar con
   `gh run rerun <id> --failed`. No tocar nada.
-- **Push a `master` = deploy a producción**: dispara el workflow de Pages (frontend) y el
-  redeploy del backend en Vercel. Antes de pushear, si el modelo agregó columnas/tablas,
-  **la migración va SIEMPRE primero** (si no, el backend nuevo pega contra tablas que no
-  existen → 500). Verificarlo con `execute_sql`/psql antes del push.
+- **Push a `master` = deploy a producción**: redeploya el backend en Vercel siempre; el
+  workflow de Pages SOLO corre si el push toca `web-app/**` (filtro `paths:` en
+  deploy-pages.yml — que un push de solo docs no genere run en `gh run list` NO es un
+  fallo). Antes de pushear, si el modelo agregó columnas/tablas, **la migración va
+  SIEMPRE primero**. Matiz que mordió en Fase 6.5: una columna nueva en un modelo YA
+  mapeado (ej. `usuarios.rol_id`) rompe TODOS los SELECT de esa tabla contra una DB sin
+  migrar — en `usuarios` eso es el LOGIN entero, no solo la feature nueva. Verificarlo
+  con psql antes del push.
 - **Popover/dropdown dentro de un contenedor con `overflow:hidden`** (p.ej. el hero del
   inicio, que lo tiene para las órbitas animadas): un hijo con `position:absolute` se
   RECORTA. Usar `position:fixed` anclado a las coords del botón (`getBoundingClientRect`
