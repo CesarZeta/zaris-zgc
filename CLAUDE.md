@@ -168,6 +168,38 @@ ZGC/
   completo se pide por id. Scripts que consuman el listado esperando `items` deben
   pedir el detalle. En el front, `useDialogos` reemplaza a window.confirm/prompt
   (cero usos nativos; todo componente que lo use renderiza `{dialogos}`).
+- **Agregaciones que arrancan con una función escalar necesitan `.select_from()`
+  explícito** (Fase 7): un `select(func.sum(...)).join(Otra, ...)` sin lado izquierdo
+  entidad revienta con "Don't know how to join" — SQLAlchemy no infiere el FROM desde
+  la función. Los KPIs del dashboard llevan `.select_from(TablaBase)` antes del `.join`.
+- **El padrón ARCA reusa el motor fiscal** (Fase 7): `wsaa.solicitar_ta(..., servicio=
+  "ws_sr_constancia_inscripcion")` — el WSAA ya es multi-servicio, no se toca. El padrón
+  (`services/arca/padron.py`) sigue el mismo patrón de modos que la emisión: simulado
+  (registro ficticio, dev/demo sin cert) / homologación / producción. El TA de padrón se
+  cachea aparte en `arca_tokens` (servicio distinto). Endpoint `GET /padron/{cuit}`
+  guardado por `clientes`/`proveedores` (los que dan de alta entidades), 400 si ARCA
+  deshabilitado, 422 si el CUIT tiene DV inválido.
+- **Proxy Nominatim: viewbox SIN `bounded=1` en ZGC** (Fase 7, difiere de ZGE): ZGE
+  encierra los resultados en su municipio (`bounded=1` los EXCLUYE); ZGC tiene tenants en
+  todo el país → el sesgo por tenant (`tenants.geo_centro_lat/lon/delta`, `PUT /empresa/geo`)
+  solo prioriza la zona sin excluir el resto. El front NUNCA llama a OSM directo (proxy
+  único `/geo`). Rate limit por-lambda (Vercel no garantiza el lock global entre
+  invocaciones; mitigado con debounce 500 ms + mín. 3 chars + limit 5). Si un tenant lo
+  estresa: migrar a Photon es cambiar solo `geo.py`.
+- **Criterio BUC en domicilios** (Fase 7): calle/localidad/provincia se completan SOLO
+  desde OSM y quedan readOnly (con escape "cargar a mano"); el mapeo provincia OSM →
+  código ARCA del catálogo está en `lib/geo.ts` (front) y `services/arca/padron.py`
+  (back, para el padrón). El domicilio plano de `entidades` sigue siendo el fiscal;
+  `entidad_domicilios` (migración 012) guarda los adicionales (entregas) para Logística.
+- **Stock valorizado = solo existencias positivas** (Fase 7 KPI): `SUM(GREATEST(cantidad,0)
+  × costo_neto)`. Un saldo negativo (vendido sin reponer) es un faltante que se ve en el
+  kardex, NO una deuda que reste valor al inventario. El costo se netea de IVA si
+  `costo_con_iva`. Los datos de demo tienen stock negativo masivo (por eso importa).
+- **Export CSV: helper compartido** (Fase 7): `app/core/csv_export.py` (`csv_response`/`num`)
+  — separador `;`, coma decimal, BOM UTF-8 + CRLF (Excel es-AR directo) CON escape de
+  celdas (comillas si el texto trae `;`/comillas/saltos — el helper viejo de `libros.py`
+  no escapaba porque eran solo números). Los `.csv` de listados reusan el filtro del
+  listado (`_filtro_comprobantes`/`_filtro_compras`), tope 5000 filas.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 

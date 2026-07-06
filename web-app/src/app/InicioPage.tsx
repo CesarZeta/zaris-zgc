@@ -1,16 +1,35 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { apiGet } from "../lib/api";
 import { getSesion, tienePermiso } from "../lib/auth";
 import HeroOrbita from "./HeroOrbita";
 
-/** Tarjetas de indicadores. Los valores reales se conectan en la Fase 7
- *  (módulo Dashboard con endpoints de agregación); por ahora, skeleton. */
-const KPIS = [
-  { label: "Ventas del mes", hint: "facturación acumulada" },
-  { label: "Cobros pendientes", hint: "cuentas por cobrar" },
-  { label: "Stock valorizado", hint: "existencias a costo" },
-  { label: "Saldo de caja", hint: "efectivo del día" },
+/** KPIs del dashboard (Fase 7): valores reales desde /dashboard/kpis. La clave
+ *  matchea el campo del endpoint; null = el rol no ve ese módulo → muestra "—". */
+interface Kpis {
+  fecha: string;
+  ventas_mes: string | null;
+  cobros_pendientes: string | null;
+  stock_valorizado: string | null;
+  saldo_caja: string | null;
+}
+const KPIS: { key: keyof Omit<Kpis, "fecha">; label: string; hint: string }[] = [
+  { key: "ventas_mes", label: "Ventas del mes", hint: "facturación acumulada" },
+  { key: "cobros_pendientes", label: "Cobros pendientes", hint: "cuentas por cobrar" },
+  { key: "stock_valorizado", label: "Stock valorizado", hint: "existencias a costo" },
+  { key: "saldo_caja", label: "Saldo de caja", hint: "efectivo del día" },
 ];
+
+const PESOS = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  minimumFractionDigits: 2,
+});
+/** El backend serializa Numeric como string con punto decimal. */
+function formatoPesos(valor: string | null): string | null {
+  if (valor == null) return null;
+  return PESOS.format(Number(valor));
+}
 
 /** Accesos directos a los módulos del sistema, con su código de permisos. */
 const MODULOS = [
@@ -66,6 +85,18 @@ export default function InicioPage() {
   useEffect(() => {
     const id = setInterval(() => setAhora(new Date()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // KPIs reales (Fase 7). Skeleton hasta que responden; si falla, quedan en "—".
+  const [kpis, setKpis] = useState<Kpis | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    void apiGet<Kpis>("/dashboard/kpis")
+      .then((r) => vivo && setKpis(r.data))
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
   }, []);
 
   // popover con el detalle de módulos habilitados.
@@ -193,14 +224,23 @@ export default function InicioPage() {
         </div>
       </section>
 
-      <section className="inicio-kpis">
-        {KPIS.map((k) => (
-          <div className="kpi-card" key={k.label}>
-            <div className="kpi-label">{k.label}</div>
-            <div className="kpi-valor skeleton">—</div>
-            <div className="kpi-hint">{k.hint}</div>
-          </div>
-        ))}
+      <section className="inicio-kpis kpis-grid">
+        {KPIS.map((k) => {
+          const valor = kpis ? formatoPesos(kpis[k.key]) : null;
+          return (
+            <div className="kpi-card" key={k.label}>
+              <div className="kpi-label">{k.label}</div>
+              {!kpis ? (
+                <div className="kpi-valor skeleton">—</div>
+              ) : (
+                <div className="kpi-valor real mono">{valor ?? "—"}</div>
+              )}
+              <div className="kpi-hint">
+                {kpis && valor == null ? "sin acceso" : k.hint}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <h2 className="inicio-seccion">

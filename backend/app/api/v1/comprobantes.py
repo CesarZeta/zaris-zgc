@@ -17,6 +17,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
+from app.core.csv_export import csv_response, num
 from app.core.db import get_db
 from app.core.permisos import requiere
 from app.models import (
@@ -494,6 +495,22 @@ async def crear_comprobante(
     return _out(comp)
 
 
+def _filtro_comprobantes(stmt, q, clase, estado, cliente_id, desde, hasta, con_saldo):
+    if clase:
+        stmt = stmt.join(TipoComprobante).where(TipoComprobante.clase == clase)
+    if estado:
+        stmt = stmt.where(Comprobante.estado == estado)
+    if cliente_id:
+        stmt = stmt.where(Comprobante.cliente_id == cliente_id)
+    if desde:
+        stmt = stmt.where(Comprobante.fecha >= desde)
+    if hasta:
+        stmt = stmt.where(Comprobante.fecha <= hasta)
+    if con_saldo:
+        stmt = stmt.where(Comprobante.saldo != 0)
+    return _aplicar_busqueda(stmt, q)
+
+
 @router.get("", response_model=list[ComprobanteListaOut])
 async def listar_comprobantes(
     response: Response,
@@ -509,20 +526,10 @@ async def listar_comprobantes(
     usuario: Usuario = Depends(requiere("ventas", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Comprobante).where(Comprobante.tenant_id == usuario.tenant_id)
-    if clase:
-        stmt = stmt.join(TipoComprobante).where(TipoComprobante.clase == clase)
-    if estado:
-        stmt = stmt.where(Comprobante.estado == estado)
-    if cliente_id:
-        stmt = stmt.where(Comprobante.cliente_id == cliente_id)
-    if desde:
-        stmt = stmt.where(Comprobante.fecha >= desde)
-    if hasta:
-        stmt = stmt.where(Comprobante.fecha <= hasta)
-    if con_saldo:
-        stmt = stmt.where(Comprobante.saldo != 0)
-    stmt = _aplicar_busqueda(stmt, q)
+    stmt = _filtro_comprobantes(
+        select(Comprobante).where(Comprobante.tenant_id == usuario.tenant_id),
+        q, clase, estado, cliente_id, desde, hasta, con_saldo,
+    )
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
     filas = await db.scalars(
@@ -538,6 +545,53 @@ async def listar_comprobantes(
         .offset(offset)
     )
     return [_out_lista(c) for c in filas]
+
+
+@router.get("/export.csv")
+async def exportar_comprobantes_csv(
+    q: str = "",
+    clase: str | None = None,
+    estado: str | None = None,
+    cliente_id: uuid.UUID | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    con_saldo: bool = False,
+    usuario: Usuario = Depends(requiere("ventas", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export universal (Fase 7): las ventas que matchean el filtro actual, a CSV
+    es-AR. Tope 5000 filas para no reventar la lambda (se avisa al front)."""
+    stmt = _filtro_comprobantes(
+        select(Comprobante).where(Comprobante.tenant_id == usuario.tenant_id),
+        q, clase, estado, cliente_id, desde, hasta, con_saldo,
+    )
+    filas = await db.scalars(
+        stmt.options(
+            noload(Comprobante.items),
+            noload(Comprobante.alicuotas),
+            noload(Comprobante.vencimientos),
+        )
+        .order_by(Comprobante.fecha.desc(), Comprobante.created_at.desc())
+        .limit(5000)
+    )
+    encabezado = [
+        "Fecha", "Comprobante", "Cliente", "Doc", "Cond. IVA", "Moneda",
+        "Neto gravado", "IVA", "Total", "Saldo", "Estado", "CAE",
+    ]
+    rows = []
+    for c in filas:
+        o = _out_lista(c)
+        rows.append([
+            o.fecha.strftime("%d/%m/%Y"),
+            o.numero_formateado or f"{o.tipo_codigo} {o.punto_venta:04d}",
+            o.receptor_nombre,
+            o.receptor_doc_nro or "",
+            o.receptor_condicion_iva,
+            o.moneda,
+            num(o.neto_gravado), num(o.iva), num(o.total), num(o.saldo),
+            o.estado, o.cae or "",
+        ])
+    return csv_response("ventas.csv", encabezado, rows)
 
 
 @router.get("/{comp_id}", response_model=ComprobanteOut)

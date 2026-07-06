@@ -9,13 +9,17 @@ from app.api.v1.clientes import router as clientes_router
 from app.api.v1.cobranzas import router as cobranzas_router
 from app.api.v1.compras import router as compras_router
 from app.api.v1.comprobantes import router as comprobantes_router
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.empresa import router as empresa_router
 from app.api.v1.entidades import router as entidades_router
+from app.api.v1.geo import router as geo_router
 from app.api.v1.libros import router as libros_router
 from app.api.v1.pagos import router as pagos_router
+from app.api.v1.padron import router as padron_router
 from app.api.v1.pos import router as pos_router
 from app.api.v1.proveedores import router as proveedores_router
 from app.api.v1.stock import router as stock_router
+from app.api.v1.sucursales import router as sucursales_router
 from app.api.v1.usuarios import router as usuarios_router
 from app.api.v1.variantes import router as variantes_router
 from app.api.v1.ventas_config import router as ventas_config_router
@@ -44,6 +48,10 @@ app.include_router(caja_router, prefix="/api/v1")
 app.include_router(libros_router, prefix="/api/v1")
 app.include_router(pos_router, prefix="/api/v1")
 app.include_router(usuarios_router, prefix="/api/v1")
+app.include_router(sucursales_router, prefix="/api/v1")
+app.include_router(geo_router, prefix="/api/v1")
+app.include_router(padron_router, prefix="/api/v1")
+app.include_router(dashboard_router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,

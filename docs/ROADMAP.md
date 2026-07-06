@@ -318,6 +318,63 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   submit). ClienteForm expone `condicion_venta_id` y `zona_id` (endpoints nuevos
   `GET/POST /clientes/zonas` con alta rápida idempotente).
 
+## FASE 7 — Dashboard + calidad de datos (OSM/padrón) + ABM sucursales 🔶 (código completo 2026-07-06)
+
+**Entregable: el dueño ve sus números al entrar, carga entidades con datos limpios (padrón ARCA + domicilios OSM), administra sus sucursales y exporta cualquier listado.** ✔ verificado con 45 pruebas de API en vivo (0 fallos) + regresión + build + E2E en navegador. **Falta el deploy a prod.**
+
+> Primer post-MVP. Las dos patas de calidad de datos (padrón ARCA + OSM) van en el
+> mismo formulario de entidad, ANTES de cargar entidades masivamente. Diseño de OSM
+> casi textual desde ZGE en `docs/DISENO-LOGISTICA-Y-DOMICILIOS.md §1` (con las 3
+> adaptaciones ZGC: User-Agent propio, viewbox opcional por tenant SIN `bounded=1`,
+> rate limit adaptado a serverless).
+
+- [x] **Migración 012** (aditiva, idempotente): `entidades`/`sucursales` += lat/lon;
+  `sucursales` += provincia_id/codigo_postal (la 001 solo tenía domicilio/localidad);
+  `tenants` += geo_centro_lat/lon/delta (sesgo Nominatim opcional); tabla nueva
+  `entidad_domicilios` (tipo fiscal/entrega/otro, predeterminado por tipo, snapshot-ready
+  para Logística F12-bis) con RLS. Segura de aplicar sola (el backend viejo no la lee).
+- [x] **Dashboard KPIs** (`GET /dashboard/kpis`): ventas del mes (fiscales netos de NC),
+  cobros pendientes (saldo deudor cta.cte.), stock valorizado (Σ cantidad **positiva** ×
+  costo neto — un faltante no resta valor al inventario), saldo de caja del día (efectivo
+  neto: cobranzas − pagos + manuales). Cada KPI respeta el permiso de su módulo (null,
+  nunca 403, para que el inicio nunca se rompa). Inicio conecta los 4 (skeleton → valores
+  reales con formato `Intl` es-AR); `.kpis-grid` responsive (2 columnas en móvil).
+- [x] **Padrón ARCA por CUIT** (`GET /padron/{cuit}`, `services/arca/padron.py`): WSAA ya
+  era multi-servicio → TA para `ws_sr_constancia_inscripcion`. Modo simulado (registro
+  ficticio determinístico, dev/demo sin cert) / homologación / producción (SOAP real,
+  patrón espejo de wsfev1). Trae razón social, tipo persona, condición IVA (mapeo de
+  impuestos activos), domicilio; mapea provincia del padrón → código ARCA. Botón "ARCA"
+  junto al CUIT en `EntidadFields` (habilitado solo con DV válido).
+- [x] **Domicilios OSM** (`GET /geo/buscar|reverse`, proxy único, `lib/geo.ts` +
+  `AddressSearch.tsx`): debounce 500 ms / mín. 3 chars / 5 sugerencias, filtro de POIs
+  (blacklist por `class` + reescritura de display_name), sesgo opcional por tenant
+  (`PUT /empresa/geo`, viewbox SIN `bounded=1`). `parseAddress` + mapeo provincia OSM →
+  catálogo ARCA. En `EntidadFields` y `SucursalesSection`: criterio BUC (calle/localidad/
+  provincia solo desde OSM, readOnly) con escape "cargar a mano" y "quitar pin". Mapa
+  Leaflet diferido a Logística (F12-bis) — v1 sin dependencia npm nueva.
+- [x] **ABM sucursales** (`sucursales.py`, CRUD calcado del de cajas POS): la tabla existía
+  desde la 001 sin UI. Listado consumido por el picker de sucursal en cajas POS (nuevo
+  select) y disponible para usuarios. `SucursalesSection` en Configuración con el mismo
+  AddressSearch. Sin DELETE (se desactivan: usuarios/cajas/movimientos las referencian).
+- [x] **Domicilios múltiples de entidad** (`entidades/{id}/domicilios` CRUD): un
+  predeterminado por tipo; el domicilio plano de `entidades` sigue siendo el fiscal.
+- [x] **Export CSV universal** (`app/core/csv_export.py`, extraído del helper de F5 con
+  escape robusto para texto libre): `GET /ventas/comprobantes/export.csv` y
+  `/compras/comprobantes/export.csv` (mismos filtros del listado, tope 5000 filas).
+  Botón "Exportar CSV" en los toolbars de Ventas y Compras (usa `apiDescargar`).
+- [x] Verificado 2026-07-06: 45 pruebas de API en vivo (ABM sucursales + 409/422,
+  padrón simulado + DV, dashboard KPIs, geo real contra OSM + q corto 422, domicilios
+  múltiples + predeterminado único, sesgo geo + validaciones, export CSV con BOM/`;`) +
+  regresión de listados de ventas/compras (refactorizados a `_filtro_*`) + build TS limpio
+  + E2E en navegador (KPIs reales, AddressSearch → Av. Corrientes con mapeo a CABA + coords
+  + readOnly, padrón trae razón social/cond. IVA, sucursal creada con domicilio normalizado,
+  CSV 200 con 151 filas).
+- [ ] **Deploy a prod**: migración 012 por psql via session pooler ANTES del push +
+  re-aplicar 005; luego push (Vercel + Pages); smoke E2E contra prod.
+- Diferido documentado: mapa Leaflet (con Logística F12-bis), export .xlsx nativo (el CSV
+  lo cubre), export CSV de clientes/proveedores/artículos (el patrón queda armado), padrón
+  con cache de resultados (hoy solo cachea el TA).
+
 ---
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
@@ -331,7 +388,7 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
 
 | # | Fase | Contenido | Condición de activación |
 |---|---|---|---|
-| 7 | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal); **domicilios normalizados OSM** (estándar de suite heredado de ZGE: proxy Nominatim + AddressSearch + lat/lon en entidades/sucursales + `entidad_domicilios` — ver `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1; hacerlo ANTES de cargar entidades masivamente); **ABM de sucursales** (la tabla existe desde la 001, falta la UI) + sucursal en cajas POS | Post-MVP inmediato |
+| 7 ✅ | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal); **domicilios normalizados OSM** (estándar de suite heredado de ZGE: proxy Nominatim + AddressSearch + lat/lon en entidades/sucursales + `entidad_domicilios` — ver `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1; hacerlo ANTES de cargar entidades masivamente); **ABM de sucursales** (la tabla existe desde la 001, falta la UI) + sucursal en cajas POS | **CÓDIGO COMPLETO 2026-07-06** (ver detalle abajo) |
 | 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
 | 9 | **Contabilidad** (módulo activable) | Plan de cuentas, asientos automáticos desde ventas/compras/caja/OP (ya registran todo), libro diario, balances; **activos fijos + amortizaciones**; **export al software del contador** (formaliza los CSV de F5) | **FOSO** — primer cliente de referencia pagando. *Adelantada de F11→F9 (decisión César 2026-07-05): mejor relación valor/mantenimiento (principios estables), palanca de plan pago, habilita F10* |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |

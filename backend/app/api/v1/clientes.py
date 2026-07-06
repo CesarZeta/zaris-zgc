@@ -30,6 +30,8 @@ class EntidadIn(BaseModel):
     localidad: str | None = None
     provincia_id: int | None = None
     codigo_postal: str | None = None
+    latitud: Decimal | None = None
+    longitud: Decimal | None = None
     observaciones: str | None = None
 
 

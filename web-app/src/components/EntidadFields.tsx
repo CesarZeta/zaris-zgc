@@ -3,6 +3,10 @@
 // Incluye la validación de documento con dígito verificador, espejo de
 // backend/app/core/cuit.py — el backend sigue siendo la última palabra.
 
+import { useState } from "react";
+
+import AddressSearch from "./AddressSearch";
+import { consultarPadron } from "../lib/padron";
 import { CONDICIONES_IVA, PROVINCIAS, type Entidad } from "../lib/types";
 
 export interface EntidadDraft {
@@ -18,6 +22,8 @@ export interface EntidadDraft {
   localidad: string;
   provincia_id: string;
   codigo_postal: string;
+  latitud: string;
+  longitud: string;
 }
 
 export function entidadDraft(
@@ -37,6 +43,8 @@ export function entidadDraft(
     localidad: e?.localidad ?? "",
     provincia_id: e?.provincia_id != null ? String(e.provincia_id) : "",
     codigo_postal: e?.codigo_postal ?? "",
+    latitud: e?.latitud != null ? String(e.latitud) : "",
+    longitud: e?.longitud != null ? String(e.longitud) : "",
   };
 }
 
@@ -55,6 +63,8 @@ export function entidadPayload(d: EntidadDraft) {
     localidad: d.localidad.trim() || null,
     provincia_id: d.provincia_id === "" ? null : Number(d.provincia_id),
     codigo_postal: d.codigo_postal.trim() || null,
+    latitud: d.latitud === "" ? null : Number(d.latitud),
+    longitud: d.longitud === "" ? null : Number(d.longitud),
   };
 }
 
@@ -93,10 +103,71 @@ export default function EntidadFields({
   labelRazonSocial?: string;
 }) {
   const d = valor;
+  // domicilio "a mano" si ya trae texto sin coordenadas (carga previa a OSM); si
+  // no, arranca en modo OSM (criterio BUC: solo desde el buscador).
+  const [manual, setManual] = useState(d.domicilio !== "" && d.latitud === "");
+  const [padronCargando, setPadronCargando] = useState(false);
+  const [padronMsg, setPadronMsg] = useState<string | null>(null);
+
   function set<K extends keyof EntidadDraft>(campo: K, v: EntidadDraft[K]) {
     onCambiar({ ...d, [campo]: v });
   }
   const errorDoc = d.nro_documento.trim() !== "" ? validarEntidad(d) : null;
+  const puedePadron =
+    (d.tipo_documento === "CUIT" || d.tipo_documento === "CUIL") && cuitValido(d.nro_documento);
+
+  async function traerPadron() {
+    setPadronCargando(true);
+    setPadronMsg(null);
+    try {
+      const p = await consultarPadron(d.nro_documento);
+      onCambiar({
+        ...d,
+        razon_social: p.razon_social || d.razon_social,
+        tipo_persona: p.tipo_persona || d.tipo_persona,
+        condicion_iva: p.condicion_iva || d.condicion_iva,
+        domicilio: p.domicilio ?? d.domicilio,
+        localidad: p.localidad ?? d.localidad,
+        provincia_id: p.provincia_id != null ? String(p.provincia_id) : d.provincia_id,
+        codigo_postal: p.codigo_postal ?? d.codigo_postal,
+      });
+      setPadronMsg(
+        p.fuente === "simulado"
+          ? "Datos simulados (ARCA en modo prueba)"
+          : "Datos traídos del padrón ARCA",
+      );
+    } catch (e) {
+      setPadronMsg(e instanceof Error ? e.message : "No se pudo consultar el padrón");
+    } finally {
+      setPadronCargando(false);
+    }
+  }
+
+  function elegirDireccion(nd: {
+    domicilio: string;
+    localidad: string;
+    provincia_id: number | null;
+    codigo_postal: string;
+    latitud: number | null;
+    longitud: number | null;
+  }) {
+    onCambiar({
+      ...d,
+      domicilio: nd.domicilio,
+      localidad: nd.localidad,
+      provincia_id: nd.provincia_id != null ? String(nd.provincia_id) : "",
+      // OSM Argentina es flojo en CP: no piso el que ya haya si OSM no lo trae
+      codigo_postal: nd.codigo_postal || d.codigo_postal,
+      latitud: nd.latitud != null ? String(nd.latitud) : "",
+      longitud: nd.longitud != null ? String(nd.longitud) : "",
+    });
+  }
+
+  function quitarPin() {
+    onCambiar({ ...d, latitud: "", longitud: "" });
+  }
+
+  const desdeOsm = d.latitud !== "";
 
   return (
     <>
@@ -147,14 +218,28 @@ export default function EntidadFields({
         </div>
         <div className="field">
           <label>Número</label>
-          <input
-            className="input mono"
-            value={d.nro_documento}
-            onChange={(ev) => set("nro_documento", ev.target.value)}
-            disabled={d.tipo_documento === "SD"}
-            placeholder={d.tipo_documento === "CUIT" ? "30-12345678-0" : ""}
-          />
+          <div className="input-con-boton">
+            <input
+              className="input mono"
+              value={d.nro_documento}
+              onChange={(ev) => set("nro_documento", ev.target.value)}
+              disabled={d.tipo_documento === "SD"}
+              placeholder={d.tipo_documento === "CUIT" ? "30-12345678-0" : ""}
+            />
+            {(d.tipo_documento === "CUIT" || d.tipo_documento === "CUIL") && (
+              <button
+                type="button"
+                className="mini-btn"
+                onClick={traerPadron}
+                disabled={!puedePadron || padronCargando}
+                title="Traer razón social, condición IVA y domicilio del padrón ARCA"
+              >
+                {padronCargando ? "…" : "ARCA"}
+              </button>
+            )}
+          </div>
           {errorDoc && <span className="neg">{errorDoc}</span>}
+          {padronMsg && <span className="hint-mono">{padronMsg}</span>}
         </div>
         <div className="field">
           <label>Condición IVA</label>
@@ -186,12 +271,37 @@ export default function EntidadFields({
         </div>
       </div>
       <div className="field">
-        <label>Domicilio</label>
-        <input
-          className="input"
-          value={d.domicilio}
-          onChange={(ev) => set("domicilio", ev.target.value)}
-        />
+        <div className="label-fila">
+          <label>Domicilio</label>
+          <button type="button" className="mini-btn-plano" onClick={() => setManual((m) => !m)}>
+            {manual ? "buscar con mapa (OSM)" : "cargar a mano"}
+          </button>
+        </div>
+        {manual ? (
+          <input
+            className="input"
+            value={d.domicilio}
+            onChange={(ev) => set("domicilio", ev.target.value)}
+            placeholder="Calle y altura"
+          />
+        ) : (
+          <>
+            <AddressSearch onElegir={elegirDireccion} />
+            {d.domicilio && (
+              <div className="dir-normalizada">
+                <span>{d.domicilio}</span>
+                {desdeOsm && (
+                  <span className="hint-mono">
+                    {Number(d.latitud).toFixed(5)}, {Number(d.longitud).toFixed(5)}
+                    <button type="button" className="mini-btn-plano" onClick={quitarPin}>
+                      quitar
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
       <div className="fila-3">
         <div className="field">
@@ -199,6 +309,7 @@ export default function EntidadFields({
           <input
             className="input"
             value={d.localidad}
+            readOnly={!manual}
             onChange={(ev) => set("localidad", ev.target.value)}
           />
         </div>
@@ -207,6 +318,7 @@ export default function EntidadFields({
           <select
             className="select"
             value={d.provincia_id}
+            disabled={!manual}
             onChange={(ev) => set("provincia_id", ev.target.value)}
           >
             <option value="">—</option>

@@ -3,7 +3,7 @@
 // registrar (stock + costos + cta. cte.) → anulable mientras no tenga pagos.
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
+import { ApiError, apiDelete, apiDescargar, apiGet, apiPost } from "../../lib/api";
 import type { Compra } from "../../lib/types";
 import { AlertError, AlertOk } from "../../components/Alertas";
 import ChipEstado from "../../components/ChipEstado";
@@ -82,6 +82,20 @@ export default function ComprasPage() {
   useEffect(() => {
     if (tab === "comprobantes") void cargar();
   }, [cargar, tab]);
+
+  async function exportarCsv() {
+    const params = new URLSearchParams();
+    if (clase) params.set("clase", clase);
+    if (estado) params.set("estado", estado);
+    if (q) params.set("q", q);
+    if (desde) params.set("desde", desde);
+    if (hasta) params.set("hasta", hasta);
+    try {
+      await apiDescargar(`/compras/comprobantes/export.csv?${params}`, "compras.csv");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo exportar");
+    }
+  }
 
   async function accion(fn: () => Promise<void>) {
     setOcupado(true);
@@ -206,6 +220,9 @@ export default function ComprasPage() {
               <option value="anulado">Anulados</option>
             </select>
             <div style={{ flex: 1 }} />
+            <button className="btn btn-ghost" onClick={() => void exportarCsv()}>
+              Exportar CSV
+            </button>
             <button className="btn btn-primary" onClick={() => setFormAbierto(true)}>
               + Nueva compra
             </button>

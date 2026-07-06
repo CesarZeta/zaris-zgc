@@ -4,6 +4,7 @@ import { tienePermiso } from "../../lib/auth";
 import type { Empresa, Rubro } from "../../lib/types";
 import CajasSection from "../pos/CajasSection";
 import ArcaConfigSection from "../ventas/ArcaConfigSection";
+import SucursalesSection from "./SucursalesSection";
 import UsuariosSection from "./UsuariosSection";
 
 const DETALLE: Record<string, string> = {
@@ -92,6 +93,8 @@ export default function ConfiguracionPage() {
           ))}
         </div>
       </div>
+
+      <SucursalesSection />
 
       <UsuariosSection />
 

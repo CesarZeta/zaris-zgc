@@ -6,6 +6,7 @@ atributos sugeridos (idempotente) para que la carga de variantes arranque lista.
 """
 
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -76,11 +77,24 @@ class EmpresaOut(BaseModel):
     razon_social: str
     nombre_fantasia: str | None
     rubro: str
+    geo_centro_lat: Decimal | None = None
+    geo_centro_lon: Decimal | None = None
+    geo_delta_grados: Decimal | None = None
     model_config = {"from_attributes": True}
 
 
 class RubroIn(BaseModel):
     rubro: str
+
+
+class GeoSesgoIn(BaseModel):
+    """Sesgo geográfico opcional para el buscador de domicilios (Fase 7):
+    prioriza la zona del comercio SIN excluir el resto del país. Los tres
+    campos en NULL = sin sesgo."""
+
+    geo_centro_lat: Decimal | None = None
+    geo_centro_lon: Decimal | None = None
+    geo_delta_grados: Decimal | None = None
 
 
 @router.get("", response_model=EmpresaOut)
@@ -97,6 +111,34 @@ async def listar_rubros():
         {"codigo": codigo, **{k: v for k, v in preset.items() if k != "atributos_sugeridos"}}
         for codigo, preset in RUBROS.items()
     ]
+
+
+@router.put("/geo", response_model=EmpresaOut)
+async def configurar_geo(
+    body: GeoSesgoIn,
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
+    db: AsyncSession = Depends(get_db),
+):
+    tiene_lat = body.geo_centro_lat is not None
+    tiene_lon = body.geo_centro_lon is not None
+    if tiene_lat != tiene_lon:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Centro geográfico incompleto: lat y lon van juntos (o ambos vacíos)",
+        )
+    if tiene_lat and not (-90 <= body.geo_centro_lat <= 90 and -180 <= body.geo_centro_lon <= 180):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Coordenadas fuera de rango")
+    if body.geo_delta_grados is not None and not (0 < body.geo_delta_grados <= 5):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Delta en grados: mayor a 0 y hasta 5 (≈500 km)",
+        )
+    tenant = await db.get(Tenant, usuario.tenant_id)
+    tenant.geo_centro_lat = body.geo_centro_lat
+    tenant.geo_centro_lon = body.geo_centro_lon
+    tenant.geo_delta_grados = body.geo_delta_grados
+    await db.commit()
+    return EmpresaOut.model_validate(tenant)
 
 
 @router.put("/rubro", response_model=EmpresaOut)

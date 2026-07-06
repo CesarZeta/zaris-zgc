@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
+from app.core.csv_export import csv_response, num
 from app.core.db import get_db
 from app.core.permisos import requiere
 from app.models import (
@@ -486,6 +487,22 @@ async def crear_compra(
     return _out(await _cargar(db, usuario.tenant_id, compra.id))
 
 
+def _filtro_compras(stmt, q, clase, estado, proveedor_id, desde, hasta, con_saldo):
+    if clase:
+        stmt = stmt.join(TipoComprobanteCompra).where(TipoComprobanteCompra.clase == clase)
+    if estado:
+        stmt = stmt.where(Compra.estado == estado)
+    if proveedor_id:
+        stmt = stmt.where(Compra.proveedor_id == proveedor_id)
+    if desde:
+        stmt = stmt.where(Compra.fecha >= desde)
+    if hasta:
+        stmt = stmt.where(Compra.fecha <= hasta)
+    if con_saldo:
+        stmt = stmt.where(Compra.saldo != 0)
+    return _aplicar_busqueda(stmt, q)
+
+
 @router.get("/comprobantes", response_model=list[CompraListaOut])
 async def listar_compras(
     response: Response,
@@ -501,20 +518,10 @@ async def listar_compras(
     usuario: Usuario = Depends(requiere("compras", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Compra).where(Compra.tenant_id == usuario.tenant_id)
-    if clase:
-        stmt = stmt.join(TipoComprobanteCompra).where(TipoComprobanteCompra.clase == clase)
-    if estado:
-        stmt = stmt.where(Compra.estado == estado)
-    if proveedor_id:
-        stmt = stmt.where(Compra.proveedor_id == proveedor_id)
-    if desde:
-        stmt = stmt.where(Compra.fecha >= desde)
-    if hasta:
-        stmt = stmt.where(Compra.fecha <= hasta)
-    if con_saldo:
-        stmt = stmt.where(Compra.saldo != 0)
-    stmt = _aplicar_busqueda(stmt, q)
+    stmt = _filtro_compras(
+        select(Compra).where(Compra.tenant_id == usuario.tenant_id),
+        q, clase, estado, proveedor_id, desde, hasta, con_saldo,
+    )
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     response.headers["X-Total-Count"] = str(total or 0)
     filas = await db.scalars(
@@ -525,6 +532,50 @@ async def listar_compras(
         .offset(offset)
     )
     return [_out_lista(c) for c in filas]
+
+
+@router.get("/comprobantes/export.csv")
+async def exportar_compras_csv(
+    q: str = "",
+    clase: str | None = None,
+    estado: str | None = None,
+    proveedor_id: uuid.UUID | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    con_saldo: bool = False,
+    usuario: Usuario = Depends(requiere("compras", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export universal (Fase 7): las compras del filtro actual a CSV es-AR
+    (tope 5000 filas)."""
+    stmt = _filtro_compras(
+        select(Compra).where(Compra.tenant_id == usuario.tenant_id),
+        q, clase, estado, proveedor_id, desde, hasta, con_saldo,
+    )
+    filas = await db.scalars(
+        stmt.options(noload(Compra.items), noload(Compra.vencimientos))
+        .order_by(Compra.fecha.desc(), Compra.created_at.desc())
+        .limit(5000)
+    )
+    encabezado = [
+        "Fecha", "Comprobante", "Proveedor", "CUIT", "Cond. IVA",
+        "Neto gravado", "No gravado", "Exento", "IVA", "Percepciones",
+        "Total", "Saldo", "Estado",
+    ]
+    rows = []
+    for c in filas:
+        o = _out_lista(c)
+        percep = o.percepcion_iva + o.percepcion_iibb
+        rows.append([
+            o.fecha.strftime("%d/%m/%Y"),
+            o.numero_formateado,
+            o.proveedor_nombre,
+            o.proveedor_cuit or "",
+            o.proveedor_condicion_iva,
+            num(o.neto_gravado), num(o.no_gravado), num(o.exento), num(o.iva),
+            num(percep), num(o.total), num(o.saldo), o.estado,
+        ])
+    return csv_response("compras.csv", encabezado, rows)
 
 
 @router.get("/comprobantes/{compra_id}", response_model=CompraOut)

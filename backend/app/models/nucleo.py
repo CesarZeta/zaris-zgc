@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, SmallInteger, String, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, SmallInteger, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +26,11 @@ class Tenant(Base):
     provincia: Mapped[str | None] = mapped_column(String(40))
     codigo_postal: Mapped[str | None] = mapped_column(String(10))
     rubro: Mapped[str] = mapped_column(String(30), default="general")
+    # Sesgo geográfico opcional para el proxy Nominatim (viewbox SIN bounded=1).
+    # NULL = sin sesgo: resultados de todo el país.
+    geo_centro_lat: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
+    geo_centro_lon: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
+    geo_delta_grados: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -40,6 +46,10 @@ class Sucursal(Base):
     nombre: Mapped[str] = mapped_column(String(60))
     domicilio: Mapped[str | None] = mapped_column(String(120))
     localidad: Mapped[str | None] = mapped_column(String(60))
+    provincia_id: Mapped[int | None] = mapped_column(ForeignKey("provincias.codigo_arca"))
+    codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    latitud: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
+    longitud: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
     telefono: Mapped[str | None] = mapped_column(String(40))
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

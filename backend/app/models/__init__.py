@@ -18,6 +18,7 @@ from app.models.bue import (
     CondicionVenta,
     Entidad,
     EntidadContacto,
+    EntidadDomicilio,
     Provincia,
     Zona,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "RolPermiso",
     "Entidad",
     "EntidadContacto",
+    "EntidadDomicilio",
     "Provincia",
     "Zona",
     "CondicionVenta",

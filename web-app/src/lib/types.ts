@@ -63,6 +63,8 @@ export interface Entidad {
   localidad: string | null;
   provincia_id: number | null;
   codigo_postal: string | null;
+  latitud: number | null;
+  longitud: number | null;
   observaciones: string | null;
   activo: boolean;
 }
@@ -686,6 +688,19 @@ export const MEDIOS_PAGO: Record<string, string> = {
 };
 
 // ===== POS Mostrador (Fase 6) =====
+
+export interface Sucursal {
+  id: string;
+  nombre: string;
+  domicilio: string | null;
+  localidad: string | null;
+  provincia_id: number | null;
+  codigo_postal: string | null;
+  latitud: number | null;
+  longitud: number | null;
+  telefono: string | null;
+  activa: boolean;
+}
 
 export interface PosCaja {
   id: string;

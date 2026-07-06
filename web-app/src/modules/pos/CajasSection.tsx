@@ -4,11 +4,12 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPatch, apiPost } from "../../lib/api";
-import type { Deposito, PosCaja, PuntoVenta } from "../../lib/types";
+import type { Deposito, PosCaja, PuntoVenta, Sucursal } from "../../lib/types";
 
 interface Form {
   id: string | null;
   nombre: string;
+  sucursal_id: string;
   punto_venta_id: string;
   deposito_id: string;
   lista_precios: number;
@@ -18,6 +19,7 @@ interface Form {
 const VACIO: Form = {
   id: null,
   nombre: "",
+  sucursal_id: "",
   punto_venta_id: "",
   deposito_id: "",
   lista_precios: 1,
@@ -28,19 +30,22 @@ export default function CajasSection() {
   const [cajas, setCajas] = useState<PosCaja[]>([]);
   const [pvs, setPvs] = useState<PuntoVenta[]>([]);
   const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [form, setForm] = useState<Form | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   async function cargar() {
-    const [c, p, d] = await Promise.all([
+    const [c, p, d, s] = await Promise.all([
       apiGet<PosCaja[]>("/pos/cajas?incluir_inactivas=true"),
       apiGet<PuntoVenta[]>("/ventas/puntos-venta"),
       apiGet<Deposito[]>("/catalogos-articulos/depositos"),
+      apiGet<Sucursal[]>("/sucursales"),
     ]);
     setCajas(c.data);
     setPvs(p.data.filter((x) => x.activo));
     setDepositos(d.data.filter((x) => x.activo));
+    setSucursales(s.data);
   }
 
   useEffect(() => {
@@ -53,6 +58,7 @@ export default function CajasSection() {
     setError(null);
     const body = {
       nombre: form.nombre.trim(),
+      sucursal_id: form.sucursal_id || null,
       punto_venta_id: form.punto_venta_id,
       deposito_id: form.deposito_id || null,
       lista_precios: form.lista_precios,
@@ -89,6 +95,7 @@ export default function CajasSection() {
           <thead>
             <tr>
               <th>Caja</th>
+              <th>Sucursal</th>
               <th>Punto de venta</th>
               <th>Depósito</th>
               <th className="num">Lista</th>
@@ -104,6 +111,7 @@ export default function CajasSection() {
                   <b>{c.nombre}</b>
                   {c.sesion_abierta && <span className="chip chip-ok"> en uso</span>}
                 </td>
+                <td>{sucursales.find((s) => s.id === c.sucursal_id)?.nombre ?? "—"}</td>
                 <td className="mono">{String(c.punto_venta_numero).padStart(4, "0")}</td>
                 <td>{depositos.find((d) => d.id === c.deposito_id)?.nombre ?? "—"}</td>
                 <td className="num">{c.lista_precios}</td>
@@ -116,6 +124,7 @@ export default function CajasSection() {
                       setForm({
                         id: c.id,
                         nombre: c.nombre,
+                        sucursal_id: c.sucursal_id ?? "",
                         punto_venta_id: c.punto_venta_id,
                         deposito_id: c.deposito_id ?? "",
                         lista_precios: c.lista_precios,
@@ -133,7 +142,7 @@ export default function CajasSection() {
             ))}
             {cajas.length === 0 && (
               <tr>
-                <td colSpan={7}>Sin cajas todavía.</td>
+                <td colSpan={8}>Sin cajas todavía.</td>
               </tr>
             )}
           </tbody>
@@ -148,6 +157,18 @@ export default function CajasSection() {
             value={form.nombre}
             onChange={(e) => setForm({ ...form, nombre: e.target.value })}
           />
+          <select
+            className="input"
+            value={form.sucursal_id}
+            onChange={(e) => setForm({ ...form, sucursal_id: e.target.value })}
+          >
+            <option value="">Sucursal (opcional)</option>
+            {sucursales.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nombre}
+              </option>
+            ))}
+          </select>
           <select
             className="input"
             value={form.punto_venta_id}

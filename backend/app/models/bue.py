@@ -48,7 +48,34 @@ class Entidad(Base):
     localidad: Mapped[str | None] = mapped_column(String(60))
     provincia_id: Mapped[int | None] = mapped_column(ForeignKey("provincias.codigo_arca"))
     codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    latitud: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
+    longitud: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
     observaciones: Mapped[str | None] = mapped_column(Text)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EntidadDomicilio(Base):
+    """Domicilios múltiples de una entidad (migración 012). El domicilio plano
+    de `entidades` sigue siendo el fiscal/principal; las entregas usan esto."""
+
+    __tablename__ = "entidad_domicilios"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    entidad_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("entidades.id", ondelete="CASCADE"))
+    tipo: Mapped[str] = mapped_column(String(10), default="entrega")
+    etiqueta: Mapped[str | None] = mapped_column(String(60))
+    domicilio: Mapped[str | None] = mapped_column(String(120))
+    localidad: Mapped[str | None] = mapped_column(String(60))
+    provincia_id: Mapped[int | None] = mapped_column(ForeignKey("provincias.codigo_arca"))
+    codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    latitud: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
+    longitud: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))
+    predeterminado: Mapped[bool] = mapped_column(Boolean, default=False)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
