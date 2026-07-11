@@ -219,6 +219,8 @@ export interface Empresa {
   razon_social: string;
   nombre_fantasia: string | null;
   rubro: string;
+  /** Plan comercial (F12-a): "suite" | "pos". Read-only — lo administra ZARIS. */
+  plan: string;
 }
 
 export interface Rubro {

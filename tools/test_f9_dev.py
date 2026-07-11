@@ -188,9 +188,14 @@ def main():
     check("asientos listados", st == 200 and len(asientos) >= 8, f"{st} n={len(asientos)}")
     check("TODOS los asientos balancean", all(balanceado(a) for a in asientos),
           [a["descripcion"] for a in asientos if not balanceado(a)][:3])
-    origenes_derivados = {a["origen_tipo"] for a in asientos}
+    # El día es compartido entre corridas y suites: la ventana puede superar el
+    # limit del listado (mordió con 351 asientos > limit=200 tras la batería de
+    # regresión de F12-a). La presencia de cada origen se consulta con su filtro.
     for esperado in ("venta", "recibo", "compra", "orden_pago", "caja_mov", "retencion", "stock_ajuste"):
-        check(f"derivó origen {esperado}", esperado in origenes_derivados, origenes_derivados)
+        st, del_origen = _req(
+            "GET", base,
+            f"/contabilidad/asientos?desde={ayer}&hasta={hoy}&limit=1&origen={esperado}", tok)
+        check(f"derivó origen {esperado}", st == 200 and len(del_origen) >= 1, f"{st}")
 
     # la venta contado derivó CMV (línea a la cuenta 5.1.01)
     venta_asientos = [a for a in asientos if a["origen_tipo"] == "venta"]

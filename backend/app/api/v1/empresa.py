@@ -69,6 +69,22 @@ RUBROS: dict[str, dict] = {
         "en_dolares_destacado": False,
         "atributos_sugeridos": {"Gusto": [], "Presentación": []},
     },
+    # F12-a (DISENO-POS-PERFILES.md §2 y §3): rubros de los perfiles de POS.
+    # Carnicería usa los flags de súper (pesables) — el despiece llega en F12-c.
+    "carniceria": {
+        "nombre": "Carnicería",
+        "flags_pos_super": True,
+        "variantes_destacadas": False,
+        "en_dolares_destacado": False,
+        "atributos_sugeridos": {},
+    },
+    "restaurante": {
+        "nombre": "Restaurante / gastronomía",
+        "flags_pos_super": False,
+        "variantes_destacadas": False,
+        "en_dolares_destacado": False,
+        "atributos_sugeridos": {},
+    },
 }
 
 
@@ -77,6 +93,8 @@ class EmpresaOut(BaseModel):
     razon_social: str
     nombre_fantasia: str | None
     rubro: str
+    # Plan comercial (F12-a): read-only para la UI — lo administra ZARIS.
+    plan: str = "suite"
     geo_centro_lat: Decimal | None = None
     geo_centro_lon: Decimal | None = None
     geo_delta_grados: Decimal | None = None

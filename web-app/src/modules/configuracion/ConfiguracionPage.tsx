@@ -14,6 +14,18 @@ const DETALLE: Record<string, string> = {
   electronica: "Variantes destacadas y precios en USD; siembra Color y Capacidad.",
   ferreteria_repuestos: "Precios en USD destacados; siembra el atributo Medida.",
   distribuidora: "Orientado a mayorista; siembra Gusto y Presentación.",
+  carniceria: "Cortes pesables como un súper; el despiece de media res llega con F12-c.",
+  restaurante: "Cajas con perfil resto (mesas y comandas) cuando llegue F12-d.",
+};
+
+const PLAN_NOMBRE: Record<string, string> = {
+  suite: "Suite completa",
+  pos: "POS (punto de venta)",
+};
+
+const PLAN_DETALLE: Record<string, string> = {
+  suite: "Todos los módulos de gestión habilitados.",
+  pos: "Licencia de punto de venta: POS, artículos y stock, clientes, ventas, caja, libros de IVA y configuración. Los demás módulos se habilitan pasando a la suite completa.",
 };
 
 export default function ConfiguracionPage() {
@@ -71,6 +83,15 @@ export default function ConfiguracionPage() {
 
       {error && <div className="login-error">{error}</div>}
       {mensaje && <div className="import-resultado">{mensaje}</div>}
+
+      <div className="config-card">
+        <div className="seccion">Plan contratado</div>
+        <p className="config-ayuda">
+          <strong>{PLAN_NOMBRE[empresa.plan] ?? empresa.plan}</strong> —{" "}
+          {PLAN_DETALLE[empresa.plan] ?? "Plan administrado por ZARIS."} El plan lo administra
+          ZARIS; para cambiarlo, contactanos.
+        </p>
+      </div>
 
       <div className="config-card">
         <div className="seccion">Rubro del comercio</div>

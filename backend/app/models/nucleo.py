@@ -26,6 +26,10 @@ class Tenant(Base):
     provincia: Mapped[str | None] = mapped_column(String(40))
     codigo_postal: Mapped[str | None] = mapped_column(String(10))
     rubro: Mapped[str] = mapped_column(String(30), default="general")
+    # Plan comercial (F12-a, POS standalone): 'suite' = todos los módulos;
+    # 'pos' = licencia solo-POS (catálogo PLANES en core/permisos.py). Lo fija
+    # ZARIS al vender (v1 por script/SQL); la UI lo muestra read-only.
+    plan: Mapped[str] = mapped_column(String(20), default="suite")
     # Sesgo geográfico opcional para el proxy Nominatim (viewbox SIN bounded=1).
     # NULL = sin sesgo: resultados de todo el país.
     geo_centro_lat: Mapped[Decimal | None] = mapped_column(Numeric(10, 7))

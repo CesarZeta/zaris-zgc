@@ -610,6 +610,48 @@ VIAJANTE.DBF + CVIAJ en clientes/ventas/recibos + GV0040 regenerable).
   defaultea al habitual), escalas de comisión por familia/artículo (el legacy
   tampoco las tenía).
 
+## FASE 12 — POS por perfiles + POS standalone 🔶 (en diseño/ejecución desde 2026-07-11)
+
+**Entregable: el POS se vende como licencia independiente (kiosco, carnicería, resto)
+sobre la misma nube — el tenant POS-only lleva stock, facturación, clientes y listados
+sin ver el resto de la suite — y los perfiles de rubro completan el POS (pesables,
+despiece, salones/mesas/comandas).** Diseño en `docs/DISENO-POS-PERFILES.md` (§7 =
+standalone, mandato César 2026-07-11: "el punto de venta puede ser un módulo que puede
+ser implementado de manera independiente... sin una instalación on-premise").
+Gate levantado por César 2026-07-11. Súper NO se vende standalone (siempre suite).
+
+- [x] **F12-a — Plan por tenant (packaging POS standalone)** ✅ 2026-07-11: migración
+  018 (`tenants.plan` `suite` default | `pos` + rubros `carniceria`/`restaurante` al
+  CHECK), catálogo `PLANES` espejo en `permisos.py`, intersección plan∩rol en
+  `permisos_efectivos()` (el nav del front se recortó solo, cero cambios de gating en
+  el front) y chequeo de plan ANTES que rol en `requiere()`/`requiere_alguno()` (403
+  "Módulo no incluido en el plan", nunca 401). Plan `pos` = pos + articulos + stock +
+  clientes + ventas + caja + libros_iva + configuracion (incluye el gestor de
+  usuarios/roles de F6.5 — el tenant POS-only administra su propia autenticación;
+  `GET /permisos/catalogo` filtrado por plan para que la matriz de roles no muestre
+  módulos ajenos). `tools/setup_tenant.py` (onboarding asistido: `--plan --rubro`,
+  idempotente, crea hasta la caja POS default). Plan read-only en Configuración +
+  presets de los 2 rubros nuevos. Verificado 2026-07-11: **36/36 pruebas en vivo**
+  (`tools/test_f12a_dev.py`, tenant efímero con cleanup) + regresiones F11 35/35 ·
+  F9-bis 50/50 · F9 39/39 · 014 53/53 · F8 31/31 + build TS + E2E navegador (nav
+  recortado, card de plan, 8 rubros). Lección: el check de orígenes de la suite F9
+  asertaba sobre una página `limit=200` de un día compartido (351 asientos) —
+  robustecido a consulta por filtro `origen`.
+  **Entrega: licencia POS kiosco/almacén vendible** (el POS de F6 ya la cubre).
+- [ ] **F12-b — Perfil súper/estándar completo**: pesables por etiqueta de balanza
+  (EAN prefijo 20–29, config por tenant peso/importe, `articulos.codigo_balanza`,
+  parsing server-side en `GET /pos/buscar`), envases retornables, venta por
+  departamento.
+- [ ] **F12-c — Despiece / transformación de stock** (gestión, no POS): tipo de
+  movimiento `transformacion` (grupo_id como interdepósito), merma explícita,
+  plantillas con % rendimiento + coeficiente de valor, costeo proporcional al valor,
+  pantalla "Ingreso de media res". **Entrega: licencia POS carnicería.**
+- [ ] **F12-d — POS Resto**: `pos_salones`/`pos_mesas`/`pos_comandas` (+items),
+  grilla de mesas, mozos (rol), comandas a cocina por impresora, mover/unir/dividir,
+  propina %, cierre de mesa → cobro POS → `emitir_core`. Delivery con domicilio OSM.
+  Nada de esto llega a la gestión salvo la venta final (mandato). **Entrega:
+  licencia POS resto.** El más grande — validar contra piloto real.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -626,7 +668,7 @@ VIAJANTE.DBF + CVIAJ en clientes/ventas/recibos + GV0040 regenerable).
 | 9 ✅ | **Contabilidad** (módulo activable) | **v1 EN PRODUCCIÓN 2026-07-11** (sección FASE 9 arriba): motor derivado regenerable + plan argentino + mapeos + diario/mayor/sumas y saldos + períodos + asiento manual + CSV. **F9-bis completada 2026-07-11** (sección propia arriba): bienes de uso + amortizaciones derivadas, balance general, apertura asistida, export contador ZIP, apareo de transferencias | Gate levantado por César 2026-07-11 (la mini-fase Contabilizabilidad ya estaba en prod) |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 ✅ | Vendedores y comisiones | **HECHA 2026-07-11** (sección propia arriba): rol BUE + sellado en ventas/cobranzas + liquidación por venta / por cobranza como documento contabilizable | — |
-| 12 | **POS por perfiles** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | Demanda ex clientes RevoSolution; por perfil: ≥1 piloto del rubro. Balanza y despiece son **adelantables sueltos** (el despiece es stock puro, no depende del POS) |
+| 12 🔶 | **POS por perfiles + POS standalone** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`, ampliado 2026-07-11 con §7: **el POS se vende como módulo independiente** (plan por tenant, sin on-premise) para kiosco/carnicería/resto — súper siempre suite. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | **Gate levantado por César 2026-07-11** ("podemos seguir por el POS", con el mandato standalone). Orden: F12-a → F12-d (ver sección FASE 12) |
 | 12-bis | Logística de entregas | Rol transportista (BUE), `entregas` por remito/factura con domicilio snapshot + estados (pendiente→en reparto→entregada/rechazada), **hojas de ruta** imprimibles, rendición del reparto, mapa opcional. Diseño en `DISENO-LOGISTICA-Y-DOMICILIOS.md` §2. Crecimiento hacia adentro (operativiza el remito que ya existe) | Requiere domicilios OSM (F7). Activación: primer cliente que reparte (distribuidora/mayorista/corralón) |
 | 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |
 | 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |

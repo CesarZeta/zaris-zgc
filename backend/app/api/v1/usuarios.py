@@ -23,6 +23,8 @@ from app.core.permisos import (
     ACCIONES,
     MODULOS,
     invalidar_cache_permisos,
+    modulos_del_plan,
+    plan_del_tenant,
     requiere,
     sembrar_roles_base,
 )
@@ -144,9 +146,15 @@ async def _verificar_no_lockout(db: AsyncSession, tenant_id: uuid.UUID) -> None:
 
 
 @router.get("/permisos/catalogo")
-async def catalogo_permisos(usuario: Usuario = Depends(requiere("configuracion", "ver"))):
+async def catalogo_permisos(
+    usuario: Usuario = Depends(requiere("configuracion", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    # F12-a: la matriz de roles solo muestra los módulos del plan del tenant —
+    # un POS-only no ve filas de Compras/Bancos/Contabilidad que no puede usar.
+    del_plan = modulos_del_plan(await plan_del_tenant(db, usuario.tenant_id))
     return {
-        "modulos": [{"codigo": c, "nombre": n} for c, n in MODULOS.items()],
+        "modulos": [{"codigo": c, "nombre": n} for c, n in MODULOS.items() if c in del_plan],
         "acciones": list(ACCIONES),
     }
 

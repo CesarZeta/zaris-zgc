@@ -6,9 +6,13 @@
 > por corte) — y pertenecer a una sucursal. Extiende `DISENO-RUBROS-Y-VARIANTES.md`
 > §4.1 ("el rubro decide qué POS se sirve a las cajas").
 >
-> **Estado: DISEÑO** — nada de esto está implementado. El orden recomendado está en §6
-> y en el ROADMAP (F12 + lote técnico). Relevamiento del estado real hecho el
-> 2026-07-05 contra código, esquema y legacy.
+> Mandato de César (2026-07-11): el POS además debe poder **venderse como módulo
+> independiente** (licencia POS-only para kiosco, carnicería, resto — súper no),
+> sin instalación on-premise. Diseño en §7; reordena el plan de ejecución (§6-bis).
+>
+> **Estado: DISEÑO** — nada de esto está implementado (el ABM de sucursales de §4 se
+> hizo en F7). El orden vigente está en §6-bis y en el ROADMAP (F12). Relevamiento del
+> estado real hecho el 2026-07-05 y re-verificado el 2026-07-11 contra código y esquema.
 
 ## 0. Principios
 
@@ -200,12 +204,110 @@ El maestro de artículos y variantes, el circuito borrador→emitir→NC espejo,
 numeración fiscal, la cta. cte., la caja/planilla y el arqueo por sesión: todos los
 perfiles se montan sobre lo existente.
 
-## 6. Orden recomendado (propuesta 2026-07-05, César decide)
+## 6. Orden recomendado (propuesta 2026-07-05 — superada por §6-bis)
 
 | Pieza | Cuándo | Por qué |
 |---|---|---|
-| ABM sucursales + sucursal en caja | **F7** (post-MVP inmediato) | La tabla ya existe; esfuerzo bajo; ordena multi-caja ya |
+| ABM sucursales + sucursal en caja | **F7** (post-MVP inmediato) — ✅ hecho en F7 | La tabla ya existe; esfuerzo bajo; ordena multi-caja ya |
 | Pesables por balanza (§1) | F12 — **adelantable** apenas haya piloto súper o carnicería | Es EL hardware de ambos rubros; el resto del perfil súper puede esperar |
 | Despiece carnicería (§2) | F12 — **adelantable solo**, no depende del POS | Es stock puro de gestión; junto con pesables habilita el rubro completo |
 | Envases + venta por depto. | F12 | Demanda ex clientes RevoSolution |
 | POS Resto (§3) | F12, al final — el más grande (UI nueva completa + tablas nuevas) | Mercado nuevo para ZGC: validar con un piloto real antes de construir |
+
+## 7. POS como módulo independiente — plan por tenant (mandato 2026-07-11)
+
+> Mandato de César: el POS debe poder implementarse **de manera independiente del resto
+> de la suite** — vender una licencia de solo-POS a un kiosco, una carnicería o un
+> restaurante, donde el usuario lleve mínimamente **stock, facturación, clientes y
+> listados de ventas**. Sin instalación on-premise. Para supermercado NO aplica
+> (siempre suite completa).
+
+### 7.1 Hallazgo de diseño: es packaging, no fork
+
+"Independiente" NO significa otra app, otro backend ni otro deploy. El mismo SaaS
+multi-tenant sirve a los tenants POS-only; la independencia es **comercial y de UX**,
+implementada como un **plan por tenant** que acota qué módulos existen para ese tenant.
+Consecuencias directas:
+
+- **Cero bifurcación** de código o modelo de datos (regla §1-ter del CLAUDE.md).
+- **Upgrade a suite = cambiar el plan**: los datos ya están en las mismas tablas; el
+  kiosco que crece "desbloquea" Compras/Bancos/Contabilidad sin migrar nada.
+- Todo lo que el plan POS incluye **ya está construido** (F1–F6): el costo de F12-a es
+  el mecanismo de gating + onboarding, no features.
+- **NO es el nodo LAN** (CLAUDE.md §3): el mandato dice explícitamente "sin instalación
+  on-premise". El tenant POS-only opera online contra la nube; facturar sin internet
+  sigue siendo la fase del nodo de sucursal (F13), ortogonal a esto.
+
+### 7.2 Mecanismo: `tenants.plan` + intersección con el RBAC existente
+
+- **Migración**: `tenants.plan varchar(20) not null default 'suite'`
+  `check (plan in ('suite','pos'))`. Aditiva e idempotente; los tenants existentes
+  quedan `suite` sin tocarlos.
+- **Catálogo** `PLANES: dict[str, set[str]]` en `app/core/permisos.py`, junto a
+  `MODULOS` (misma regla de mantenimiento: es EL espejo; `suite` = todos los módulos).
+- **`permisos_efectivos()` interseca con los módulos del plan** antes de devolver.
+  Como el login ya devuelve `permisos` top-level y el nav del front ya se filtra por
+  ese mapa (F6.5), **el frontend se recorta solo, sin cambios** para el gating del menú.
+  Cubre también `rol_id NULL` (acceso total = todos los módulos DEL PLAN, no del sistema).
+- **`requiere()`/`requiere_alguno()` chequean plan ANTES que rol**: módulo fuera del
+  plan → **403** "módulo no incluido en el plan" (nunca 401, regla §6). Con esto los
+  ~130 endpoints existentes quedan guardados sin tocarlos uno por uno.
+- **Quién fija el plan**: ZARIS al vender (v1 por script/SQL — no hay billing).
+  En Configuración → Empresa se muestra read-only ("Plan: POS" / "Plan: Suite completa").
+- Los KPIs del inicio ya devuelven `null` por módulo sin permiso (F7) → el dashboard
+  se adapta solo al plan.
+- **Autenticación y usuarios incluidos** (precisión de César 2026-07-11): el plan POS
+  trae el módulo `configuracion`, que ES el gestor de usuarios y roles de F6.5 — login
+  JWT, ABM de usuarios, roles con niveles Ver/Editar/Anular por módulo, anti-lockout,
+  más el `nivel_acceso` de supervisor del POS. El tenant POS-only administra su propia
+  seguridad con la MISMA granularidad que la suite, solo que sobre sus módulos:
+  `GET /permisos/catalogo` se filtra por plan, así la matriz del editor de roles no
+  muestra filas de módulos que el tenant no tiene (los roles base sembrados pueden
+  tener permisos de módulos fuera del plan: son inertes por la intersección y quedan
+  listos para el upgrade).
+
+### 7.3 Matriz del plan `pos` (recomendación, César ajusta)
+
+| Módulo | ¿Incluido? | Por qué |
+|---|:-:|---|
+| `pos` | ✔ | El producto. |
+| `articulos` | ✔ | Catálogo, precios, variantes — "llevar stock" lo exige. |
+| `stock` | ✔ | Kardex, ajustes; con rubro carnicería trae el despiece (§2). |
+| `clientes` | ✔ | BUE + cta. cte. — "clientes" del mandato. |
+| `ventas` | ✔ | Listados/detalle/export CSV, cobranzas, cta. cte. Ya construido; costo cero. |
+| `caja` | ✔ | Planilla del día + salidas manuales: sin Compras, es la única vía de registrar los gastos del kiosco. |
+| `libros_iva` | ✔ | El IVA ventas al contador es argumento de venta (fiscal nativo). El de compras queda vacío y no molesta. |
+| `configuracion` | ✔ | Usuarios/roles, ARCA, PV, cajas POS, empresa. |
+| `proveedores` + `compras` | ✘ | Upsell a suite. |
+| `vendedores` | ✘ | Upsell. |
+| `bancos` | ✘ | Upsell. |
+| `contabilidad` | ✘ | Upsell (ya era módulo activable por diseño de producto). |
+
+### 7.4 Viabilidad standalone por rubro
+
+| Rubro | ¿Standalone? | Qué necesita |
+|---|:-:|---|
+| Kiosco / almacén | ✔ | **Nada nuevo salvo F12-a**: el POS actual (F6) ya cubre escaneo, medios, arqueo. Primera licencia vendible. |
+| Carnicería | ✔ | F12-a + pesables (§1) + despiece (§2). El despiece vive en Stock, que está en el plan. Rubro `carniceria` al CHECK de `tenants.rubro`. |
+| Resto | ✔ | F12-a + perfil resto (§3). Es el MÁS naturalmente standalone: todo lo operativo ya vivía en tablas `pos_*` por mandato. Rubro `restaurante` al CHECK. |
+| Supermercado | ✘ (comercial) | Multi-caja + compras/proveedores/reposición son el corazón del negocio → siempre suite. La arquitectura no lo bloquea; es política de venta. |
+
+### 7.5 Onboarding y ARCA del tenant POS-only
+
+- **Onboarding v1 asistido**: generalizar `tools/demo_setup_tenant.py` a
+  `tools/setup_tenant.py --plan pos --rubro carniceria ...` (tenant + admin + arca_config
+  simulado + PV + depósito + caja POS default, idempotente — la orquestación ya existe).
+  El registro autoservicio (signup público) queda FUERA de F12: pieza propia, gated por
+  demanda real.
+- **ARCA**: el tenant POS-only necesita exactamente lo mismo que cualquiera
+  (`arca_config` por tenant; modo simulado hasta la homologación de fin de proyecto).
+  Kiosco monotributista → factura C; la matriz de letras ya lo resuelve.
+
+### 7.6 §6-bis — Orden de ejecución vigente (F12 en sub-fases)
+
+| Sub-fase | Contenido | Entrega vendible |
+|---|---|---|
+| **F12-a** | Plan por tenant (§7.2) + `setup_tenant.py` + rubros `carniceria`/`restaurante` en el CHECK + plan visible en Configuración | **Licencia POS kiosco/almacén** (el POS F6 ya alcanza) |
+| **F12-b** | Pesables por balanza + envases retornables + venta por depto. (§1) | Perfil súper completo (suite) y base de carnicería |
+| **F12-c** | Despiece / transformación de stock (§2) | **Licencia POS carnicería** |
+| **F12-d** | POS Resto: salones/mesas/mozos/comandas (§3) | **Licencia POS resto** — el más grande, validar con piloto |
