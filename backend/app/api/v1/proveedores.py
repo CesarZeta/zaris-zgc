@@ -16,9 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.clientes import EntidadIn, _validar_entidad
 from app.api.v1.entidades import EntidadOut, aplicar_busqueda
+from app.core.csv_export import csv_response
 from app.core.db import get_db
 from app.core.permisos import requiere
-from app.models import Articulo, ArticuloProveedor, Entidad, Proveedor, Usuario
+from app.models import Articulo, ArticuloProveedor, Entidad, Proveedor, Provincia, Usuario
 
 router = APIRouter(prefix="/proveedores", tags=["proveedores"])
 
@@ -168,6 +169,46 @@ async def listar_proveedores(
     stmt = stmt.order_by(Entidad.razon_social).limit(min(limit, 200)).offset(offset)
     proveedores = (await db.scalars(stmt)).unique().all()
     return [ProveedorOut.model_validate(p) for p in proveedores]
+
+
+# OJO: ruta estática ANTES de /{proveedor_id} (regla §6 del CLAUDE.md)
+@router.get("/export.csv")
+async def exportar_proveedores_csv(
+    q: str = "",
+    incluir_inactivos: bool = False,
+    usuario: Usuario = Depends(requiere("proveedores", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export universal (patrón F7): mismos filtros del listado, tope 5000 filas."""
+    stmt = (
+        select(Proveedor)
+        .join(Entidad, Proveedor.entidad_id == Entidad.id)
+        .where(Proveedor.tenant_id == usuario.tenant_id)
+    )
+    if not incluir_inactivos:
+        stmt = stmt.where(Proveedor.activo)
+    stmt = aplicar_busqueda(stmt, q)
+    proveedores = (
+        (await db.scalars(stmt.order_by(Entidad.razon_social).limit(5000))).unique().all()
+    )
+    provincias = {p.codigo_arca: p.nombre for p in await db.scalars(select(Provincia))}
+    encabezado = [
+        "Código", "Razón social", "Fantasía", "Tipo doc", "Documento", "Cond. IVA",
+        "Domicilio", "Localidad", "Provincia", "CP", "Teléfono", "Email",
+        "Rubro", "Activo",
+    ]
+    rows = []
+    for p in proveedores:
+        e = p.entidad
+        rows.append([
+            p.codigo or "", e.razon_social, e.nombre_fantasia or "",
+            e.tipo_documento, e.nro_documento or "", e.condicion_iva,
+            e.domicilio or "", e.localidad or "",
+            provincias.get(e.provincia_id, "") if e.provincia_id is not None else "",
+            e.codigo_postal or "", e.telefono_1 or "", e.email or "",
+            p.rubro or "", "sí" if p.activo else "no",
+        ])
+    return csv_response("proveedores.csv", encabezado, rows)
 
 
 @router.get("/{proveedor_id}", response_model=ProveedorOut)

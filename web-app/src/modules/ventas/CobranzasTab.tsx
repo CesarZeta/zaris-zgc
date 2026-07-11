@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
-import type { Cliente, Comprobante, PuntoVenta, Recibo } from "../../lib/types";
+import type { Cliente, Comprobante, PuntoVenta, Recibo, Vendedor } from "../../lib/types";
 import { AlertError } from "../../components/Alertas";
 import Buscador from "../../components/Buscador";
 import ChipEstado from "../../components/ChipEstado";
@@ -41,12 +41,22 @@ function ReciboModal({
   >([{ medio: "efectivo", importe: "", referencia: "", cuenta_bancaria_id: "" }]);
   const [imputar, setImputar] = useState<Record<string, string>>({});
   const [obs, setObs] = useState("");
+  const [vendedorId, setVendedorId] = useState("");
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const { confirmar, dialogos } = useDialogos();
   const cuentas = useCuentasBancarias();
 
   useEffect(() => {
+    // sin permiso `vendedores` el select no se muestra (patrón ComprobanteForm)
+    void apiGet<Vendedor[]>("/vendedores?limit=200")
+      .then(({ data }) => setVendedores(data))
+      .catch(() => setVendedores([]));
+  }, []);
+
+  useEffect(() => {
+    setVendedorId(cliente?.vendedor_id ?? "");
     if (!cliente) {
       setPendientes([]);
       setImputar({});
@@ -91,6 +101,7 @@ function ReciboModal({
         imputaciones: Object.entries(imputar)
           .filter(([, v]) => Number(v) > 0)
           .map(([comprobante_id, importe]) => ({ comprobante_id, importe })),
+        vendedor_id: vendedorId || null,
         observaciones: obs.trim() || null,
       });
       onCerrar(true);
@@ -129,6 +140,23 @@ function ReciboModal({
               ))}
             </select>
           </div>
+          {vendedores.length > 0 && (
+            <div className="field">
+              <label>Vendedor</label>
+              <select
+                className="select"
+                value={vendedorId}
+                onChange={(ev) => setVendedorId(ev.target.value)}
+              >
+                <option value="">—</option>
+                {vendedores.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.entidad.razon_social}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="seccion">Medios de pago</div>

@@ -24,6 +24,7 @@ class PadronOut(BaseModel):
     provincia_id: int | None
     codigo_postal: str | None
     fuente: str
+    desde_cache: bool = False
 
 
 @router.get("/{cuit}", response_model=PadronOut)

@@ -221,6 +221,8 @@ class OrdenPago(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     numero: Mapped[int] = mapped_column(BigInteger)
     fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    # NULL = sin sucursal: la OP entra solo en la planilla de caja global
+    sucursal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sucursales.id"))
     proveedor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("proveedores.id"))
     proveedor_nombre: Mapped[str] = mapped_column(String(120))
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2))

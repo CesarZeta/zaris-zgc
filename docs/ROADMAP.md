@@ -189,8 +189,9 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   ciclo de caja completo con arqueo/diferencia, libros vacíos coherentes, CSV+CITI,
   retenciones) — tenant creado y eliminado en la misma corrida.
 - Diferido documentado: percepciones de ventas en el libro (el modelo de ventas
-  aún no las discrimina — `ImpTrib` diferido de Fase 3), sucursal en OP (entran
-  solo en planilla global), export Excel nativo (.xlsx; el CSV lo cubre).
+  aún no las discrimina — `ImpTrib` diferido de Fase 3), ~~sucursal en OP~~
+  (→ hecho en el LOTE DE DIFERIDOS 2026-07-11), export Excel nativo (.xlsx; el
+  CSV lo cubre).
 
 ## FASE 6 — POS Mostrador Web ✅ (cierra el MVP — en producción 2026-07-05)
 
@@ -236,8 +237,9 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   verificado que el bundle publicado contiene el POS). Click-through del POS en prod
   logueado: pendiente de César (DEPLOY.md § Verificaciones pendientes).
 - Diferido documentado: pesables por etiqueta de balanza, envases, venta por depto.
-  (POS Súper, fase 12), descuento por línea/venta en el POS (el backend ya lo soporta
-  vía `descuento_pct`), identificación CF ≥ umbral RG 5700 la exige el backend (422).
+  (POS Súper, fase 12), ~~descuento por línea/venta en el POS~~ (→ hecho en el LOTE
+  DE DIFERIDOS 2026-07-11, tecla F7), identificación CF ≥ umbral RG 5700 la exige
+  el backend (422).
 
 ## FASE 6.5 — Usuarios, Roles y Permisos por módulo (RBAC) ✅ (implementada 2026-07-05)
 
@@ -376,8 +378,8 @@ tablas satélite que referencian `id_entidad` y agregan solo lo específico del 
   Se sembraron 5 usuarios de prueba (uno por rol: admin=César + gerente/cajero/vendedor/
   consulta en `@zgc.dev`, clave genérica dev) para probar los niveles de permisos.
 - Diferido documentado: mapa Leaflet (con Logística F12-bis), export .xlsx nativo (el CSV
-  lo cubre), export CSV de clientes/proveedores/artículos (el patrón queda armado), padrón
-  con cache de resultados (hoy solo cachea el TA).
+  lo cubre), ~~export CSV de clientes/proveedores/artículos~~ y ~~padrón con cache de
+  resultados~~ (→ hechos en el LOTE DE DIFERIDOS 2026-07-11).
 - **Verificación en prod (Pages) — HECHA 2026-07-06** (César + click-through de Claude
   navegando `cesarzeta.github.io/zaris-zgc` contra la API de Vercel):
   - `/inicio`: los 4 KPIs renderizan con valores reales (ventas $1.812,22 · cobros
@@ -606,9 +608,9 @@ VIAJANTE.DBF + CVIAJ en clientes/ventas/recibos + GV0040 regenerable).
 - [x] Verificado 2026-07-11: **35/35 pruebas en vivo** (`tools/test_f11_dev.py`) +
   regresiones F9-bis 50/50 · F9 39/39 · 014 53/53 · F8 31/31 + build TS.
 - Diferido documentado: migrador VIAJANTE.DBF (29 filas en un backup 2009 — alta
-  manual más barata), selector de vendedor en el modal de recibo (el backend ya
-  defaultea al habitual), escalas de comisión por familia/artículo (el legacy
-  tampoco las tenía).
+  manual más barata), ~~selector de vendedor en el modal de recibo~~ (→ hecho en
+  el LOTE DE DIFERIDOS 2026-07-11), escalas de comisión por familia/artículo (el
+  legacy tampoco las tenía).
 
 ## FASE 12 — POS por perfiles + POS standalone ✅ (completada 2026-07-11: a/b/c/d en producción)
 
@@ -698,6 +700,57 @@ Gate levantado por César 2026-07-11. Súper NO se vende standalone (siempre sui
   (`tools/smoke_f12_prod.py`, tenant efímero creado con `setup_tenant.py` +
   `.env.prod` temporal y eliminado por psql al terminar) → click-through en Pages
   (secciones balanza/salones renderizando contra la API nueva, 200 cross-origin).
+
+## LOTE DE DIFERIDOS — quick wins post-F12 ✅ (2026-07-11)
+
+**Entregable: cinco diferidos menores del ROADMAP cerrados en una sesión — la suite
+más redonda sin esperar cliente.** Decisión de César 2026-07-11 (sesión post-F12):
+resolver los pendientes chicos antes de encarar el próximo módulo grande.
+
+- [x] **Migración 022** (aditiva/idempotente): `ordenes_pago.sucursal_id` (FK) +
+  tabla `padron_cache` (una fila por tenant+cuit, `modo` sellado, RLS). En prod
+  va ANTES del push + re-aplicación de la 005 (tabla nueva).
+- [x] **Descuento por línea y por venta en el POS** (diferido F6): `VentaItemIn.
+  descuento_pct` viaja como `bonif_pct` del ítem fiscal (mismo campo que la
+  gestión — queda impreso en la factura); el `descuento_pct` de la venta ya
+  existía end-to-end. UI: tecla **F7** + botón (modal línea seleccionada / toda
+  la venta), chip `−X%` en la línea, total estimado descontado. El POS resto
+  ya aceptaba descuento de venta al cobrar (`CobrarIn`); su UI queda para resto v2.
+- [x] **Selector de vendedor en el modal de recibo** (diferido F11): patrón del
+  ComprobanteForm (catálogo con catch por permiso, default al habitual del
+  cliente al elegirlo, `vendedor_id` en el body). El backend era de F11.
+- [x] **Sucursal en órdenes de pago** (diferido F5): `sucursal_id` opcional
+  validado por tenant en `OrdenPagoIn`/`Out`; la planilla de caja por sucursal
+  ahora SUMA los pagos de sus OP (sin sucursal → solo global, compat con las
+  históricas; compras contado siguen solo en global). Selector en el modal de
+  OP ("Global" default); `GET /sucursales` suma el módulo `compras` a su guarda.
+- [x] **Cache de resultados del padrón ARCA** (diferido F7): `padron_cache` con
+  TTL 24 h (la condición IVA decide letra: no estirar más), patrón `_ta_vigente`
+  (select→flush, commit en el endpoint), `modo` sellado (cambiar de modo ARCA
+  invalida solo). `PadronOut.desde_cache` (aditivo) lo hace observable.
+- [x] **Export CSV de clientes, proveedores y artículos** (diferido F7): mismos
+  filtros del listado, tope 5000, provincia/familia/marca resueltas a nombre,
+  rutas estáticas ANTES de `/{id}` (regla §6). Botón "Exportar CSV" en los tres
+  toolbars.
+- [x] Verificado 2026-07-11: **40/40 pruebas en vivo** (`tools/test_diferidos_dev.py`,
+  tenant efímero) + regresiones F12-b 39/39 · F12-d 51/51 · mini-014 53/53 ·
+  F11 35/35 · F9 39/39 + build TS + **E2E navegador** (export 200 desde la UI,
+  selects de vendedor/sucursal renderizando, venta POS real con −20% línea y
+  −10% venta = Factura B $8,32 exactos del server; caja "Caja Mostrador" creada
+  como vitrina en el demo local).
+- [x] **Deploy a prod (2026-07-11)**: migración 022 + re-005 por psql session pooler
+  ANTES del push → push a master (Vercel + Pages) → probe openapi → smoke prod.
+
+## FASE 13-LAN — Nodo de sucursal (diseño listo, implementación pendiente de decisión)
+
+**Mandatos de César 2026-07-11**: conectar puestos en red con puntos de venta
+asignados; endpoint del POS propio y separado del login de la suite; autonomía de
+gestión local (stock/inventario) con integración total a la gestión al reconectar;
+replicable a N puestos. Diseño completo en `docs/DISENO-NODO-LAN.md` (sub-fases
+N1 nodo mínimo / N2 sincronización + CAE diferido / N3 robustez; preguntas
+abiertas en §8 — entre ellas si se adelanta el login POS dedicado como pieza de
+nube). Es la materialización del "nodo de sucursal" de CLAUDE.md §3; ortogonal al
+plan `pos` de F12-a (aquel es packaging online, esto es facturar sin internet).
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 

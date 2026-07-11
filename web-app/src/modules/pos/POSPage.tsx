@@ -36,6 +36,7 @@ interface Linea {
   precio: number; // final estimado; el exacto lo da /calcular
   pesable: boolean;
   es_depto?: boolean; // venta por departamento: el precio ES el importe tipeado
+  descuento_pct?: number; // descuento por línea (F7); viaja como bonif_pct fiscal
 }
 
 interface ClienteSel {
@@ -180,6 +181,8 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
   const [verTickets, setVerTickets] = useState(false);
   const [verCierre, setVerCierre] = useState(false);
   const [verDepto, setVerDepto] = useState(false);
+  const [verDescuento, setVerDescuento] = useState(false);
+  const [descuentoVenta, setDescuentoVenta] = useState(0);
   const [deptos, setDeptos] = useState<PosDepartamento[]>([]);
 
   useEffect(() => {
@@ -194,7 +197,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
   }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const modalAbierto = !!(resultados || pickVariante || buscaCliente || cobro || verTickets || verCierre || verDepto);
+  const modalAbierto = !!(resultados || pickVariante || buscaCliente || cobro || verTickets || verCierre || verDepto || verDescuento);
 
   const enfocar = useCallback(() => {
     setTimeout(() => inputRef.current?.focus(), 30);
@@ -346,7 +349,11 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
     setLineas((prev) => prev.map((l, x) => (x === i ? { ...l, cantidad: cant } : l)));
   }
 
-  const totalEstimado = lineas.reduce((acc, l) => acc + l.cantidad * l.precio, 0);
+  const totalEstimado =
+    lineas.reduce(
+      (acc, l) => acc + l.cantidad * l.precio * (1 - (l.descuento_pct ?? 0) / 100),
+      0,
+    ) * (1 - descuentoVenta / 100);
 
   async function abrirCobro() {
     if (lineas.length === 0 || ocupado) return;
@@ -359,11 +366,13 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       const calculo = await apiPost<PosCalculo>("/pos/ventas/calcular", {
         caja_id: sesion.caja_id,
         cliente_id: cliente?.id ?? null,
+        descuento_pct: String(descuentoVenta),
         items: lineas.map((l) => ({
           articulo_id: l.articulo_id,
           variante_id: l.variante_id,
           cantidad: String(l.cantidad),
           precio_unitario: l.es_depto ? String(l.precio) : null,
+          descuento_pct: String(l.descuento_pct ?? 0),
         })),
       });
       setCobro(calculo);
@@ -380,11 +389,13 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       const vta = await apiPost<Comprobante>("/pos/ventas", {
         sesion_id: sesion.id,
         cliente_id: cliente?.id ?? null,
+        descuento_pct: String(descuentoVenta),
         items: lineas.map((l) => ({
           articulo_id: l.articulo_id,
           variante_id: l.variante_id,
           cantidad: String(l.cantidad),
           precio_unitario: l.es_depto ? String(l.precio) : null,
+          descuento_pct: String(l.descuento_pct ?? 0),
         })),
         medios,
       });
@@ -392,6 +403,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       setLineas([]);
       setCliente(null);
       setSelec(-1);
+      setDescuentoVenta(0);
       setFlash(`✔ ${vta.tipo_descripcion} ${vta.letra} ${vta.numero_formateado} — $ ${$(vta.total)}`);
       setTimeout(() => setFlash(null), 6000);
       try {
@@ -426,6 +438,9 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       } else if (ev.key === "F9") {
         ev.preventDefault();
         if (!modalAbierto && deptos.length > 0) setVerDepto(true);
+      } else if (ev.key === "F7") {
+        ev.preventDefault();
+        if (!modalAbierto && lineas.length > 0) setVerDescuento(true);
       } else if (ev.key === "Escape") {
         setResultados(null);
         setPickVariante(null);
@@ -434,6 +449,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
         setVerTickets(false);
         setVerCierre(false);
         setVerDepto(false);
+        setVerDescuento(false);
         setMulti(null);
         enfocar();
       } else if (ev.key === "Delete" && !modalAbierto && selec >= 0 && document.activeElement === inputRef.current) {
@@ -466,6 +482,13 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
               Depto (F9)
             </button>
           )}
+          <button
+            className="btn btn-ghost"
+            disabled={lineas.length === 0}
+            onClick={() => setVerDescuento(true)}
+          >
+            Desc. (F7)
+          </button>
           <button className="btn btn-ghost" onClick={() => setVerTickets(true)}>
             Tickets (F6)
           </button>
@@ -523,7 +546,12 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
                 {lineas.map((l, i) => (
                   <tr key={`${l.articulo_id}-${l.variante_id ?? ""}`} className={i === selec ? "pos-selec" : ""} onClick={() => setSelec(i)}>
                     <td className="mono">{l.codigo}</td>
-                    <td>{l.descripcion}</td>
+                    <td>
+                      {l.descripcion}
+                      {(l.descuento_pct ?? 0) > 0 && (
+                        <span className="chico"> −{l.descuento_pct}%</span>
+                      )}
+                    </td>
                     <td className="num">
                       <input
                         className="input pos-cant"
@@ -535,7 +563,9 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
                       />
                     </td>
                     <td className="num mono">{$(l.precio)}</td>
-                    <td className="num mono">{$(l.cantidad * l.precio)}</td>
+                    <td className="num mono">
+                      {$(l.cantidad * l.precio * (1 - (l.descuento_pct ?? 0) / 100))}
+                    </td>
                     <td>
                       <button className="btn-quitar" title="Quitar (Supr)" onClick={() => quitarLinea(i)}>
                         ✕
@@ -553,8 +583,9 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
             <span className="pos-total-label">TOTAL</span>
             <span className="pos-total">$ {$(totalEstimado)}</span>
             <span className="chico pos-total-nota">
-              {lineas.reduce((a, l) => a + l.cantidad, 0)} ítems · el total fiscal exacto se
-              confirma al cobrar
+              {lineas.reduce((a, l) => a + l.cantidad, 0)} ítems
+              {descuentoVenta > 0 && ` · desc. venta −${descuentoVenta}%`} · el total fiscal
+              exacto se confirma al cobrar
             </span>
           </div>
           <button className="pos-cliente" onClick={() => setBuscaCliente(true)}>
@@ -634,6 +665,103 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           onCerrar={() => setVerDepto(false)}
         />
       )}
+      {verDescuento && (
+        <DescuentoModal
+          linea={selec >= 0 ? lineas[selec] : null}
+          descuentoVenta={descuentoVenta}
+          onAplicar={(destino, pct) => {
+            if (destino === "linea") {
+              setLineas((prev) =>
+                prev.map((l, x) => (x === selec ? { ...l, descuento_pct: pct } : l)),
+              );
+            } else {
+              setDescuentoVenta(pct);
+            }
+            setVerDescuento(false);
+          }}
+          onCerrar={() => setVerDescuento(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DescuentoModal({
+  linea,
+  descuentoVenta,
+  onAplicar,
+  onCerrar,
+}: {
+  linea: Linea | null;
+  descuentoVenta: number;
+  onAplicar: (destino: "linea" | "venta", pct: number) => void;
+  onCerrar: () => void;
+}) {
+  const [destino, setDestino] = useState<"linea" | "venta">(linea ? "linea" : "venta");
+  const [pct, setPct] = useState(
+    String(destino === "linea" ? (linea?.descuento_pct ?? 0) : descuentoVenta),
+  );
+  const valor = Number(pct.replace(",", "."));
+  const valido = !Number.isNaN(valor) && valor >= 0 && valor <= 100;
+
+  return (
+    <div className="drawer-backdrop" onClick={onCerrar}>
+      <div className="modal pos-modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Descuento</h2>
+        <div className="pos-resultados">
+          {linea && (
+            <button
+              className={`pos-resultado${destino === "linea" ? " activo" : ""}`}
+              onClick={() => {
+                setDestino("linea");
+                setPct(String(linea.descuento_pct ?? 0));
+              }}
+            >
+              <span className="pos-res-desc">Línea: {linea.descripcion}</span>
+            </button>
+          )}
+          <button
+            className={`pos-resultado${destino === "venta" ? " activo" : ""}`}
+            onClick={() => {
+              setDestino("venta");
+              setPct(String(descuentoVenta));
+            }}
+          >
+            <span className="pos-res-desc">Toda la venta</span>
+          </button>
+        </div>
+        <label className="pos-campo">
+          Descuento % (0 lo quita)
+          <input
+            className="input num"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            autoFocus
+            value={pct}
+            onChange={(e) => setPct(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && valido) {
+                e.preventDefault();
+                onAplicar(destino, valor);
+              }
+            }}
+          />
+        </label>
+        <div className="pos-cobro-botones">
+          <button className="btn btn-ghost" onClick={onCerrar}>
+            Cancelar (Esc)
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={!valido}
+            onClick={() => onAplicar(destino, valor)}
+          >
+            Aplicar (Enter)
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

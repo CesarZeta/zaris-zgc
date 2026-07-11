@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
+import { ApiError, apiDescargar, apiGet, apiPost, apiUpload } from "../../lib/api";
 import type { Articulo, Cotizacion, Empresa, Familia, Marca, Rubro, Unidad } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
 import ArticuloForm from "./ArticuloForm";
@@ -182,6 +182,18 @@ export default function ArticulosPage() {
             </option>
           ))}
         </select>
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            const params = new URLSearchParams({ q: busqueda });
+            if (familiaId) params.set("familia_id", familiaId);
+            void apiDescargar(`/articulos/export.csv?${params}`, "articulos.csv").catch(
+              (err) => setError(err instanceof Error ? err.message : "Error al exportar"),
+            );
+          }}
+        >
+          Exportar CSV
+        </button>
         <button className="btn btn-ghost" onClick={() => setCambioAbierto(true)}>
           Cambio de precios
         </button>

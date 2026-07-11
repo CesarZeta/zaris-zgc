@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiGet } from "../../lib/api";
+import { apiDescargar, apiGet } from "../../lib/api";
 import { CONDICIONES_IVA, type Cliente } from "../../lib/types";
 import ClienteForm from "./ClienteForm";
 
@@ -87,6 +87,20 @@ export default function ClientesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <div style={{ flex: 1 }} />
+        <button
+          className="btn btn-ghost"
+          onClick={() =>
+            void apiDescargar(
+              `/clientes/export.csv?${new URLSearchParams({ q: busqueda })}`,
+              "clientes.csv",
+            ).catch((err) =>
+              setError(err instanceof Error ? err.message : "Error al exportar"),
+            )
+          }
+        >
+          Exportar CSV
+        </button>
         <button className="btn btn-primary" onClick={abrirNuevo}>
           + Nuevo cliente
         </button>

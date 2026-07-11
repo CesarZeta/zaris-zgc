@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
-import type { Compra, OrdenPago, Proveedor, VencimientoPagar } from "../../lib/types";
+import type { Compra, OrdenPago, Proveedor, Sucursal, VencimientoPagar } from "../../lib/types";
 import { AlertError } from "../../components/Alertas";
 import ChipEstado from "../../components/ChipEstado";
 import Paginado from "../../components/Paginado";
@@ -32,10 +32,19 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
   >([{ medio: "transferencia", importe: "", referencia: "", cuenta_bancaria_id: "" }]);
   const [imputar, setImputar] = useState<Record<string, string>>({});
   const [obs, setObs] = useState("");
+  const [sucursalId, setSucursalId] = useState("");
+  const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const { confirmar, dialogos } = useDialogos();
   const cuentas = useCuentasBancarias();
+
+  useEffect(() => {
+    // sin sucursal la OP entra solo en la planilla global (022)
+    void apiGet<Sucursal[]>("/sucursales")
+      .then(({ data }) => setSucursales(data))
+      .catch(() => setSucursales([]));
+  }, []);
 
   useEffect(() => {
     if (!proveedor) {
@@ -81,6 +90,7 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
         imputaciones: Object.entries(imputar)
           .filter(([, v]) => Number(v) > 0)
           .map(([compra_id, importe]) => ({ compra_id, importe })),
+        sucursal_id: sucursalId || null,
         observaciones: obs.trim() || null,
       });
       onCerrar(true);
@@ -96,9 +106,28 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
         <h2>Nueva orden de pago</h2>
         <AlertError>{error}</AlertError>
 
-        <div className="field">
-          <label>Proveedor *</label>
-          <BuscadorProveedor elegido={proveedor} onElegir={setProveedor} />
+        <div className="fila">
+          <div className="field" style={{ flex: 2 }}>
+            <label>Proveedor *</label>
+            <BuscadorProveedor elegido={proveedor} onElegir={setProveedor} />
+          </div>
+          {sucursales.length > 0 && (
+            <div className="field">
+              <label>Sucursal</label>
+              <select
+                className="select"
+                value={sucursalId}
+                onChange={(ev) => setSucursalId(ev.target.value)}
+              >
+                <option value="">Global</option>
+                {sucursales.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="seccion">Medios de pago</div>

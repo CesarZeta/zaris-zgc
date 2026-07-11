@@ -8,8 +8,8 @@ Criterios (espejo del legacy MOVIM/SALCAJA):
 - El saldo de caja es EFECTIVO. La planilla muestra todos los medios; el
   cierre sella entradas/salidas de efectivo. Las ventas de contado se asumen
   efectivo hasta que el POS (Fase 6) registre medios por venta.
-- Las órdenes de pago no tienen sucursal: entran solo en la planilla global
-  (sin filtro de sucursal).
+- Las órdenes de pago CON sucursal entran en la planilla de su sucursal (022);
+  sin sucursal entran solo en la global. Las compras contado, solo en la global.
 - Cerrado el día (por sucursal o global), no se permiten altas/bajas de
   movimientos manuales de esa fecha; el cierre puede eliminarse (reabrir).
 """
@@ -297,25 +297,28 @@ async def _calcular_planilla(
         TotalMedio(medio=m, total=t, cantidad=c) for m, t, c in (await db.execute(stmt)).all()
     ]
 
-    # --- pagos del día por medio (OP no tienen sucursal: solo planilla global) ---
-    pagos: list[TotalMedio] = []
-    if not sucursal_id:
-        stmt = (
-            select(OrdenPagoMedio.medio, func.sum(OrdenPagoMedio.importe), func.count())
-            .join(OrdenPago, OrdenPago.id == OrdenPagoMedio.orden_pago_id)
-            .where(
-                OrdenPago.tenant_id == tenant_id,
-                OrdenPago.fecha == fecha,
-                OrdenPago.estado == "emitida",
-            )
-            .group_by(OrdenPagoMedio.medio)
+    # --- pagos del día por medio: la OP con sucursal entra en SU planilla (022);
+    # sin sucursal entra solo en la global (compat con las OP históricas) ---
+    stmt = (
+        select(OrdenPagoMedio.medio, func.sum(OrdenPagoMedio.importe), func.count())
+        .join(OrdenPago, OrdenPago.id == OrdenPagoMedio.orden_pago_id)
+        .where(
+            OrdenPago.tenant_id == tenant_id,
+            OrdenPago.fecha == fecha,
+            OrdenPago.estado == "emitida",
         )
-        acumulado: dict[str, list] = {
-            m: [Decimal(t), c] for m, t, c in (await db.execute(stmt)).all()
-        }
+        .group_by(OrdenPagoMedio.medio)
+    )
+    if sucursal_id:
+        stmt = stmt.where(OrdenPago.sucursal_id == sucursal_id)
+    acumulado: dict[str, list] = {
+        m: [Decimal(t), c] for m, t, c in (await db.execute(stmt)).all()
+    }
+    if not sucursal_id:
         # compras CONTADO con medios registrados (014): salida por su medio real,
         # signo del tipo (NC contado devuelve plata). Las compras contado SIN
-        # medios siguen fuera de la planilla (criterio F5, no retroactivo).
+        # medios siguen fuera de la planilla (criterio F5, no retroactivo); las
+        # compras no tienen sucursal, así que solo suman en la global.
         from app.models import Compra, CompraMedio, TipoComprobanteCompra
 
         stmt = (
@@ -343,9 +346,9 @@ async def _calcular_planilla(
                 acumulado[m][1] += c
             else:
                 acumulado[m] = [Decimal(t), c]
-        pagos = [
-            TotalMedio(medio=m, total=t, cantidad=c) for m, (t, c) in acumulado.items()
-        ]
+    pagos = [
+        TotalMedio(medio=m, total=t, cantidad=c) for m, (t, c) in acumulado.items()
+    ]
 
     # --- movimientos manuales del día (vivos: los anulados no cuentan) ---
     stmt = (

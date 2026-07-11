@@ -23,10 +23,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cuit import solo_digitos, validar_documento
-from app.models import ArcaConfig, ArcaToken
+from app.models import ArcaConfig, ArcaToken, PadronCache
 from app.services.arca import wsaa
 
 SERVICIO = "ws_sr_constancia_inscripcion"
+
+# Vigencia del cache de resultados (los datos del padrón cambian poco, pero la
+# condición IVA decide la letra del comprobante: no estirar más de un día).
+CACHE_TTL = timedelta(hours=24)
 
 URLS_PADRON = {
     "homologacion": "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
@@ -61,6 +65,7 @@ class DatosPadron:
     provincia_id: int | None
     codigo_postal: str | None
     fuente: str                  # 'padron' · 'simulado'
+    desde_cache: bool = False
 
 
 def _provincia_arca(descripcion: str | None) -> int | None:
@@ -102,6 +107,55 @@ async def _ta_vigente(db: AsyncSession, config: ArcaConfig) -> tuple[str, str]:
         fila.token, fila.sign, fila.expira = ta["token"], ta["sign"], ta["expira"]
     await db.flush()
     return ta["token"], ta["sign"]
+
+
+async def _cache_leer(db: AsyncSession, config: ArcaConfig, cuit: str) -> DatosPadron | None:
+    """Resultado cacheado vigente para el modo ACTUAL del tenant (o None)."""
+    fila = await db.scalar(
+        select(PadronCache).where(
+            PadronCache.tenant_id == config.tenant_id, PadronCache.cuit == cuit
+        )
+    )
+    if fila is None or fila.modo != config.modo:
+        return None
+    if fila.consultado_at < datetime.now(timezone.utc) - CACHE_TTL:
+        return None
+    return DatosPadron(
+        cuit=fila.cuit,
+        razon_social=fila.razon_social,
+        tipo_persona=fila.tipo_persona,
+        condicion_iva=fila.condicion_iva,
+        domicilio=fila.domicilio,
+        localidad=fila.localidad,
+        provincia_id=fila.provincia_id,
+        codigo_postal=fila.codigo_postal,
+        fuente=fila.fuente,
+        desde_cache=True,
+    )
+
+
+async def _cache_guardar(db: AsyncSession, config: ArcaConfig, datos: DatosPadron) -> None:
+    """Upsert de la fila (tenant, cuit) — patrón _ta_vigente; el commit lo hace
+    el endpoint."""
+    fila = await db.scalar(
+        select(PadronCache).where(
+            PadronCache.tenant_id == config.tenant_id, PadronCache.cuit == datos.cuit
+        )
+    )
+    if fila is None:
+        fila = PadronCache(tenant_id=config.tenant_id, cuit=datos.cuit)
+        db.add(fila)
+    fila.modo = config.modo
+    fila.razon_social = datos.razon_social
+    fila.tipo_persona = datos.tipo_persona
+    fila.condicion_iva = datos.condicion_iva
+    fila.domicilio = datos.domicilio
+    fila.localidad = datos.localidad
+    fila.provincia_id = datos.provincia_id
+    fila.codigo_postal = datos.codigo_postal
+    fila.fuente = datos.fuente
+    fila.consultado_at = datetime.now(timezone.utc)
+    await db.flush()
 
 
 def _parsear_persona(raiz: ET.Element, cuit: str) -> DatosPadron:
@@ -163,8 +217,15 @@ async def consultar_cuit(db: AsyncSession, config: ArcaConfig | None, cuit_raw: 
             "Padrón ARCA no disponible: configurá el modo (simulado para probar) "
             "en Configuración → ARCA."
         )
+
+    cacheado = await _cache_leer(db, config, cuit)
+    if cacheado is not None:
+        return cacheado
+
     if config.modo == "simulado":
-        return _simulado(cuit)
+        datos = _simulado(cuit)
+        await _cache_guardar(db, config, datos)
+        return datos
 
     if not (config.cuit and config.cert_pem and config.key_pem):
         raise ErrorPadron("Config ARCA incompleta: falta CUIT, certificado o clave privada.")
@@ -199,4 +260,6 @@ async def consultar_cuit(db: AsyncSession, config: ArcaConfig | None, cuit_raw: 
         raise ErrorPadron(f"Padrón ARCA: {detalle or 'sin datos para ese CUIT'}")
     if not any(n.tag.endswith("persona") for n in raiz.iter()):
         raise ErrorPadron("El CUIT no figura en el padrón de ARCA.")
-    return _parsear_persona(raiz, cuit)
+    datos = _parsear_persona(raiz, cuit)
+    await _cache_guardar(db, config, datos)
+    return datos

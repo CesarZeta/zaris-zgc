@@ -314,3 +314,28 @@ class ArcaToken(Base):
     sign: Mapped[str] = mapped_column(Text)
     expira: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PadronCache(Base):
+    """Resultado de consulta al padrón cacheado por (tenant, cuit). El `modo`
+    queda sellado: si el tenant cambia de modo ARCA la fila no se reusa."""
+
+    __tablename__ = "padron_cache"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    cuit: Mapped[str] = mapped_column(String(11))
+    modo: Mapped[str] = mapped_column(String(13))
+    razon_social: Mapped[str | None] = mapped_column(Text)
+    tipo_persona: Mapped[str] = mapped_column(String(10))
+    condicion_iva: Mapped[str] = mapped_column(String(5))
+    domicilio: Mapped[str | None] = mapped_column(Text)
+    localidad: Mapped[str | None] = mapped_column(Text)
+    provincia_id: Mapped[int | None] = mapped_column(SmallInteger)
+    codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    fuente: Mapped[str] = mapped_column(String(10))
+    consultado_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

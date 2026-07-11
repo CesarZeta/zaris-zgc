@@ -2,7 +2,7 @@
 // Incluye drill-down a los artículos que provee (costos y bonificaciones).
 
 import { useCallback, useEffect, useState } from "react";
-import { apiGet } from "../../lib/api";
+import { apiDescargar, apiGet } from "../../lib/api";
 import type { ArticuloDeProveedor, Proveedor } from "../../lib/types";
 import ProveedorForm from "./ProveedorForm";
 
@@ -146,6 +146,20 @@ export default function ProveedoresPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <div style={{ flex: 1 }} />
+        <button
+          className="btn btn-ghost"
+          onClick={() =>
+            void apiDescargar(
+              `/proveedores/export.csv?${new URLSearchParams({ q: busqueda })}`,
+              "proveedores.csv",
+            ).catch((err) =>
+              setError(err instanceof Error ? err.message : "Error al exportar"),
+            )
+          }
+        >
+          Exportar CSV
+        </button>
         <button
           className="btn btn-primary"
           onClick={() => {

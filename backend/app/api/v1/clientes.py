@@ -8,10 +8,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.entidades import EntidadOut, aplicar_busqueda
+from app.core.csv_export import csv_response, num
 from app.core.cuit import validar_documento
 from app.core.db import get_db
 from app.core.permisos import requiere
-from app.models import Cliente, Entidad, Usuario, Zona
+from app.models import Cliente, Entidad, Provincia, Usuario, Zona
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
@@ -231,6 +232,47 @@ async def listar_clientes(
     stmt = stmt.order_by(Entidad.razon_social).limit(min(limit, 200)).offset(offset)
     clientes = (await db.scalars(stmt)).unique().all()
     return [ClienteOut.model_validate(c) for c in clientes]
+
+
+# OJO: ruta estática ANTES de /{cliente_id} (regla §6 del CLAUDE.md)
+@router.get("/export.csv")
+async def exportar_clientes_csv(
+    q: str = "",
+    incluir_inactivos: bool = False,
+    usuario: Usuario = Depends(requiere("clientes", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export universal (patrón F7): mismos filtros del listado, tope 5000 filas."""
+    stmt = (
+        select(Cliente)
+        .join(Entidad, Cliente.entidad_id == Entidad.id)
+        .where(Cliente.tenant_id == usuario.tenant_id)
+    )
+    if not incluir_inactivos:
+        stmt = stmt.where(Cliente.activo)
+    stmt = aplicar_busqueda(stmt, q)
+    clientes = (
+        (await db.scalars(stmt.order_by(Entidad.razon_social).limit(5000))).unique().all()
+    )
+    provincias = {p.codigo_arca: p.nombre for p in await db.scalars(select(Provincia))}
+    encabezado = [
+        "Código", "Razón social", "Fantasía", "Tipo doc", "Documento", "Cond. IVA",
+        "Domicilio", "Localidad", "Provincia", "CP", "Teléfono", "Email",
+        "Lista", "Descuento %", "Límite crédito", "Bloqueado", "Activo",
+    ]
+    rows = []
+    for c in clientes:
+        e = c.entidad
+        rows.append([
+            c.codigo or "", e.razon_social, e.nombre_fantasia or "",
+            e.tipo_documento, e.nro_documento or "", e.condicion_iva,
+            e.domicilio or "", e.localidad or "",
+            provincias.get(e.provincia_id, "") if e.provincia_id is not None else "",
+            e.codigo_postal or "", e.telefono_1 or "", e.email or "",
+            str(c.lista_precios), num(c.descuento), num(c.limite_credito),
+            "sí" if c.bloqueado else "no", "sí" if c.activo else "no",
+        ])
+    return csv_response("clientes.csv", encabezado, rows)
 
 
 @router.get("/{cliente_id}", response_model=ClienteOut)

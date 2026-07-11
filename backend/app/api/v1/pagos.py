@@ -66,6 +66,7 @@ class ImputacionIn(BaseModel):
 class OrdenPagoIn(BaseModel):
     proveedor_id: uuid.UUID
     fecha: date | None = None
+    sucursal_id: uuid.UUID | None = None
     medios: list[MedioIn] = Field(min_length=1)
     imputaciones: list[ImputacionIn] = []
     observaciones: str | None = None
@@ -84,6 +85,7 @@ class OrdenPagoOut(BaseModel):
     numero: int
     numero_formateado: str
     fecha: date
+    sucursal_id: uuid.UUID | None = None
     proveedor_id: uuid.UUID
     proveedor_nombre: str
     total: Decimal
@@ -109,6 +111,7 @@ def _op_out(op: OrdenPago) -> OrdenPagoOut:
         numero=op.numero,
         numero_formateado=f"OP-{op.numero:08d}",
         fecha=op.fecha,
+        sucursal_id=op.sucursal_id,
         proveedor_id=op.proveedor_id,
         proveedor_nombre=op.proveedor_nombre,
         total=op.total,
@@ -185,11 +188,23 @@ async def crear_orden_pago(
         if cuentas_ids - validas:
             raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
 
+    if body.sucursal_id is not None:
+        from app.models import Sucursal
+
+        existe = await db.scalar(
+            select(Sucursal.id).where(
+                Sucursal.id == body.sucursal_id, Sucursal.tenant_id == usuario.tenant_id
+            )
+        )
+        if existe is None:
+            raise HTTPException(status_code=422, detail="Sucursal inexistente")
+
     numero = await sc.proximo_numero_op(db, usuario.tenant_id)
     op = OrdenPago(
         tenant_id=usuario.tenant_id,
         numero=numero,
         fecha=body.fecha or date.today(),
+        sucursal_id=body.sucursal_id,
         proveedor_id=proveedor.id,
         proveedor_nombre=proveedor.entidad.razon_social,
         total=total,

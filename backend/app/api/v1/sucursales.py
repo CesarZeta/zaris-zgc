@@ -71,7 +71,8 @@ async def _validar_provincia(db: AsyncSession, provincia_id: int | None) -> None
 async def listar_sucursales(
     incluir_inactivas: bool = False,
     usuario: Usuario = Depends(
-        requiere_alguno(["configuracion", "caja", "pos"], "ver")
+        # compras: el modal de OP elige sucursal (022)
+        requiere_alguno(["configuracion", "caja", "pos", "compras"], "ver")
     ),
     db: AsyncSession = Depends(get_db),
 ):

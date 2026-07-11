@@ -161,6 +161,9 @@ class VentaItemIn(BaseModel):
     # server solo lo acepta si el artículo tiene venta_por_depto=true — para
     # el resto, los precios siguen siendo de servidor (regla de la Fase 6).
     precio_unitario: Decimal | None = Field(None, gt=0)
+    # Descuento porcentual por línea: viaja como bonif_pct del ítem fiscal
+    # (el mismo campo que usa la gestión — queda impreso en la factura).
+    descuento_pct: Decimal = Field(Decimal("0"), ge=0, le=100)
 
 
 class VentaCalcularIn(BaseModel):
@@ -491,6 +494,7 @@ async def _armar_venta(
                 descripcion=descripcion,
                 cantidad=it.cantidad,
                 precio_unitario=precio,
+                bonif_pct=it.descuento_pct,
             )
         )
 

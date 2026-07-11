@@ -19,6 +19,7 @@ from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.csv_export import csv_response, num
 from app.core.db import get_db
 from app.core.permisos import requiere
 from app.models import (
@@ -329,6 +330,62 @@ async def listar_articulos(
     stmt = stmt.order_by(Articulo.descripcion).limit(min(limit, 200)).offset(offset)
     filas = (await db.execute(stmt)).all()
     return [_armar_out(articulo, st) for articulo, st in filas]
+
+
+# OJO: ruta estática ANTES de /{articulo_id} (regla §6 del CLAUDE.md)
+@router.get("/export.csv")
+async def exportar_articulos_csv(
+    q: str = "",
+    familia_id: uuid.UUID | None = None,
+    subfamilia_id: uuid.UUID | None = None,
+    marca_id: uuid.UUID | None = None,
+    es_envase: bool | None = None,
+    incluir_inactivos: bool = False,
+    usuario: Usuario = Depends(requiere("articulos", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export universal (patrón F7): mismos filtros del listado, tope 5000 filas."""
+    stmt = select(Articulo).where(Articulo.tenant_id == usuario.tenant_id)
+    if not incluir_inactivos:
+        stmt = stmt.where(Articulo.activo)
+    if familia_id:
+        stmt = stmt.where(Articulo.familia_id == familia_id)
+    if subfamilia_id:
+        stmt = stmt.where(Articulo.subfamilia_id == subfamilia_id)
+    if marca_id:
+        stmt = stmt.where(Articulo.marca_id == marca_id)
+    if es_envase is not None:
+        stmt = stmt.where(Articulo.es_envase_retornable.is_(es_envase))
+    stmt = aplicar_busqueda_articulos(stmt, q)
+    stmt = stmt.add_columns(_subquery_stock_total(usuario.tenant_id).label("stock_total"))
+    filas = (await db.execute(stmt.order_by(Articulo.descripcion).limit(5000))).all()
+
+    familias = {
+        f.id: f.nombre
+        for f in await db.scalars(select(Familia).where(Familia.tenant_id == usuario.tenant_id))
+    }
+    marcas = {
+        m.id: m.nombre
+        for m in await db.scalars(select(Marca).where(Marca.tenant_id == usuario.tenant_id))
+    }
+    encabezado = [
+        "Código", "Cód. barras", "Descripción", "Familia", "Marca", "IVA %",
+        "Costo", "Costo c/IVA", "Precio 1", "Precio 2", "Precio 3", "Precio 4",
+        "USD", "Stock", "Activo",
+    ]
+    rows = []
+    for articulo, st in filas:
+        rows.append([
+            articulo.codigo, articulo.codigo_barras or "", articulo.descripcion,
+            familias.get(articulo.familia_id, ""), marcas.get(articulo.marca_id, ""),
+            num(articulo.tasa_iva), num(articulo.costo),
+            "sí" if articulo.costo_con_iva else "no",
+            num(articulo.precio_1), num(articulo.precio_2),
+            num(articulo.precio_3), num(articulo.precio_4),
+            "sí" if articulo.en_dolares else "no",
+            num(st), "sí" if articulo.activo else "no",
+        ])
+    return csv_response("articulos.csv", encabezado, rows)
 
 
 @router.get("/{articulo_id}", response_model=ArticuloOut)
