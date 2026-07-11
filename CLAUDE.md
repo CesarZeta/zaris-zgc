@@ -159,6 +159,19 @@ ZGC/
   necesitan el `INSERT ... ON CONFLICT DO NOTHING` en la migración. Y las sesiones ya
   logueadas NO ven el ítem nuevo del nav hasta re-loguear (los `permisos` viajan en el
   login) — no es un bug del deploy.
+- **Plan por tenant encima del RBAC** (F12-a, 2026-07-11 — POS standalone, diseño en
+  `DISENO-POS-PERFILES.md` §7): `tenants.plan` (`suite`|`pos`) acota qué módulos
+  EXISTEN para el tenant. El catálogo `PLANES` en `permisos.py` es ESPEJO del CHECK
+  de la migración 018 (misma regla que MODULOS↔seed 010). `permisos_efectivos()` =
+  **plan ∩ rol** → el login viaja recortado y el nav del front se adapta solo;
+  las guardas chequean plan ANTES que rol (403 "Módulo no incluido en el plan",
+  nunca 401); `/permisos/catalogo` se filtra por plan (la matriz de roles no muestra
+  módulos ajenos). Al AGREGAR un módulo, además del seed de roles hay que decidir
+  **si entra o no al plan `pos`** (editar `PLANES`); plan desconocido degrada a
+  suite (nunca bloquear por un valor no mapeado). Los roles sembrados pueden tener
+  permisos de módulos fuera del plan: son inertes y quedan listos para el upgrade.
+  Alta de tenants (cualquier plan): `tools/setup_tenant.py` (idempotente, crea hasta
+  la caja POS default) — `demo_setup_tenant.py` queda solo para el tenant demo.
 - **Índices para relaciones `selectin`**: el loader emite `WHERE fk IN (...)` SIN
   `tenant_id` → un índice compuesto `(tenant_id, fk)` NO le sirve (mordió en
   `comprobante_items`/`compra_items`, migraciones 006/007). Toda tabla hija nueva lleva
@@ -300,6 +313,11 @@ ZGC/
   anteriores contaminan los resultados aunque tengan nombre distinto. Y al testear un
   código de error específico (p. ej. 409 "ya apareado"), el fixture debe SATISFACER las
   validaciones previas del endpoint (o dispara el 422 anterior y el test miente).
+  AMPLIADA en F12-a: la **PRESENCIA de un registro en un agregado compartido se
+  consulta con su filtro específico** (`?origen=stock_ajuste&limit=1`), NUNCA
+  escaneando una página del listado — la suite F9 asertaba orígenes sobre una página
+  `limit=200` del día y con 351 asientos acumulados por la batería de regresión el
+  registro buscado caía fuera de la página (la prueba fallaba con el motor sano).
 - **`git add -A -- ':!ruta'` ABORTA (exit 1) si la ruta está gitignoreada** (F9): el
   pathspec de exclusión hace que git intente evaluar el archivo ignorado y corta con el
   hint "paths are ignored". Si el archivo ya está en `.gitignore`, `git add -A` solo alcanza.
@@ -307,6 +325,10 @@ ZGC/
   `(Get-Content f) -replace ... | Set-Content -Encoding utf8 f` lee el UTF-8 sin BOM
   como ANSI y lo re-escribe → **mojibake** en todos los acentos (Ã­, Ã³). Para editar
   archivos del repo usar SIEMPRE las herramientas de edición (Edit/Write), no shell.
+- **Commits multilínea: mensaje a archivo + `git commit -F`** (F12-a): un here-string
+  `@'...'@` pasado al tool de PowerShell puede llegar mal parseado (las líneas del
+  mensaje se interpretan como comandos sueltos — un `- PLANES...` intentó ejecutarse).
+  Escribir el mensaje a un archivo temporal (scratchpad) y commitear con `-F ruta`.
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
