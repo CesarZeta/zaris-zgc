@@ -125,7 +125,9 @@ ZGC/
 - **Reusar el núcleo, no copiarlo**: la emisión fiscal y la NC espejo viven en
   `emitir_core`/`crear_nc_espejo_core` (`api/v1/comprobantes.py`, sin commit adentro) —
   cualquier flujo nuevo que emita comprobantes (POS, futuras integraciones) los llama
-  dentro de su propia transacción. No duplicar esa lógica.
+  dentro de su propia transacción. No duplicar esa lógica. OJO scripts/tests: el
+  endpoint `POST /{id}/nota-credito` devuelve la NC en **BORRADOR** — hay que emitirla
+  aparte para que impacte (cta. cte., stock, comisiones; mordió en la suite F11).
 - **Pruebas sobre agregados del día** (planilla, resúmenes): asertar **deltas**
   (después − antes), nunca absolutos — el día es compartido entre corridas y sesiones.
 - **Números `Numeric` viajan como STRING en el JSON** de la API (SQLAlchemy los
@@ -152,6 +154,11 @@ ZGC/
   UI la muestra). El catálogo de módulos vive en `app/core/permisos.py` y es ESPEJO del
   seed SQL de la migración 010 — cambiar uno exige cambiar el otro. `usuarios.rol_id
   NULL` = acceso total (compat scripts/seeds). La guarda responde 403, nunca 401.
+  Al AGREGAR un módulo (F8 bancos, F9 contabilidad, F11 vendedores): las comprehensions
+  de `ROLES_BASE` lo toman solas para tenants NUEVOS (iteran `MODULOS`); los existentes
+  necesitan el `INSERT ... ON CONFLICT DO NOTHING` en la migración. Y las sesiones ya
+  logueadas NO ven el ítem nuevo del nav hasta re-loguear (los `permisos` viajan en el
+  login) — no es un bug del deploy.
 - **Índices para relaciones `selectin`**: el loader emite `WHERE fk IN (...)` SIN
   `tenant_id` → un índice compuesto `(tenant_id, fk)` NO le sirve (mordió en
   `comprobante_items`/`compra_items`, migraciones 006/007). Toda tabla hija nueva lleva
@@ -224,6 +231,11 @@ ZGC/
   (`services/contabilidad.py`); ningún módulo postea asientos en línea. Toda regla de
   `asiento_mapeos` DEBE tener fila default (clave NULL) — un origen sin fallback saltea
   asientos con warning (mordió con los débitos de extracto importado).
+- **Marcas de "ya procesado" se DERIVAN, nunca mutan el documento fuente** (F11,
+  extensión del contrato de inmutabilidad): un documento está liquidado/exportado/
+  procesado si existe un ítem VIVO del documento procesador que lo referencia
+  (patrón `comision_liquidacion_items`) — anular el procesador (marcar) libera los
+  documentos solo. Nada de flags booleanos sobre comprobantes/recibos emitidos.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 
@@ -282,10 +294,19 @@ ZGC/
 - **Suites en vivo: todo recurso NOMBRADO que crea el test lleva el sufijo único de la
   corrida** (uuid), no solo emails/CUITs — si la suite crashea a mitad, el cleanup no
   corre y los huérfanos rompen los conteos de la re-corrida (mordió en Fase 6.5 con un
-  rol "Depósito" huérfano de una corrida anterior).
+  rol "Depósito" huérfano de una corrida anterior). AMPLIADA en F9-bis: también los
+  **VALORES que el backend usa como clave de matching** (importes en candidatos de
+  apareo, fechas de búsqueda) llevan valor único por corrida — los huérfanos de corridas
+  anteriores contaminan los resultados aunque tengan nombre distinto. Y al testear un
+  código de error específico (p. ej. 409 "ya apareado"), el fixture debe SATISFACER las
+  validaciones previas del endpoint (o dispara el 422 anterior y el test miente).
 - **`git add -A -- ':!ruta'` ABORTA (exit 1) si la ruta está gitignoreada** (F9): el
   pathspec de exclusión hace que git intente evaluar el archivo ignorado y corta con el
   hint "paths are ignored". Si el archivo ya está en `.gitignore`, `git add -A` solo alcanza.
+- **NUNCA editar archivos UTF-8 con pipelines de PowerShell 5.1** (F9-bis):
+  `(Get-Content f) -replace ... | Set-Content -Encoding utf8 f` lee el UTF-8 sin BOM
+  como ANSI y lo re-escribe → **mojibake** en todos los acentos (Ã­, Ã³). Para editar
+  archivos del repo usar SIEMPRE las herramientas de edición (Edit/Write), no shell.
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
@@ -314,3 +335,10 @@ ZGC/
   el navegador, si un click "no hace nada", **recargar la página completa** antes de
   concluir que hay un bug (pasó 2-3 veces en esta sesión: el handler nuevo no estaba
   adjunto por HMR).
+- **`git push` colgado con el remoto accesible = credential manager pidiendo credenciales
+  interactivas** (F11): `ls-remote`/`fetch` andan pero el push cuelga minutos sin error —
+  el Windows Credential Manager quedó esperando un prompt tras un 401 en el receive-pack
+  (visible con `GIT_TRACE=1 GIT_CURL_VERBOSE=1`). Fix que funciona sin tocar la config
+  global: `git -c credential.helper= -c credential.helper='!gh auth git-credential' push`
+  (usa el token del gh CLI, que no expira a mitad de sesión). No insistir con reintentos
+  a ciegas: diagnosticar con trace al segundo intento fallido.
