@@ -16,6 +16,27 @@
    de la gestión**, como si fuera un punto de venta más.
 5. El esquema debe ser **replicable a N puntos de venta**.
 
+### 0-bis. Definiciones de César (2026-07-11, segunda ronda — responden §8)
+
+- **El nodo lleva TAMBIÉN la facturación de gestión** ("facturación propiamente
+  dicha", el módulo Ventas — presupuestos/facturas/NC/ND), con un **punto de
+  venta PROPIO del nodo/sucursal**, distinto de los PV de las cajas POS. Cada
+  canal factura con SU punto de venta y opera su stock/inventario: la
+  suite/nodo con el suyo, cada caja POS con el suyo.
+- **La gestión local completa** (compras, bancos, contabilidad… en el nodo) es
+  un **extra deseable, no requisito** → queda para N3.
+- Los puntos de venta (los POS) son módulos que pueden ser **independientes o
+  conectarse a la suite** — coherente con el plan `pos` de F12-a (packaging) y
+  con este nodo (offline): son las dos caras de la misma independencia.
+- **Login POS dedicado: ADELANTADO** — implementado en la nube el 2026-07-11
+  (mismo día): `POST /pos/auth/login` emite JWT con `scope: "pos"`; las guardas
+  acotan la sesión de caja al módulo `pos` completo + solo-lectura de
+  `ventas`/`clientes` (impresión de tickets, identificar receptor, OSM del
+  delivery), 403 en todo lo demás (nunca 401). Front: página `/pos/login`
+  («Punto de Venta»), la gestión rebota a `/pos` para sesiones de caja, y
+  «Salir de la caja» desloguea al login del POS. El token de la suite sigue
+  operando el POS como siempre. Suite `tools/test_pos_login_dev.py` (23).
+
 ## 1. Qué es y qué no es
 
 - **ES** la implementación del "nodo de sucursal" de CLAUDE.md §3: una PC de la
@@ -80,12 +101,12 @@
   - emite un JWT con `scope: pos` que las guardas de la suite rechazan (un token
     de caja no sirve para la gestión, y viceversa el de la suite sigue operando
     el POS online como hoy — compat).
-- **Superficie del nodo recortada**: el perfil `nodo` monta SOLO los routers que el
-  POS necesita (`pos`, `pos_resto`, `articulos`/`stock` en modo consulta+ajuste,
-  `clientes` para identificar receptor, `auth` del POS). La gestión completa
-  (compras, bancos, contabilidad…) NO se sirve desde el nodo en v1 — se usa online
-  contra la nube, como hoy. Esto implementa la "autonomía de gestión" mínima del
-  mandato 3 (stock e inventario locales) sin duplicar la suite entera.
+- **Superficie del nodo (v1, ajustada por §0-bis)**: el perfil `nodo` monta los
+  routers del POS (`pos`, `pos_resto`, `auth` del POS) **más la facturación de
+  gestión** (`ventas`/comprobantes/cobranzas con el PV propio del nodo),
+  `articulos`/`stock` (consulta + ajustes locales) y `clientes`. La gestión
+  completa (compras, bancos, contabilidad…) NO se sirve desde el nodo en v1 —
+  es el extra de N3; mientras tanto se usa online contra la nube, como hoy.
 - En la nube, `POST /pos/auth/login` también existe (mismo código): un tenant sin
   nodo gana igual la pantalla de entrada propia del POS.
 
@@ -137,23 +158,22 @@ todo sellado con `tenant_id`, las ventas POS con su sesión/caja, kardex con
 
 | Sub-fase | Contenido | Criterio de listo |
 |---|---|---|
-| **N1 — Nodo mínimo** | Perfil `nodo` del backend, instalador Windows, aparejamiento (`sucursal_nodos` + token), réplica de bajada de maestros, POS servido por el nodo con `POST /pos/auth/login` | Una caja de la LAN vende contra el nodo con precios/artículos replicados (aunque la venta aún no suba sola) |
+| **N1 — Nodo mínimo** | Perfil `nodo` del backend, instalador Windows, aparejamiento (`sucursal_nodos` + token), réplica de bajada de maestros, POS servido por el nodo (el login POS ya existe) + **facturación de gestión con el PV propio del nodo** (§0-bis) | Una caja de la LAN vende contra el nodo con precios/artículos replicados, y el nodo factura desde Ventas con su PV (aunque nada suba solo todavía) |
 | **N2 — Sincronización completa** | Cola `sync_eventos` idempotente de subida, CAE diferido al reconectar, monitoreo del nodo en Configuración (last_seen, atraso de cola) | Corte de internet de horas: la sucursal vende, stock y ventas convergen al reconectar, CAE otorgado retroactivo |
-| **N3 — Robustez y extras** | Gestión local ampliada (consultas de cta. cte. offline), CAEA evaluado, resto/carnicería offline completos, updates automáticos del nodo | Piloto multi-caja real corriendo semanas sin intervención |
+| **N3 — Robustez y extras** | **Gestión local ampliada (el "extra" de §0-bis: compras, cta. cte. offline…)**, CAEA evaluado, resto/carnicería offline completos, updates automáticos del nodo | Piloto multi-caja real corriendo semanas sin intervención |
 
-El login POS dedicado (`/pos/auth/login` + scope) puede adelantarse como pieza
-suelta en la nube (sirve a TODOS los tenants, con o sin nodo) — es el paso barato
-que ya cumple el mandato 2.
+~~El login POS dedicado puede adelantarse como pieza suelta en la nube~~ →
+**HECHO 2026-07-11** (ver §0-bis): `/pos/auth/login` + scope ya sirve a todos los
+tenants, con o sin nodo, y es el MISMO código que servirá el nodo.
 
 ## 8. Preguntas abiertas para César
 
-1. **¿Gestión local completa en el nodo?** v1 propone solo POS + stock/inventario
-   local (mandato 3 mínimo); la gestión entera (compras, bancos…) sigue online.
-   ¿Alcanza, o la sucursal necesita cargar compras sin internet?
+1. ~~¿Gestión local completa en el nodo?~~ → **RESPONDIDA 2026-07-11** (§0-bis):
+   el nodo lleva POS + **facturación de gestión con PV propio** + stock/clientes;
+   la gestión completa es un extra (N3).
 2. **Hardware de referencia del nodo**: ¿PC Windows dedicada existente en los
    clientes tipo (como el server del legacy)? Define el instalador de N1.
-3. **¿Adelantamos el login POS dedicado** (pieza de nube, barata) antes de encarar
-   el nodo entero?
+3. ~~¿Adelantamos el login POS dedicado?~~ → **HECHA 2026-07-11** (§0-bis).
 4. **Prioridad vs. F12-bis Logística**: el nodo es esfuerzo ALTO (varias sesiones).
    ¿Va antes, después, o en paralelo con pilotos?
 

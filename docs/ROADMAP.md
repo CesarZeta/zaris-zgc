@@ -745,16 +745,35 @@ resolver los pendientes chicos antes de encarar el próximo módulo grande.
   exports con BOM, cache del padrón vivo, planilla por sucursal, dry-run POS con
   descuentos; creó "Caja Mostrador" de vitrina en el demo prod).
 
-## FASE 13-LAN — Nodo de sucursal (diseño listo, implementación pendiente de decisión)
+## FASE 13-LAN — Nodo de sucursal (diseño cerrado; login POS dedicado YA en producción)
 
 **Mandatos de César 2026-07-11**: conectar puestos en red con puntos de venta
 asignados; endpoint del POS propio y separado del login de la suite; autonomía de
-gestión local (stock/inventario) con integración total a la gestión al reconectar;
-replicable a N puestos. Diseño completo en `docs/DISENO-NODO-LAN.md` (sub-fases
-N1 nodo mínimo / N2 sincronización + CAE diferido / N3 robustez; preguntas
-abiertas en §8 — entre ellas si se adelanta el login POS dedicado como pieza de
-nube). Es la materialización del "nodo de sucursal" de CLAUDE.md §3; ortogonal al
-plan `pos` de F12-a (aquel es packaging online, esto es facturar sin internet).
+gestión local con integración total a la gestión al reconectar; replicable a N
+puestos. **Definiciones de la 2ª ronda (mismo día, §0-bis del diseño)**: el nodo
+lleva TAMBIÉN la facturación de gestión (módulo Ventas) con un **PV propio del
+nodo** — cada canal factura con su punto de venta y su stock —; la gestión local
+completa es un extra (N3). Diseño completo en `docs/DISENO-NODO-LAN.md`
+(sub-fases N1 nodo mínimo / N2 sincronización + CAE diferido / N3 robustez).
+Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
+
+- [x] **Login POS dedicado (adelanto, EN PRODUCCIÓN 2026-07-11)**: `POST
+  /pos/auth/login` valida contra el MISMO esquema de usuarios, exige el módulo
+  `pos` en plan∩rol (403 si no, nunca 401) y emite JWT con `scope: "pos"`. Las
+  guardas (`permisos.py`) acotan la sesión de caja: módulo `pos` completo según
+  rol + SOLO LECTURA de `ventas`/`clientes` (impresión de tickets, identificar
+  receptor, OSM del delivery vía guarda de clientes) + 403 "sesión de caja" en
+  todo lo demás. Front: página `/pos/login` («Punto de Venta», link cruzado con
+  el login de la suite), `/pos` sin sesión va al login de caja, la gestión
+  REBOTA a `/pos` para sesiones de caja, «Salir de la caja» desloguea al login
+  del POS, y el interceptor 401 vuelve al login que corresponde. El token de la
+  suite sigue operando el POS como siempre (compat). Sin migración (el scope es
+  claim del JWT). Verificado: **23/23 en vivo** (`tools/test_pos_login_dev.py`,
+  incluye ciclo de venta completo con token de caja y tenant plan `pos`) +
+  regresiones F12-a 36/36 · lote diferidos 40/40 · F12-b 39/39 + build TS + E2E
+  navegador (login → /pos, gestión rebota, salir de la caja).
+- [ ] **N1/N2/N3** (nodo físico): pendientes de las preguntas §8 restantes
+  (hardware de referencia; prioridad vs. F12-bis Logística).
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 

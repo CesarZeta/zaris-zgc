@@ -26,7 +26,7 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(usuario: Usuario) -> str:
+def create_access_token(usuario: Usuario, scope: str | None = None) -> str:
     payload = {
         "sub": str(usuario.id),
         "tenant_id": str(usuario.tenant_id),
@@ -34,6 +34,10 @@ def create_access_token(usuario: Usuario) -> str:
         "rol_id": str(usuario.rol_id) if usuario.rol_id else None,
         "exp": datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
     }
+    # scope "pos" = sesión de caja (login POS dedicado): las guardas la acotan a
+    # la superficie del POS (permisos.py). Sin scope = token pleno de la suite.
+    if scope:
+        payload["scope"] = scope
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
@@ -52,4 +56,7 @@ async def get_current_user(
     usuario = await db.scalar(select(Usuario).where(Usuario.id == user_id))
     if usuario is None or not usuario.activo:
         raise exc
+    # atributo efímero (no persiste): las guardas de permisos.py leen el alcance
+    # del token acá — None = suite plena, "pos" = sesión de caja acotada
+    usuario.token_scope = payload.get("scope")
     return usuario

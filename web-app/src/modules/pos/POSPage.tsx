@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
-import { getSesion } from "../../lib/auth";
+import { clearSesion, getSesion } from "../../lib/auth";
 import type {
   Cliente,
   ImpresionPayload,
@@ -62,7 +62,7 @@ export default function POSPage() {
     })();
   }, []);
 
-  if (!auth) return <Navigate to="/login" replace />;
+  if (!auth) return <Navigate to="/pos/login" replace />;
   if (cargando) return <div className="pos-pantalla pos-centro">Cargando…</div>;
   if (!sesion) return <AperturaView onAbierta={setSesion} />;
   // F12-d: la caja decide la pantalla — mostrador (F6) o resto (mesas/comandas)
@@ -70,6 +70,29 @@ export default function POSPage() {
     <RestoPOS sesion={sesion} onCerrada={() => setSesion(null)} />
   ) : (
     <VentaView sesion={sesion} onCerrada={() => setSesion(null)} />
+  );
+}
+
+/** Salida del POS según la sesión: la sesión de caja (scope pos) se desloguea
+ *  y vuelve al login del POS; la de la suite vuelve a la gestión. */
+export function SalirCajaBoton({ className, label }: { className: string; label: string }) {
+  if (getSesion()?.scope === "pos") {
+    return (
+      <button
+        className={className}
+        onClick={() => {
+          clearSesion();
+          window.location.href = `${import.meta.env.BASE_URL}pos/login`;
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <Link className={className} to="/">
+      {label}
+    </Link>
   );
 }
 
@@ -154,9 +177,10 @@ function AperturaView({ onAbierta }: { onAbierta: (s: PosSesion) => void }) {
             </button>
           </>
         )}
-        <Link className="pos-salir" to="/">
-          ← Volver a la gestión
-        </Link>
+        <SalirCajaBoton
+          className="pos-salir"
+          label={getSesion()?.scope === "pos" ? "← Salir de la caja" : "← Volver a la gestión"}
+        />
       </div>
     </div>
   );
@@ -495,9 +519,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           <button className="btn btn-ghost" onClick={() => setVerCierre(true)}>
             Cierre (F8)
           </button>
-          <Link className="btn btn-ghost" to="/">
-            Salir
-          </Link>
+          <SalirCajaBoton className="btn btn-ghost" label="Salir" />
         </div>
       </header>
 

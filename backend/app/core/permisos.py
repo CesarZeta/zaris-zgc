@@ -55,6 +55,23 @@ PLANES: dict[str, set[str]] = {
     "pos": {"pos", "articulos", "stock", "clientes", "ventas", "caja", "libros_iva", "configuracion"},
 }
 
+# Alcance del TOKEN (login POS dedicado, adelanto de F13-LAN — DISENO-NODO-LAN.md §4):
+# un JWT con scope "pos" es una sesión de CAJA. Opera el módulo `pos` completo
+# (según su rol) y SOLO LECTURA de los módulos de apoyo que la pantalla de caja
+# consume: `ventas` (impresión de tickets) y `clientes` (identificar receptor;
+# habilita también el proxy OSM del delivery, cuya guarda pasa por clientes).
+# Todo lo demás responde 403 (nunca 401 — regla §6). El token de la suite
+# (sin scope) sigue operando el POS y todo lo demás como siempre.
+SCOPE_POS_APOYO: set[str] = {"ventas", "clientes"}
+
+
+def _scope_permite(usuario: Usuario, modulo: str, accion: str) -> bool:
+    if getattr(usuario, "token_scope", None) != "pos":
+        return True
+    if modulo == "pos":
+        return True
+    return modulo in SCOPE_POS_APOYO and accion == "ver"
+
 _TODO_ANULAR: dict[str, str] = {m: "anular" for m in MODULOS}
 
 # Roles base sembrados por tenant (es_sistema=true). Espejo del seed de la
@@ -156,6 +173,12 @@ def requiere(modulo: str, accion: str = "ver"):
         usuario: Usuario = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> Usuario:
+        # Scope ANTES que todo (no toca la DB): una sesión de caja no sale del POS.
+        if not _scope_permite(usuario, modulo, accion):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Sesión de caja: fuera del alcance del POS ({MODULOS[modulo]})",
+            )
         # Plan ANTES que rol: mensaje distinto (no es un problema de permisos del
         # usuario sino del plan contratado). Siempre 403, nunca 401 (regla §6).
         if modulo not in modulos_del_plan(await plan_del_tenant(db, usuario.tenant_id)):
@@ -186,16 +209,24 @@ def requiere_alguno(modulos: list[str], accion: str = "ver"):
         usuario: Usuario = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> Usuario:
-        del_plan = modulos_del_plan(await plan_del_tenant(db, usuario.tenant_id))
-        if not any(m in del_plan for m in modulos):
+        # Scope primero: solo cuentan los módulos alcanzables por la sesión.
+        alcanzables = [m for m in modulos if _scope_permite(usuario, m, accion)]
+        if not alcanzables:
             nombres = " / ".join(MODULOS[m] for m in modulos)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Sesión de caja: fuera del alcance del POS ({nombres})",
+            )
+        del_plan = modulos_del_plan(await plan_del_tenant(db, usuario.tenant_id))
+        if not any(m in del_plan for m in alcanzables):
+            nombres = " / ".join(MODULOS[m] for m in alcanzables)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Módulo no incluido en el plan: {nombres}",
             )
         permisos = await permisos_efectivos(db, usuario)
-        if not any(_tiene(permisos, m, accion) for m in modulos if m in del_plan):
-            nombres = " / ".join(MODULOS[m] for m in modulos)
+        if not any(_tiene(permisos, m, accion) for m in alcanzables if m in del_plan):
+            nombres = " / ".join(MODULOS[m] for m in alcanzables)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Sin permiso: {nombres} ({accion})",

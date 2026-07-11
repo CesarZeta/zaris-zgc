@@ -27,6 +27,9 @@ export default function AppShell() {
   const navigate = useNavigate();
   const sesion = getSesion();
   if (!sesion) return <Navigate to="/login" replace />;
+  // Sesión de caja (login POS dedicado): la gestión no existe para este token
+  // (el backend responde 403) — toda la UI vive en /pos.
+  if (sesion.scope === "pos") return <Navigate to="/pos" replace />;
 
   function salir() {
     clearSesion();

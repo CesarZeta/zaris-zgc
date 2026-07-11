@@ -1,3 +1,8 @@
+// Login dedicado del Punto de Venta (adelanto de F13-LAN): entra por
+// POST /pos/auth/login y recibe un token de ALCANCE POS — el backend rechaza
+// todo lo que esté fuera de la superficie de la caja, y la UI vive en /pos.
+// El mismo formulario servirá en el nodo de sucursal (cambia solo la API base).
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, apiPost } from "../lib/api";
@@ -5,7 +10,7 @@ import { setSesion } from "../lib/auth";
 import type { Sesion } from "../lib/types";
 import ZarisLogo from "./ZarisLogo";
 
-export default function LoginPage() {
+export default function POSLoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,9 +22,9 @@ export default function LoginPage() {
     setError(null);
     setCargando(true);
     try {
-      const sesion = await apiPost<Sesion>("/auth/login", { email, password });
+      const sesion = await apiPost<Sesion>("/pos/auth/login", { email, password });
       setSesion({ ...sesion, login_at: new Date().toISOString() });
-      navigate("/inicio");
+      navigate("/pos");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo conectar con el servidor");
     } finally {
@@ -34,7 +39,7 @@ export default function LoginPage() {
           <ZarisLogo size={40} />
           <h1 className="login-logo">ZARIS</h1>
         </div>
-        <p className="login-sub">Gestión Comercial</p>
+        <p className="login-sub">Punto de Venta</p>
 
         {error && <div className="login-error">{error}</div>}
 
@@ -62,11 +67,11 @@ export default function LoginPage() {
           />
         </div>
         <button className="btn btn-primary btn-block" type="submit" disabled={cargando}>
-          {cargando ? "Ingresando…" : "Ingresar"}
+          {cargando ? "Ingresando…" : "Abrir el POS"}
         </button>
 
         <p className="login-sub" style={{ marginTop: "var(--space-4)" }}>
-          <Link to="/pos/login">Ingreso de caja (POS) →</Link>
+          <Link to="/login">← Ingresar a la gestión</Link>
         </p>
       </form>
     </div>

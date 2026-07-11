@@ -20,7 +20,7 @@ import type {
 } from "../../lib/types";
 import AddressSearch from "../../components/AddressSearch";
 import { useDialogos } from "../../components/dialogos";
-import { CierreModal, CobroModal } from "./POSPage";
+import { CierreModal, CobroModal, SalirCajaBoton } from "./POSPage";
 import { imprimirTicket } from "./ticket";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
@@ -164,9 +164,7 @@ export default function RestoPOS({
           <button className="btn btn-ghost" onClick={() => setVerCierre(true)}>
             Cierre (F8)
           </button>
-          <Link className="btn btn-ghost" to="/">
-            Salir
-          </Link>
+          <SalirCajaBoton className="btn btn-ghost" label="Salir" />
         </div>
       </header>
 

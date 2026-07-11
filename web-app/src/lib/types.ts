@@ -17,6 +17,9 @@ export interface Sesion {
   /** Permisos por módulo (Fase 6.5). Ausente en sesiones viejas = acceso total
    *  en la UI (el backend igual controla cada endpoint). */
   permisos?: PermisosMap;
+  /** "pos" = sesión de caja (login POS dedicado): la UI vive en /pos y el
+   *  backend acota el token a la superficie del POS. Ausente = suite plena. */
+  scope?: string;
   /** ISO timestamp del inicio de sesión (lo sella el cliente al loguear). */
   login_at?: string;
 }

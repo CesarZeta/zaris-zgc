@@ -23,10 +23,12 @@ async function request<T>(
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
 
-  if (res.status === 401 && !path.startsWith("/auth/login")) {
+  if (res.status === 401 && !path.startsWith("/auth/login") && !path.startsWith("/pos/auth/login")) {
+    const eraCaja = sesion?.scope === "pos";
     clearSesion();
-    // BASE_URL cubre el subpath de GitHub Pages (/zaris-zgc/)
-    window.location.href = `${import.meta.env.BASE_URL}login`;
+    // BASE_URL cubre el subpath de GitHub Pages (/zaris-zgc/); la sesión de
+    // caja vencida vuelve al login del POS, no al de la gestión
+    window.location.href = `${import.meta.env.BASE_URL}${eraCaja ? "pos/login" : "login"}`;
     throw new ApiError(401, "Sesión vencida");
   }
   if (!res.ok) {
