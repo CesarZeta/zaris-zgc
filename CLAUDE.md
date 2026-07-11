@@ -218,8 +218,12 @@ ZGC/
   incluidos los checks de bloqueo (si no, las anuladas bloquean para siempre) — y
   (3) MAPEABLE — toda categoría que decida una cuenta contable es FK a catálogo, no texto
   libre. Los movimientos de stock sellan `costo_unitario` neto ARS (`services/stock_valor.py`)
-  y la fecha del documento si viene backdateado. La contabilidad (F9) se DERIVA de los
-  documentos con un motor regenerable; ningún módulo postea asientos en línea.
+  y la fecha del documento si viene backdateado — PERO el contra-movimiento de ANULACIÓN se
+  fecha HOY, nunca con la fecha del papel (el hecho ocurre hoy; bug cazado en la revisión de
+  la 014). La contabilidad (F9) se DERIVA de los documentos con un motor regenerable
+  (`services/contabilidad.py`); ningún módulo postea asientos en línea. Toda regla de
+  `asiento_mapeos` DEBE tener fila default (clave NULL) — un origen sin fallback saltea
+  asientos con warning (mordió con los débitos de extracto importado).
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 
@@ -279,6 +283,9 @@ ZGC/
   corrida** (uuid), no solo emails/CUITs — si la suite crashea a mitad, el cleanup no
   corre y los huérfanos rompen los conteos de la re-corrida (mordió en Fase 6.5 con un
   rol "Depósito" huérfano de una corrida anterior).
+- **`git add -A -- ':!ruta'` ABORTA (exit 1) si la ruta está gitignoreada** (F9): el
+  pathspec de exclusión hace que git intente evaluar el archivo ignorado y corta con el
+  hint "paths are ignored". Si el archivo ya está en `.gitignore`, `git add -A` solo alcanza.
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
@@ -290,7 +297,9 @@ ZGC/
   workflow de Pages SOLO corre si el push toca `web-app/**` (filtro `paths:` en
   deploy-pages.yml — que un push de solo docs no genere run en `gh run list` NO es un
   fallo). Antes de pushear, si el modelo agregó columnas/tablas, **la migración va
-  SIEMPRE primero**. Matiz que mordió en Fase 6.5: una columna nueva en un modelo YA
+  SIEMPRE primero**. Probe barato de "¿Vercel ya sirve el backend nuevo?" (mejora F9 del
+  probe 401/404 del LOTE TÉCNICO): `curl /openapi.json | grep <ruta-o-campo-nuevo>` — es
+  público, no necesita token y detecta cambios de schema, no solo rutas nuevas. Matiz que mordió en Fase 6.5: una columna nueva en un modelo YA
   mapeado (ej. `usuarios.rol_id`) rompe TODOS los SELECT de esa tabla contra una DB sin
   migrar — en `usuarios` eso es el LOGIN entero, no solo la feature nueva. Verificarlo
   con psql antes del push.

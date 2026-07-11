@@ -40,6 +40,7 @@ const MODULOS = [
   { to: "/articulos", modulo: "articulos", nombre: "Artículos", desc: "Catálogo, listas de precios y variantes" },
   { to: "/stock", modulo: "stock", nombre: "Stock", desc: "Existencias, kardex y ajustes" },
   { to: "/caja", modulo: "caja", nombre: "Caja", desc: "Planilla diaria, movimientos y arqueo" },
+  { to: "/bancos", modulo: "bancos", nombre: "Bancos y Cheques", desc: "Cartera de cheques, cuentas y tesorería" },
   { to: "/pos", modulo: "pos", nombre: "Punto de Venta", desc: "Mostrador con lector y ticket térmico" },
   { to: "/libros", modulo: "libros_iva", nombre: "Libros IVA", desc: "Ventas, compras, retenciones y CITI" },
   { to: "/contabilidad", modulo: "contabilidad", nombre: "Contabilidad", desc: "Libro diario derivado, plan de cuentas y mayor" },
