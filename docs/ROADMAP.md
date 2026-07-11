@@ -771,7 +771,9 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
   claim del JWT). Verificado: **23/23 en vivo** (`tools/test_pos_login_dev.py`,
   incluye ciclo de venta completo con token de caja y tenant plan `pos`) +
   regresiones F12-a 36/36 · lote diferidos 40/40 · F12-b 39/39 + build TS + E2E
-  navegador (login → /pos, gestión rebota, salir de la caja).
+  navegador (login → /pos, gestión rebota, salir de la caja). **Deploy 2026-07-11
+  (commit 82b02de)**: push → probe openapi 1er intento → **smoke prod 8/8**
+  (`tools/smoke_pos_login_prod.py`, neutro) → Pages success 1er intento.
 - [ ] **N1/N2/N3** (nodo físico): pendientes de las preguntas §8 restantes
   (hardware de referencia; prioridad vs. F12-bis Logística).
 
