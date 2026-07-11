@@ -18,6 +18,7 @@ const NAV: { to: string; label: string; modulo: string | null }[] = [
   { to: "/bancos", label: "Bancos y Cheques", modulo: "bancos" },
   { to: "/pos", label: "Punto de Venta", modulo: "pos" },
   { to: "/libros", label: "Libros IVA", modulo: "libros_iva" },
+  { to: "/contabilidad", label: "Contabilidad", modulo: "contabilidad" },
   { to: "/configuracion", label: "Configuración", modulo: "configuracion" },
 ];
 

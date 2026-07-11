@@ -8,6 +8,7 @@ import CajaPage from "./modules/caja/CajaPage";
 import ClientesPage from "./modules/clientes/ClientesPage";
 import ComprasPage from "./modules/compras/ComprasPage";
 import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
+import ContabilidadPage from "./modules/contabilidad/ContabilidadPage";
 import LibrosPage from "./modules/libros/LibrosPage";
 import POSPage from "./modules/pos/POSPage";
 import ProveedoresPage from "./modules/proveedores/ProveedoresPage";
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/caja" element={<CajaPage />} />
           <Route path="/bancos" element={<BancosPage />} />
           <Route path="/libros" element={<LibrosPage />} />
+          <Route path="/contabilidad" element={<ContabilidadPage />} />
           <Route path="/configuracion" element={<ConfiguracionPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

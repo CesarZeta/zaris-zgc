@@ -496,6 +496,48 @@ módulos; la F9 completa sigue gated por su condición).
   ANTES del push (el backend nuevo mapea las columnas — como la 010) + push a
   master + smoke contra prod.
 
+## FASE 9 — Contabilidad v1 (módulo activable) ✅ (en producción 2026-07-11)
+
+**Entregable: el tenant tiene libro diario, mayor y sumas y saldos DERIVADOS de sus
+operaciones — regenerables por período — con plan de cuentas argentino y mapeos
+configurables.** Diseño en `docs/DISENO-CONTABILIDAD.md`; el gate original (primer
+cliente pagando) lo levantó César el 2026-07-11 ("adelante") con la mini-fase
+Contabilizabilidad ya en producción como base.
+
+- [x] **Migración 015** (greenfield): `plan_cuentas` (jerárquico, seed lazy por tenant),
+  `asiento_mapeos` (regla+clave → cuenta, unique NULLS NOT DISTINCT; espejo moderno de
+  los CUENTA C6 del legacy), `asientos` + `asiento_lineas` (CHECK debe XOR haber),
+  `contab_periodos` (cierre mensual, reabrir = marcar). RLS + módulo RBAC `contabilidad`
+  (admin/gerente anular · consulta ver · cajero/vendedor sin acceso — espejo permisos.py).
+- [x] **Plan argentino base** (~37 cuentas es_sistema, renombrables no borrables) +
+  **mapeos default** con fallback en TODA regla — sembrado lazy en `GET /contabilidad/plan`
+  (patrón roles RBAC). ABM de cuentas propias.
+- [x] **Motor de derivación** (`services/contabilidad.py`, sin commit): ventas (con CMV
+  por el costo sellado de la 014 + apertura por familia con residual al default),
+  recibos, compras (percepciones/internos/redondeo), OP (cheques endosados vs propios),
+  caja, bancos (manual/import; los de cheques van por eventos), eventos de cheque
+  (depósito/rechazo/débito/altas manuales), retenciones, ajustes de inventario y
+  diferencias de arqueo. **Los documentos ANULADOS derivan además su reversión fechada
+  en `anulado_at`** (la mini-fase 014 existía para esto). Todo asiento se valida
+  balanceado; lo no mapeable/no balanceable se saltea con warning (p. ej. recibos con
+  total reescrito por rechazos pre-014: historia dañada, no derivable).
+- [x] **Regeneración por período** (`POST /regenerar`, máx. 400 días): borra los
+  derivados del rango y re-deriva; los manuales nunca se tocan; 409 sobre período cerrado.
+- [x] **Asiento manual** (balanceado, cuentas imputables, período abierto; anular = marcar)
+  + **cierre/reapertura de períodos**.
+- [x] **Reportes**: libro diario (con detalle por línea + export CSV es-AR), mayor por
+  cuenta con saldo corrido, sumas y saldos con verificación de balance.
+- [x] **Frontend** módulo `/contabilidad` (tabs Libro diario · Sumas y saldos · Plan de
+  cuentas · Mapeos) + NAV/inicio gated por permiso.
+- [x] Verificado 2026-07-11: **39/39 pruebas en vivo** (`tools/test_f9_dev.py`) incluida la
+  **prueba de fuego del diseño**: regenerar ~4 meses del tenant demo (331 asientos) sin
+  tocar ningún módulo operativo, con sumas y saldos balanceados. Regresión: mini-fase 014
+  53/53 + F8 31/31 + build TS.
+- Diferido documentado (**F9-bis**): activos fijos + amortizaciones (alcance original de
+  la fila F9), export específico del software del contador (el CSV del diario cubre v1),
+  balance general presentable, apareo de transferencias entre cuentas propias (hoy van a
+  cuenta puente 1.1.06), asiento de apertura asistido.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -509,7 +551,7 @@ módulos; la F9 completa sigue gated por su condición).
 |---|---|---|---|
 | 7 ✅ | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal); **domicilios normalizados OSM** (estándar de suite heredado de ZGE: proxy Nominatim + AddressSearch + lat/lon en entidades/sucursales + `entidad_domicilios` — ver `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1; hacerlo ANTES de cargar entidades masivamente); **ABM de sucursales** (la tabla existe desde la 001, falta la UI) + sucursal en cajas POS | **CÓDIGO COMPLETO 2026-07-06** (ver detalle abajo) |
 | 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
-| 9 | **Contabilidad** (módulo activable) | **Diseño completo en `DISENO-CONTABILIDAD.md` (2026-07-10)**: contabilidad DERIVADA y regenerable (motor de asientos que lee los documentos operativos — patrón validado por el legacy GV016x), plan de cuentas con seed argentino, `asiento_mapeos` (espejo moderno de los CUENTA C6 del legacy), libro diario, balances; **activos fijos + amortizaciones**; **export al software del contador**. La mini-fase Contabilizabilidad (2026-07-10, EN PROD) dejó los documentos listos para derivar retroactivamente | **FOSO** — primer cliente de referencia pagando. *Adelantada de F11→F9 (decisión César 2026-07-05): mejor relación valor/mantenimiento (principios estables), palanca de plan pago, habilita F10* |
+| 9 ✅ | **Contabilidad** (módulo activable) | **v1 EN PRODUCCIÓN 2026-07-11** (sección FASE 9 arriba): motor derivado regenerable + plan argentino + mapeos + diario/mayor/sumas y saldos + períodos + asiento manual + CSV. Pendiente **F9-bis**: activos fijos + amortizaciones, export específico del software del contador, balance presentable | Gate levantado por César 2026-07-11 (la mini-fase Contabilizabilidad ya estaba en prod) |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 | Vendedores y comisiones | Liquidación por venta / por cobranza | — |
 | 12 | **POS por perfiles** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | Demanda ex clientes RevoSolution; por perfil: ≥1 piloto del rubro. Balanza y despiece son **adelantables sueltos** (el despiece es stock puro, no depende del POS) |

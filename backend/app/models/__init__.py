@@ -43,6 +43,13 @@ from app.models.compras import (
     TipoComprobanteCompra,
 )
 from app.models.caja import CajaCierre, CajaMovimiento, ConceptoCaja, Retencion
+from app.models.contabilidad import (
+    Asiento,
+    AsientoLinea,
+    AsientoMapeo,
+    ContabPeriodo,
+    PlanCuenta,
+)
 from app.models.nucleo import Rol, RolPermiso, Sucursal, Tenant, Usuario
 from app.models.pos import PosCaja, PosSesion, VentaMedio
 from app.models.ventas import (
@@ -121,4 +128,9 @@ __all__ = [
     "ExtractoImport",
     "BancoMovimiento",
     "ChequeEvento",
+    "PlanCuenta",
+    "AsientoMapeo",
+    "Asiento",
+    "AsientoLinea",
+    "ContabPeriodo",
 ]

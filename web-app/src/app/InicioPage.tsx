@@ -42,6 +42,7 @@ const MODULOS = [
   { to: "/caja", modulo: "caja", nombre: "Caja", desc: "Planilla diaria, movimientos y arqueo" },
   { to: "/pos", modulo: "pos", nombre: "Punto de Venta", desc: "Mostrador con lector y ticket térmico" },
   { to: "/libros", modulo: "libros_iva", nombre: "Libros IVA", desc: "Ventas, compras, retenciones y CITI" },
+  { to: "/contabilidad", modulo: "contabilidad", nombre: "Contabilidad", desc: "Libro diario derivado, plan de cuentas y mayor" },
   { to: "/configuracion", modulo: "configuracion", nombre: "Configuración", desc: "Empresa, rubro, usuarios y ajustes" },
 ];
 

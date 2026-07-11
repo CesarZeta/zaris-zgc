@@ -36,6 +36,7 @@ MODULOS: dict[str, str] = {
     "libros_iva": "Libros IVA",
     "pos": "POS",
     "bancos": "Bancos y Cheques",
+    "contabilidad": "Contabilidad",
     "configuracion": "Configuración",
 }
 

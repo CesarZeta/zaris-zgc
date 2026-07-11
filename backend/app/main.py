@@ -11,6 +11,7 @@ from app.api.v1.clientes import router as clientes_router
 from app.api.v1.cobranzas import router as cobranzas_router
 from app.api.v1.compras import router as compras_router
 from app.api.v1.comprobantes import router as comprobantes_router
+from app.api.v1.contabilidad import router as contabilidad_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.empresa import router as empresa_router
 from app.api.v1.entidades import router as entidades_router
@@ -58,6 +59,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(cheques_router, prefix="/api/v1")
 app.include_router(bancos_router, prefix="/api/v1")
 app.include_router(tesoreria_router, prefix="/api/v1")
+app.include_router(contabilidad_router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,
