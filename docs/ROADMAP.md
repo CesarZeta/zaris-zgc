@@ -738,8 +738,12 @@ resolver los pendientes chicos antes de encarar el próximo módulo grande.
   selects de vendedor/sucursal renderizando, venta POS real con −20% línea y
   −10% venta = Factura B $8,32 exactos del server; caja "Caja Mostrador" creada
   como vitrina en el demo local).
-- [x] **Deploy a prod (2026-07-11)**: migración 022 + re-005 por psql session pooler
-  ANTES del push → push a master (Vercel + Pages) → probe openapi → smoke prod.
+- [x] **Deploy a prod (2026-07-11, commit 22b6bcd)**: migración 022 + re-005 por psql
+  session pooler ANTES del push (columna + RLS verificados por SQL) → push a master
+  (Vercel probe OK al 1er intento; Pages success al 1er intento) → **smoke prod 17/17**
+  (`tools/smoke_diferidos_prod.py`, NEUTRO sobre el tenant demo: openapi probes,
+  exports con BOM, cache del padrón vivo, planilla por sucursal, dry-run POS con
+  descuentos; creó "Caja Mostrador" de vitrina en el demo prod).
 
 ## FASE 13-LAN — Nodo de sucursal (diseño listo, implementación pendiente de decisión)
 

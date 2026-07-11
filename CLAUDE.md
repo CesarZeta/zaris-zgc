@@ -341,6 +341,12 @@ ZGC/
   un `cat >> archivo << 'EOF'` con contenido largo cortó con "unexpected EOF while
   looking for matching quote". Misma regla que los pipelines de PowerShell: todo
   contenido de archivo se escribe con Write/Edit, el shell no toca archivos del repo.
+- **NUNCA recortar la salida de una suite con `| Select-Object -First N`** (lote
+  diferidos 2026-07-11): al recibir N objetos PowerShell cierra el pipe y MATA el
+  proceso upstream a mitad de corrida — la suite parece crashear (exit 255,
+  traceback a mitad) con el código sano. Para ver solo el inicio: redirigir a
+  archivo (`> out.txt`) y `Get-Content -TotalCount/-Tail`. `Select-Object -Last N`
+  sí es seguro (espera a que el proceso termine).
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
