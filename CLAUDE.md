@@ -334,6 +334,13 @@ ZGC/
   `@'...'@` pasado al tool de PowerShell puede llegar mal parseado (las líneas del
   mensaje se interpretan como comandos sueltos — un `- PLANES...` intentó ejecutarse).
   Escribir el mensaje a un archivo temporal (scratchpad) y commitear con `-F ruta`.
+  AMPLIADA en F12: el archivo del mensaje se escribe con la herramienta Write, NUNCA
+  con `Out-File -Encoding utf8` (PS 5.1 mete BOM y el BOM queda DENTRO del mensaje —
+  primera línea del commit 45345a7 arrancó con `﻿`).
+- **Heredocs (`<< 'EOF'`) en el tool de Bash de este entorno NO son confiables** (F12):
+  un `cat >> archivo << 'EOF'` con contenido largo cortó con "unexpected EOF while
+  looking for matching quote". Misma regla que los pipelines de PowerShell: todo
+  contenido de archivo se escribe con Write/Edit, el shell no toca archivos del repo.
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
