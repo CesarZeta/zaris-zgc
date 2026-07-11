@@ -43,6 +43,7 @@ class ClienteIn(BaseModel):
     lista_precios: int = Field(1, ge=1, le=4)
     condicion_venta_id: uuid.UUID | None = None
     zona_id: uuid.UUID | None = None
+    vendedor_id: uuid.UUID | None = None  # F11: vendedor habitual
     descuento: Decimal = Decimal("0")
     limite_credito: Decimal | None = None
     bloqueado: bool = False
@@ -54,6 +55,7 @@ class ClienteUpdate(BaseModel):
     lista_precios: int | None = Field(None, ge=1, le=4)
     condicion_venta_id: uuid.UUID | None = None
     zona_id: uuid.UUID | None = None
+    vendedor_id: uuid.UUID | None = None  # F11: vendedor habitual
     descuento: Decimal | None = None
     limite_credito: Decimal | None = None
     bloqueado: bool | None = None
@@ -68,6 +70,7 @@ class ClienteOut(BaseModel):
     lista_precios: int
     condicion_venta_id: uuid.UUID | None
     zona_id: uuid.UUID | None
+    vendedor_id: uuid.UUID | None = None
     descuento: Decimal
     limite_credito: Decimal | None
     bloqueado: bool
@@ -138,12 +141,26 @@ async def crear_zona(
     return zona
 
 
+async def _validar_vendedor(db: AsyncSession, tenant_id, vendedor_id) -> None:
+    """F11: el vendedor habitual debe ser del tenant (la FK sola no lo cubre)."""
+    if vendedor_id is None:
+        return
+    from app.models import Vendedor
+
+    existe = await db.scalar(
+        select(Vendedor.id).where(Vendedor.id == vendedor_id, Vendedor.tenant_id == tenant_id)
+    )
+    if existe is None:
+        raise HTTPException(status_code=422, detail="Vendedor inexistente")
+
+
 @router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
 async def crear_cliente(
     body: ClienteIn,
     usuario: Usuario = Depends(requiere("clientes", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
+    await _validar_vendedor(db, usuario.tenant_id, body.vendedor_id)
     if (body.entidad_id is None) == (body.entidad is None):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -235,6 +252,8 @@ async def actualizar_cliente(
     cliente = await _obtener_cliente(db, usuario.tenant_id, cliente_id)
 
     cambios = body.model_dump(exclude_unset=True, exclude={"entidad"})
+    if "vendedor_id" in cambios:
+        await _validar_vendedor(db, usuario.tenant_id, cambios["vendedor_id"])
     for campo, valor in cambios.items():
         setattr(cliente, campo, valor)
     cliente.updated_at = func.now()

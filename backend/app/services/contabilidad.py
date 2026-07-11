@@ -35,6 +35,7 @@ from app.models import (
     CajaMovimiento,
     Cheque,
     ChequeEvento,
+    ComisionLiquidacion,
     Compra,
     CompraItem,
     CompraMedio,
@@ -91,6 +92,7 @@ PLAN_BASE: list[tuple[str, str, str, bool, str | None]] = [
     ("2.1", "Deudas comerciales", "pasivo", False, "2"),
     ("2.1.01", "Proveedores", "pasivo", True, "2.1"),
     ("2.1.02", "Cheques diferidos a pagar", "pasivo", True, "2.1"),
+    ("2.1.03", "Comisiones a pagar", "pasivo", True, "2.1"),
     ("2.2", "Deudas fiscales", "pasivo", False, "2"),
     ("2.2.01", "IVA Débito Fiscal", "pasivo", True, "2.2"),
     ("2.2.02", "Retenciones a depositar", "pasivo", True, "2.2"),
@@ -111,6 +113,7 @@ PLAN_BASE: list[tuple[str, str, str, bool, str | None]] = [
     ("5.1.06", "Ajustes por redondeo", "r_negativo", True, "5"),
     ("5.1.07", "Amortizaciones del ejercicio", "r_negativo", True, "5"),
     ("5.1.08", "Resultado por baja de bienes de uso", "r_negativo", True, "5"),
+    ("5.1.09", "Comisiones de vendedores", "r_negativo", True, "5"),
 ]
 
 # Categorías de bienes de uso con vida útil sugerida (meses) — seed lazy por
@@ -150,6 +153,8 @@ ORIGENES: dict[str, str] = {
     "amort_acumulada": "Amortización acumulada bienes de uso (clave = id de categoría)",
     "amort_ejercicio": "Amortizaciones del ejercicio (clave = id de categoría)",
     "baja_bienes_uso": "Resultado por baja de bienes de uso",
+    "comisiones": "Comisiones de vendedores (gasto)",
+    "comisiones_a_pagar": "Comisiones a pagar (pasivo)",
 }
 
 # (origen, clave, codigo_cuenta)
@@ -197,6 +202,8 @@ MAPEOS_BASE: list[tuple[str, str | None, str]] = [
     ("amort_acumulada", None, "1.4.02"),
     ("amort_ejercicio", None, "5.1.07"),
     ("baja_bienes_uso", None, "5.1.08"),
+    ("comisiones", None, "5.1.09"),
+    ("comisiones_a_pagar", None, "2.1.03"),
 ]
 
 
@@ -850,6 +857,31 @@ async def derivar(
              (mapa.get("baja_bienes_uso"), residual_contable, None),
              (mapa.get("bienes_uso", a.categoria_id), -Decimal(a.valor_origen), None)],
         )
+
+    # ===== 13. Liquidaciones de comisión (F11): la liquidación es el documento
+    # que devenga la comisión — Debe gasto / Haber comisiones a pagar. El pago
+    # al vendedor sale por caja/OP contra la cuenta pasivo (no automatizado v1).
+    liqs = (
+        await db.scalars(
+            select(ComisionLiquidacion).where(
+                ComisionLiquidacion.tenant_id == tenant_id,
+                (func.date(ComisionLiquidacion.created_at) >= desde)
+                & (func.date(ComisionLiquidacion.created_at) <= hasta)
+                | (ComisionLiquidacion.anulado_at.is_not(None)),
+            )
+        )
+    ).all()
+    for lq in liqs:
+        fecha_liq = lq.created_at.date()
+        lineas = [
+            (mapa.get("comisiones"), Decimal(lq.total), None),
+            (mapa.get("comisiones_a_pagar"), -Decimal(lq.total), None),
+        ]
+        etiqueta = f"Liquidación comisiones LC-{lq.numero:08d} ({lq.desde} a {lq.hasta})"
+        if en_rango(fecha_liq):
+            b.agregar(fecha_liq, etiqueta, "comision", lq.id, lineas)
+        if anulado_en_rango(lq.anulado_at):
+            b.reversion(lq.anulado_at.date(), f"Anulación {etiqueta}", "comision_anulacion", lq.id, lineas)
 
     # ===== Persistir: borrar derivados del rango y re-insertar (los manuales
     # y el asiento de apertura NUNCA se tocan) =====

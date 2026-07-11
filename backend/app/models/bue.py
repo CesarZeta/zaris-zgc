@@ -132,6 +132,9 @@ class Cliente(Base):
     zona_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zonas.id"))
     descuento: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
     limite_credito: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    # vendedor habitual (017, espejo de CLIENTES.CVIAJ): defaultea el vendedor
+    # de comprobantes y recibos del cliente
+    vendedor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vendedores.id"))
     bloqueado: Mapped[bool] = mapped_column(Boolean, default=False)
     observaciones: Mapped[str | None] = mapped_column(Text)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)

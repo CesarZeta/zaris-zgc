@@ -13,6 +13,7 @@ import LibrosPage from "./modules/libros/LibrosPage";
 import POSPage from "./modules/pos/POSPage";
 import ProveedoresPage from "./modules/proveedores/ProveedoresPage";
 import StockPage from "./modules/stock/StockPage";
+import VendedoresPage from "./modules/vendedores/VendedoresPage";
 import VentasPage from "./modules/ventas/VentasPage";
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/ventas" element={<VentasPage />} />
           <Route path="/proveedores" element={<ProveedoresPage />} />
           <Route path="/compras" element={<ComprasPage />} />
+          <Route path="/vendedores" element={<VendedoresPage />} />
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/caja" element={<CajaPage />} />

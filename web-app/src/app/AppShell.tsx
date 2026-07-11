@@ -12,6 +12,7 @@ const NAV: { to: string; label: string; modulo: string | null }[] = [
   { to: "/ventas", label: "Ventas", modulo: "ventas" },
   { to: "/proveedores", label: "Proveedores", modulo: "proveedores" },
   { to: "/compras", label: "Compras", modulo: "compras" },
+  { to: "/vendedores", label: "Vendedores", modulo: "vendedores" },
   { to: "/articulos", label: "Artículos", modulo: "articulos" },
   { to: "/stock", label: "Stock", modulo: "stock" },
   { to: "/caja", label: "Caja", modulo: "caja" },

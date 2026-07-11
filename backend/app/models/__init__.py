@@ -54,6 +54,11 @@ from app.models.contabilidad import (
 )
 from app.models.nucleo import Rol, RolPermiso, Sucursal, Tenant, Usuario
 from app.models.pos import PosCaja, PosSesion, VentaMedio
+from app.models.vendedores import (
+    ComisionLiquidacion,
+    ComisionLiquidacionItem,
+    Vendedor,
+)
 from app.models.ventas import (
     ArcaConfig,
     ArcaToken,
@@ -137,4 +142,7 @@ __all__ = [
     "ContabPeriodo",
     "ActivoCategoria",
     "ActivoFijo",
+    "Vendedor",
+    "ComisionLiquidacion",
+    "ComisionLiquidacionItem",
 ]

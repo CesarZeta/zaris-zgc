@@ -12,6 +12,7 @@ import type {
   CondicionVentaCatalogo,
   PuntoVenta,
   Variante,
+  Vendedor,
 } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
 import { etiquetaCuenta, useCuentasBancarias } from "../../components/useCuentasBancarias";
@@ -277,6 +278,9 @@ export default function ComprobanteForm({
   const [medioCobro, setMedioCobro] = useState("efectivo");
   const [cuentaBancariaId, setCuentaBancariaId] = useState("");
   const cuentas = useCuentasBancarias();
+  // F11: vendedor de la venta (default = habitual del cliente)
+  const [vendedorId, setVendedorId] = useState("");
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
 
   // un click en el backdrop no tira una factura a medio cargar (LOTE TÉCNICO)
   const hayDatos =
@@ -294,9 +298,13 @@ export default function ComprobanteForm({
     void apiGet<CondicionVentaCatalogo[]>("/ventas/condiciones-venta").then(({ data }) =>
       setCondiciones(data),
     );
+    // el usuario puede no tener permiso `vendedores` — el select no se muestra
+    void apiGet<Vendedor[]>("/vendedores?limit=200")
+      .then(({ data }) => setVendedores(data))
+      .catch(() => setVendedores([]));
   }, []);
 
-  // al elegir cliente, adoptar su lista y su condición habitual
+  // al elegir cliente, adoptar su lista, su condición y su vendedor habitual
   const listaPrecios = cliente?.lista_precios ?? 1;
   useEffect(() => {
     if (cliente?.condicion_venta_id && condiciones.some((c) => c.id === cliente.condicion_venta_id)) {
@@ -304,6 +312,9 @@ export default function ComprobanteForm({
       setContado(false);
     }
   }, [cliente, condiciones]);
+  useEffect(() => {
+    setVendedorId(cliente?.vendedor_id ?? "");
+  }, [cliente]);
 
   const totalPreview = useMemo(() => {
     const dto = 1 - Number(descuento || 0) / 100;
@@ -335,6 +346,7 @@ export default function ComprobanteForm({
         cliente_id: cliente?.id ?? null,
         contado: clase === "factura" ? contado : true,
         condicion_venta_id: !contado && condicionId ? condicionId : null,
+        vendedor_id: vendedorId || null,
         lista_precios: listaPrecios,
         precios_con_iva: preciosConIva,
         descuento_pct: descuento || "0",
@@ -414,9 +426,23 @@ export default function ComprobanteForm({
           </div>
         </div>
 
-        <div className="field">
-          <label>Cliente</label>
-          <BuscadorCliente elegido={cliente} onElegir={setCliente} />
+        <div className="fila">
+          <div className="field" style={{ flex: 2 }}>
+            <label>Cliente</label>
+            <BuscadorCliente elegido={cliente} onElegir={setCliente} />
+          </div>
+          {vendedores.length > 0 && (
+            <div className="field">
+              <label>Vendedor</label>
+              <select className="select" value={vendedorId}
+                onChange={(ev) => setVendedorId(ev.target.value)}>
+                <option value="">—</option>
+                {vendedores.map((v) => (
+                  <option key={v.id} value={v.id}>{v.entidad.razon_social}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {clase === "factura" && (

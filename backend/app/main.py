@@ -26,6 +26,7 @@ from app.api.v1.sucursales import router as sucursales_router
 from app.api.v1.tesoreria import router as tesoreria_router
 from app.api.v1.usuarios import router as usuarios_router
 from app.api.v1.variantes import router as variantes_router
+from app.api.v1.vendedores import router as vendedores_router
 from app.api.v1.ventas_config import router as ventas_config_router
 from app.core.config import settings
 
@@ -60,6 +61,7 @@ app.include_router(cheques_router, prefix="/api/v1")
 app.include_router(bancos_router, prefix="/api/v1")
 app.include_router(tesoreria_router, prefix="/api/v1")
 app.include_router(contabilidad_router, prefix="/api/v1")
+app.include_router(vendedores_router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,

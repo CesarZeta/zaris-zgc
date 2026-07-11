@@ -38,6 +38,7 @@ from app.models import (
     Tenant,
     TipoComprobante,
     Usuario,
+    Vendedor,
 )
 from app.services import stock_valor
 from app.services import ventas as sv
@@ -78,6 +79,8 @@ class ComprobanteIn(BaseModel):
     descuento_pct: Decimal = Field(Decimal("0"), ge=0, le=100)
     precios_con_iva: bool = False
     comprobante_asociado_id: uuid.UUID | None = None
+    # F11: vendedor de la venta; si no viene, defaultea al habitual del cliente
+    vendedor_id: uuid.UUID | None = None
     observaciones: str | None = None
     items: list[ItemIn] = Field(min_length=1)
 
@@ -147,6 +150,7 @@ class ComprobanteListaOut(BaseModel):
     arca_observaciones: str | None
     comprobante_asociado_id: uuid.UUID | None
     origen_id: uuid.UUID | None
+    vendedor_id: uuid.UUID | None = None
     observaciones: str | None
 
 
@@ -193,6 +197,7 @@ def _campos_base(comp: Comprobante) -> dict:
         arca_observaciones=comp.arca_observaciones,
         comprobante_asociado_id=comp.comprobante_asociado_id,
         origen_id=comp.origen_id,
+        vendedor_id=comp.vendedor_id,
         observaciones=comp.observaciones,
     )
 
@@ -420,6 +425,31 @@ async def _validar_asociado(
     return asociado
 
 
+async def _resolver_vendedor(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    vendedor_id: uuid.UUID | None,
+    cliente_id: uuid.UUID | None,
+) -> uuid.UUID | None:
+    """F11: valida el vendedor del body o defaultea al habitual del cliente."""
+    if vendedor_id is not None:
+        existe = await db.scalar(
+            select(Vendedor.id).where(
+                Vendedor.id == vendedor_id, Vendedor.tenant_id == tenant_id
+            )
+        )
+        if existe is None:
+            raise HTTPException(status_code=422, detail="Vendedor inexistente")
+        return vendedor_id
+    if cliente_id is not None:
+        return await db.scalar(
+            select(Cliente.vendedor_id).where(
+                Cliente.id == cliente_id, Cliente.tenant_id == tenant_id
+            )
+        )
+    return None
+
+
 # ===== CRUD de borradores =====
 
 @router.post("", response_model=ComprobanteOut, status_code=status.HTTP_201_CREATED)
@@ -484,6 +514,9 @@ async def crear_comprobante(
         cotizacion=Decimal("1"),
         descuento_pct=body.descuento_pct,
         comprobante_asociado_id=asociado.id if asociado else None,
+        vendedor_id=await _resolver_vendedor(
+            db, usuario.tenant_id, body.vendedor_id, body.cliente_id
+        ),
         observaciones=body.observaciones,
         creado_por=usuario.id,
         **receptor,
@@ -642,6 +675,9 @@ async def actualizar_borrador(
     comp.actualiza_stock = body.actualiza_stock
     comp.descuento_pct = body.descuento_pct
     comp.comprobante_asociado_id = asociado.id if asociado else None
+    comp.vendedor_id = await _resolver_vendedor(
+        db, usuario.tenant_id, body.vendedor_id, body.cliente_id
+    )
     comp.observaciones = body.observaciones
     comp.updated_at = func.now()
     for campo, valor in receptor.items():
@@ -1023,6 +1059,8 @@ async def crear_nc_espejo_core(
         iva_contenido=factura.iva_contenido,
         otros_imp_indirectos=factura.otros_imp_indirectos,
         comprobante_asociado_id=factura.id,
+        # F11: la NC espejo hereda el vendedor — la anulación resta comisión
+        vendedor_id=factura.vendedor_id,
         observaciones=f"Reversión de {factura.tipo_codigo} "
         f"{_fmt_numero(factura.punto_venta.numero, factura.numero)}",
         creado_por=usuario.id,

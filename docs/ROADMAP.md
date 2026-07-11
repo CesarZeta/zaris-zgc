@@ -574,6 +574,42 @@ puente.** Diseño en `docs/DISENO-CONTABILIDAD.md` §6. Cierra los 5 diferidos d
 - [x] Verificado 2026-07-11: **50/50 pruebas en vivo** (`tools/test_f9bis_dev.py`) +
   regresiones F9 39/39 · mini-fase 014 53/53 · F8 31/31 + build TS limpio.
 
+## FASE 11 — Vendedores y comisiones ✅ (2026-07-11)
+
+**Entregable: el comercio administra sus vendedores, cada venta y cobranza queda
+sellada con su vendedor, y las comisiones se liquidan por período como documento
+contabilizable.** Diseño en `docs/DISENO-VENDEDORES-COMISIONES.md` (legacy:
+VIAJANTE.DBF + CVIAJ en clientes/ventas/recibos + GV0040 regenerable).
+
+- [x] **Migración 017**: `vendedores` (rol BUE: % único + modalidad venta/cobranza —
+  el esquema del VIAJANTE), `vendedor_id` en clientes (habitual) / comprobantes /
+  recibos (sellado, espejo de CVIAJ), `comision_liquidaciones` + ítems (documento:
+  número por tenant, % y modalidad SELLADOS, anulable marcada) + módulo RBAC
+  `vendedores` (admin/gerente anular · consulta ver; el rol RBAC "vendedor" no ve
+  comisiones ajenas) + RLS.
+- [x] **Sellado del vendedor**: default = habitual del cliente en comprobantes y
+  recibos (override explícito validado por tenant); **la NC espejo hereda el
+  vendedor** (la anulación resta comisión sola). POS sin vendedor (v1).
+- [x] **Comisiones**: pendientes calculados al vuelo por modalidad — venta = neto
+  (gravado+no gravado+exento) × signo de fiscales emitidos (las NC restan);
+  cobranza = `total − rechazado_total` de recibos vivos. "Ya liquidado" = ítem de
+  liquidación VIVA que referencia el documento (los documentos fuente NO se mutan);
+  anular la liquidación los libera.
+- [x] **Contabilidad**: la liquidación es fuente del motor (origen `comision`:
+  Debe 5.1.09 Comisiones de vendedores / Haber 2.1.03 Comisiones a pagar; anulada →
+  reversión). Cuentas y mapeos nuevos con re-seed lazy. El PAGO al vendedor sale
+  por caja/OP contra 2.1.03 (no automatizado v1).
+- [x] **Frontend**: módulo `/vendedores` (tabs Vendedores ABM BUE · Comisiones con
+  preview de pendientes → liquidar → listado con detalle/anular/CSV), ítem del
+  sidebar gated por permiso, vendedor habitual en ClienteForm, selector de vendedor
+  en ComprobanteForm (adopta el del cliente).
+- [x] Verificado 2026-07-11: **35/35 pruebas en vivo** (`tools/test_f11_dev.py`) +
+  regresiones F9-bis 50/50 · F9 39/39 · 014 53/53 · F8 31/31 + build TS.
+- Diferido documentado: migrador VIAJANTE.DBF (29 filas en un backup 2009 — alta
+  manual más barata), selector de vendedor en el modal de recibo (el backend ya
+  defaultea al habitual), escalas de comisión por familia/artículo (el legacy
+  tampoco las tenía).
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -589,7 +625,7 @@ puente.** Diseño en `docs/DISENO-CONTABILIDAD.md` §6. Cierra los 5 diferidos d
 | 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
 | 9 ✅ | **Contabilidad** (módulo activable) | **v1 EN PRODUCCIÓN 2026-07-11** (sección FASE 9 arriba): motor derivado regenerable + plan argentino + mapeos + diario/mayor/sumas y saldos + períodos + asiento manual + CSV. **F9-bis completada 2026-07-11** (sección propia arriba): bienes de uso + amortizaciones derivadas, balance general, apertura asistida, export contador ZIP, apareo de transferencias | Gate levantado por César 2026-07-11 (la mini-fase Contabilizabilidad ya estaba en prod) |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
-| 11 | Vendedores y comisiones | Liquidación por venta / por cobranza | — |
+| 11 ✅ | Vendedores y comisiones | **HECHA 2026-07-11** (sección propia arriba): rol BUE + sellado en ventas/cobranzas + liquidación por venta / por cobranza como documento contabilizable | — |
 | 12 | **POS por perfiles** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | Demanda ex clientes RevoSolution; por perfil: ≥1 piloto del rubro. Balanza y despiece son **adelantables sueltos** (el despiece es stock puro, no depende del POS) |
 | 12-bis | Logística de entregas | Rol transportista (BUE), `entregas` por remito/factura con domicilio snapshot + estados (pendiente→en reparto→entregada/rechazada), **hojas de ruta** imprimibles, rendición del reparto, mapa opcional. Diseño en `DISENO-LOGISTICA-Y-DOMICILIOS.md` §2. Crecimiento hacia adentro (operativiza el remito que ya existe) | Requiere domicilios OSM (F7). Activación: primer cliente que reparte (distribuidora/mayorista/corralón) |
 | 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |

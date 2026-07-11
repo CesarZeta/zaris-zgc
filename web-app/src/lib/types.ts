@@ -75,12 +75,52 @@ export interface Cliente {
   lista_precios: number;
   condicion_venta_id: string | null;
   zona_id: string | null;
+  vendedor_id: string | null;
   descuento: string;
   limite_credito: string | null;
   bloqueado: boolean;
   observaciones: string | null;
   activo: boolean;
   entidad: Entidad;
+}
+
+// ===== Vendedores y comisiones (F11) =====
+
+export interface Vendedor {
+  id: string;
+  codigo: string | null;
+  comision_pct: string;
+  modalidad: "venta" | "cobranza";
+  observaciones: string | null;
+  activo: boolean;
+  entidad: Entidad;
+}
+
+export interface ComisionPendiente {
+  comprobante_id: string | null;
+  recibo_id: string | null;
+  fecha: string;
+  descripcion: string;
+  base: string;
+  importe: string;
+}
+
+export interface ComisionLiquidacion {
+  id: string;
+  numero: number;
+  numero_formateado: string;
+  vendedor_id: string;
+  vendedor_nombre: string;
+  modalidad: string;
+  desde: string;
+  hasta: string;
+  comision_pct: string;
+  base_total: string;
+  total: string;
+  fecha: string;
+  observaciones: string | null;
+  anulada: boolean;
+  items?: ComisionPendiente[];
 }
 
 // ===== Artículos y Stock (Fase 2) =====

@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
-import type { Cliente, CondicionVentaCatalogo } from "../../lib/types";
+import type { Cliente, CondicionVentaCatalogo, Vendedor } from "../../lib/types";
 import EntidadFields, {
   entidadDraft,
   entidadPayload,
@@ -31,12 +31,14 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
     lista_precios: cliente?.lista_precios ?? 1,
     condicion_venta_id: cliente?.condicion_venta_id ?? "",
     zona_id: cliente?.zona_id ?? "",
+    vendedor_id: cliente?.vendedor_id ?? "",
     descuento: cliente?.descuento ?? "0",
     limite_credito: cliente?.limite_credito ?? "",
     bloqueado: cliente?.bloqueado ?? false,
   });
   const [condiciones, setCondiciones] = useState<CondicionVentaCatalogo[]>([]);
   const [zonas, setZonas] = useState<Zona[]>([]);
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [modificado, setModificado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -47,6 +49,10 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
       setCondiciones(data.filter((c) => c.activa)),
     );
     void apiGet<Zona[]>("/clientes/zonas").then(({ data }) => setZonas(data));
+    // el usuario puede no tener permiso `vendedores` — el select queda vacío
+    void apiGet<Vendedor[]>("/vendedores?limit=200")
+      .then(({ data }) => setVendedores(data))
+      .catch(() => setVendedores([]));
   }, []);
 
   function set<K extends keyof typeof rol>(campo: K, valor: (typeof rol)[K]) {
@@ -86,6 +92,7 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
       lista_precios: Number(rol.lista_precios),
       condicion_venta_id: rol.condicion_venta_id || null,
       zona_id: rol.zona_id || null,
+      vendedor_id: rol.vendedor_id || null,
       descuento: rol.descuento === "" ? 0 : Number(rol.descuento),
       limite_credito: rol.limite_credito === "" ? null : Number(rol.limite_credito),
       bloqueado: rol.bloqueado,
@@ -197,6 +204,25 @@ export default function ClienteForm({ cliente, onCerrar }: Props) {
             </select>
           </div>
         </div>
+        {vendedores.length > 0 && (
+          <div className="fila">
+            <div className="field">
+              <label>Vendedor habitual</label>
+              <select
+                className="select"
+                value={rol.vendedor_id}
+                onChange={(ev) => set("vendedor_id", ev.target.value)}
+              >
+                <option value="">—</option>
+                {vendedores.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.entidad.razon_social} ({v.comision_pct}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
         <div className="fila">
           <div className="field">
             <label>Límite de crédito $</label>

@@ -124,6 +124,9 @@ class Comprobante(Base):
     )
     origen_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("comprobantes.id"))
     pos_sesion_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pos_sesiones.id"))
+    # vendedor sellado (017, espejo de VENTASM.CVIAJ): default = el habitual
+    # del cliente; la NC espejo lo copia de la factura
+    vendedor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vendedores.id"))
     observaciones: Mapped[str | None] = mapped_column(Text)
     emitido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     emitido_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
@@ -218,6 +221,8 @@ class Recibo(Base):
     # disponible es total − aplicado − rechazado_total
     rechazado_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     estado: Mapped[str] = mapped_column(String(10), default="emitido")
+    # vendedor sellado (017, espejo de RECIBOSM.CVIAJ): comisión por cobranza
+    vendedor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vendedores.id"))
     observaciones: Mapped[str | None] = mapped_column(Text)
     anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))

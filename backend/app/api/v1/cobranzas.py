@@ -71,6 +71,8 @@ class ReciboIn(BaseModel):
     punto_venta_id: uuid.UUID
     cliente_id: uuid.UUID
     fecha: date | None = None
+    # F11: vendedor de la cobranza; si no viene, defaultea al habitual del cliente
+    vendedor_id: uuid.UUID | None = None
     medios: list[MedioIn] = Field(min_length=1)
     imputaciones: list[ImputacionIn] = []
     observaciones: str | None = None
@@ -96,6 +98,7 @@ class ReciboOut(BaseModel):
     rechazado_total: Decimal
     a_cuenta: Decimal
     estado: str
+    vendedor_id: uuid.UUID | None = None
     observaciones: str | None
     medios: list[MedioOut]
 
@@ -122,6 +125,7 @@ def _recibo_out(r: Recibo) -> ReciboOut:
         rechazado_total=r.rechazado_total,
         a_cuenta=r.total - r.aplicado - r.rechazado_total,
         estado=r.estado,
+        vendedor_id=r.vendedor_id,
         observaciones=r.observaciones,
         medios=[MedioOut.model_validate(m) for m in r.medios],
     )
@@ -200,6 +204,21 @@ async def crear_recibo(
         if cuentas_ids - validas:
             raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
 
+    # F11: vendedor explícito (validado por tenant) o el habitual del cliente
+    vendedor_id = body.vendedor_id
+    if vendedor_id is not None:
+        from app.models import Vendedor
+
+        existe = await db.scalar(
+            select(Vendedor.id).where(
+                Vendedor.id == vendedor_id, Vendedor.tenant_id == usuario.tenant_id
+            )
+        )
+        if existe is None:
+            raise HTTPException(status_code=422, detail="Vendedor inexistente")
+    else:
+        vendedor_id = cliente.vendedor_id
+
     numero = await sv.proximo_numero(db, usuario.tenant_id, pv.id, "REC")
     recibo = Recibo(
         tenant_id=usuario.tenant_id,
@@ -210,6 +229,7 @@ async def crear_recibo(
         receptor_nombre=cliente.entidad.razon_social,
         total=total,
         aplicado=Decimal("0"),
+        vendedor_id=vendedor_id,
         observaciones=body.observaciones,
         creado_por=usuario.id,
     )
