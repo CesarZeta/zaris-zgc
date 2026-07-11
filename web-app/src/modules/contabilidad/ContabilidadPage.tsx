@@ -4,6 +4,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "../../lib/api";
+import ActivosTab from "./ActivosTab";
+import BalanceTab from "./BalanceTab";
 import DiarioTab from "./DiarioTab";
 import MapeosTab from "./MapeosTab";
 import PlanTab from "./PlanTab";
@@ -11,7 +13,7 @@ import ReportesTab from "./ReportesTab";
 import type { Cuenta } from "./tipos";
 
 export default function ContabilidadPage() {
-  const [tab, setTab] = useState<"diario" | "reportes" | "plan" | "mapeos">("diario");
+  const [tab, setTab] = useState<"diario" | "reportes" | "balance" | "activos" | "plan" | "mapeos">("diario");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
 
   const cargarCuentas = useCallback(async () => {
@@ -36,6 +38,8 @@ export default function ContabilidadPage() {
           [
             ["diario", "Libro diario"],
             ["reportes", "Sumas y saldos"],
+            ["balance", "Balance"],
+            ["activos", "Bienes de uso"],
             ["plan", "Plan de cuentas"],
             ["mapeos", "Mapeos"],
           ] as const
@@ -48,6 +52,8 @@ export default function ContabilidadPage() {
 
       {tab === "diario" && <DiarioTab cuentas={cuentas} />}
       {tab === "reportes" && <ReportesTab />}
+      {tab === "balance" && <BalanceTab />}
+      {tab === "activos" && <ActivosTab />}
       {tab === "plan" && <PlanTab cuentas={cuentas} onRefrescar={() => void cargarCuentas()} />}
       {tab === "mapeos" && <MapeosTab cuentas={cuentas} />}
     </>

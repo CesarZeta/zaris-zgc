@@ -16,6 +16,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -96,6 +97,47 @@ class AsientoLinea(Base):
     debe: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     haber: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     detalle: Mapped[str | None] = mapped_column(String(120))
+
+
+class ActivoCategoria(Base):
+    __tablename__ = "activo_categorias"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    nombre: Mapped[str] = mapped_column(String(60))
+    vida_util_meses: Mapped[int] = mapped_column(Integer, default=60)
+    es_sistema: Mapped[bool] = mapped_column(Boolean, default=False)
+    activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActivoFijo(Base):
+    __tablename__ = "activos_fijos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    nombre: Mapped[str] = mapped_column(String(120))
+    categoria_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("activo_categorias.id"))
+    fecha_alta: Mapped[date] = mapped_column(Date)
+    # 1° del mes desde el que devenga (el ALTA no deriva asiento — diseño §6.1)
+    inicio_amortizacion: Mapped[date] = mapped_column(Date)
+    valor_origen: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    valor_residual: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    vida_util_meses: Mapped[int] = mapped_column(Integer)
+    compra_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("compras.id", ondelete="SET NULL")
+    )
+    fecha_baja: Mapped[date | None] = mapped_column(Date)
+    baja_motivo: Mapped[str | None] = mapped_column(String(120))
+    observaciones: Mapped[str | None] = mapped_column(String(200))
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
+    creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ContabPeriodo(Base):

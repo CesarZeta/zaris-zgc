@@ -140,6 +140,11 @@ class BancoMovimiento(Base):
         ForeignKey("extracto_imports.id", ondelete="SET NULL")
     )
     origen: Mapped[str] = mapped_column(String(8), default="manual")
+    # apareo de transferencias entre cuentas propias (016, simétrico): un par
+    # apareado deriva UN asiento banco a banco, sin cuenta puente
+    contrapartida_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("banco_movimientos.id", ondelete="SET NULL")
+    )
     # eliminar = marcar (014): el movimiento nunca se borra físicamente
     anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))

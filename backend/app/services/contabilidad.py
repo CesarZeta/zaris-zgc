@@ -16,6 +16,7 @@ derivan (stock transitorio), anticipos de clientes quedan dentro de Deudores,
 sin multi-moneda contable.
 """
 
+import calendar
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -24,6 +25,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    ActivoCategoria,
+    ActivoFijo,
     Articulo,
     Asiento,
     AsientoLinea,
@@ -81,6 +84,9 @@ PLAN_BASE: list[tuple[str, str, str, bool, str | None]] = [
     ("1.2.04", "IVA Crédito Fiscal", "activo", True, "1.2"),
     ("1.3", "Bienes de cambio", "activo", False, "1"),
     ("1.3.01", "Mercaderías", "activo", True, "1.3"),
+    ("1.4", "Bienes de uso", "activo", False, "1"),
+    ("1.4.01", "Bienes de uso", "activo", True, "1.4"),
+    ("1.4.02", "Amortización acumulada bienes de uso", "activo", True, "1.4"),
     ("2", "PASIVO", "pasivo", False, None),
     ("2.1", "Deudas comerciales", "pasivo", False, "2"),
     ("2.1.01", "Proveedores", "pasivo", True, "2.1"),
@@ -103,6 +109,19 @@ PLAN_BASE: list[tuple[str, str, str, bool, str | None]] = [
     ("5.1.04", "Faltante de caja", "r_negativo", True, "5"),
     ("5.1.05", "Ajustes de inventario", "r_negativo", True, "5"),
     ("5.1.06", "Ajustes por redondeo", "r_negativo", True, "5"),
+    ("5.1.07", "Amortizaciones del ejercicio", "r_negativo", True, "5"),
+    ("5.1.08", "Resultado por baja de bienes de uso", "r_negativo", True, "5"),
+]
+
+# Categorías de bienes de uso con vida útil sugerida (meses) — seed lazy por
+# tenant junto al plan; renombrables, la vida útil real la fija cada activo.
+CATEGORIAS_BASE: list[tuple[str, int]] = [
+    ("Rodados", 60),
+    ("Muebles y útiles", 120),
+    ("Equipos de computación", 36),
+    ("Instalaciones", 120),
+    ("Maquinarias", 120),
+    ("Inmuebles", 600),
 ]
 
 # Catálogo de reglas de mapeo (para la UI) — clave NULL = default de la regla.
@@ -127,6 +146,10 @@ ORIGENES: dict[str, str] = {
     "ajuste_inventario": "Ajustes de inventario",
     "diferencias_caja": "Diferencias de arqueo (sobrante | faltante)",
     "redondeo": "Ajustes por redondeo",
+    "bienes_uso": "Bienes de uso (clave = id de categoría)",
+    "amort_acumulada": "Amortización acumulada bienes de uso (clave = id de categoría)",
+    "amort_ejercicio": "Amortizaciones del ejercicio (clave = id de categoría)",
+    "baja_bienes_uso": "Resultado por baja de bienes de uso",
 }
 
 # (origen, clave, codigo_cuenta)
@@ -170,6 +193,10 @@ MAPEOS_BASE: list[tuple[str, str | None, str]] = [
     ("diferencias_caja", "sobrante", "4.1.03"),
     ("diferencias_caja", "faltante", "5.1.04"),
     ("redondeo", None, "5.1.06"),
+    ("bienes_uso", None, "1.4.01"),
+    ("amort_acumulada", None, "1.4.02"),
+    ("amort_ejercicio", None, "5.1.07"),
+    ("baja_bienes_uso", None, "5.1.08"),
 ]
 
 
@@ -207,7 +234,59 @@ async def sembrar_plan_base(db: AsyncSession, tenant_id: uuid.UUID) -> int:
                 tenant_id=tenant_id, origen=origen, clave=clave, cuenta_id=existentes[codigo]
             )
         )
+    categorias = {
+        c.nombre
+        for c in (
+            await db.scalars(
+                select(ActivoCategoria).where(ActivoCategoria.tenant_id == tenant_id)
+            )
+        ).all()
+    }
+    for nombre, vida in CATEGORIAS_BASE:
+        if nombre in categorias:
+            continue
+        db.add(
+            ActivoCategoria(
+                tenant_id=tenant_id, nombre=nombre, vida_util_meses=vida, es_sistema=True
+            )
+        )
+        creadas += 1
     return creadas
+
+
+# ============================================================================
+# Amortización lineal mensual (diseño §6.1): cuota fija redondeada a 2
+# decimales, la última absorbe el residuo. Devenga desde el mes de
+# inicio_amortizacion inclusive hasta agotar vida útil o hasta el mes ANTERIOR
+# a la baja. Compartida entre el motor y el cuadro de bienes de uso.
+# ============================================================================
+
+def _fin_de_mes(d: date) -> date:
+    return d.replace(day=calendar.monthrange(d.year, d.month)[1])
+
+
+def _mes_mas(d: date, n: int) -> date:
+    m = d.year * 12 + (d.month - 1) + n
+    return date(m // 12, m % 12 + 1, 1)
+
+
+def cuotas_amortizacion(activo: ActivoFijo) -> list[tuple[date, Decimal]]:
+    """[(fin_de_mes, cuota)] devengadas por el activo en toda su vida."""
+    base = Decimal(activo.valor_origen) - Decimal(activo.valor_residual)
+    vida = int(activo.vida_util_meses)
+    if base <= 0 or vida <= 0:
+        return []
+    cuota = _r2(base / vida)
+    inicio = activo.inicio_amortizacion.replace(day=1)
+    tope_baja = activo.fecha_baja.replace(day=1) if activo.fecha_baja else None
+    cuotas = []
+    for i in range(vida):
+        mes = _mes_mas(inicio, i)
+        if tope_baja is not None and mes >= tope_baja:
+            break
+        monto = cuota if i < vida - 1 else base - cuota * (vida - 1)
+        cuotas.append((_fin_de_mes(mes), monto))
+    return cuotas
 
 
 # ============================================================================
@@ -574,7 +653,34 @@ async def derivar(
             )
         )
     ).all()
+    # contrapartidas de transferencias apareadas (016): pueden caer fuera del
+    # rango — se buscan aparte solo para conocer su cuenta destino
+    pares: dict = {}
+    pares_ids = {m.contrapartida_id for m in bmovs if m.contrapartida_id}
+    if pares_ids:
+        for cm in (
+            await db.scalars(select(BancoMovimiento).where(BancoMovimiento.id.in_(pares_ids)))
+        ).all():
+            pares[cm.id] = cm
     for m in bmovs:
+        # transferencia apareada entre cuentas propias: UN asiento banco a
+        # banco anclado en la SALIDA; la entrada apareada se saltea (§6.2)
+        if m.contrapartida_id and m.anulado_at is None:
+            par = pares.get(m.contrapartida_id)
+            if par is not None and par.anulado_at is None:
+                if m.tipo == "transferencia_in":
+                    continue
+                if m.tipo == "transferencia_out":
+                    if en_rango(m.fecha):
+                        etiqueta = "Transferencia entre cuentas propias" + (
+                            f" — {m.descripcion[:40]}" if m.descripcion else ""
+                        )
+                        b.agregar(
+                            m.fecha, etiqueta, "banco_transfer", m.id,
+                            [(mapa.get("cuenta_bancaria", par.cuenta_id), Decimal(m.importe), "destino"),
+                             (mapa.get("cuenta_bancaria", m.cuenta_id), -Decimal(m.importe), "origen")],
+                        )
+                    continue
         signo = SIGNO_MOV.get(m.tipo, 1)
         lineas = [
             (mapa.get("cuenta_bancaria", m.cuenta_id), signo * m.importe, None),
@@ -701,11 +807,56 @@ async def derivar(
         if anulado_en_rango(c.anulado_at):
             b.reversion(c.anulado_at.date(), f"Reapertura {etiqueta}", "arqueo_anulacion", c.id, lineas)
 
-    # ===== Persistir: borrar derivados del rango y re-insertar =====
+    # ===== 11. Amortizaciones de bienes de uso (F9-bis, diseño §6.1): UN
+    # asiento por mes calendario cuyo fin de mes cae en el rango, con un par de
+    # líneas por activo. El alta del activo NO deriva (entró por su documento).
+    activos = (
+        await db.scalars(
+            select(ActivoFijo).where(
+                ActivoFijo.tenant_id == tenant_id,
+                ActivoFijo.anulado_at.is_(None),
+            )
+        )
+    ).all()
+    por_mes: dict[date, list] = {}
+    for a in activos:
+        for fecha_cuota, monto in cuotas_amortizacion(a):
+            if en_rango(fecha_cuota):
+                por_mes.setdefault(fecha_cuota, []).append((a, monto))
+    for fecha_cuota in sorted(por_mes):
+        lineas = []
+        for a, monto in por_mes[fecha_cuota]:
+            lineas.append((mapa.get("amort_ejercicio", a.categoria_id), monto, a.nombre[:40]))
+            lineas.append((mapa.get("amort_acumulada", a.categoria_id), -monto, a.nombre[:40]))
+        b.agregar(
+            fecha_cuota, f"Amortización bienes de uso {fecha_cuota.isoformat()[:7]}",
+            "amortizacion", None, lineas,
+        )
+
+    # ===== 12. Bajas de bienes de uso: retiro del activo al valor de origen,
+    # descargando la amortización acumulada devengada; el residual contable va
+    # a resultado por baja. Baja por venta: el ingreso lo deriva la factura.
+    for a in activos:
+        if a.fecha_baja is None or not en_rango(a.fecha_baja):
+            continue
+        devengada = sum((m for _, m in cuotas_amortizacion(a)), D0)
+        residual_contable = Decimal(a.valor_origen) - devengada
+        etiqueta = f"Baja bien de uso: {a.nombre[:40]}" + (
+            f" — {a.baja_motivo[:40]}" if a.baja_motivo else ""
+        )
+        b.agregar(
+            a.fecha_baja, etiqueta, "activo_baja", a.id,
+            [(mapa.get("amort_acumulada", a.categoria_id), devengada, None),
+             (mapa.get("baja_bienes_uso"), residual_contable, None),
+             (mapa.get("bienes_uso", a.categoria_id), -Decimal(a.valor_origen), None)],
+        )
+
+    # ===== Persistir: borrar derivados del rango y re-insertar (los manuales
+    # y el asiento de apertura NUNCA se tocan) =====
     await db.execute(
         delete(Asiento).where(
             Asiento.tenant_id == tenant_id,
-            Asiento.origen_tipo != "manual",
+            Asiento.origen_tipo.notin_(("manual", "apertura")),
             Asiento.fecha >= desde,
             Asiento.fecha <= hasta,
         )

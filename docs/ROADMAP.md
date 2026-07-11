@@ -533,10 +533,46 @@ Contabilizabilidad ya en producción como base.
   **prueba de fuego del diseño**: regenerar ~4 meses del tenant demo (331 asientos) sin
   tocar ningún módulo operativo, con sumas y saldos balanceados. Regresión: mini-fase 014
   53/53 + F8 31/31 + build TS.
-- Diferido documentado (**F9-bis**): activos fijos + amortizaciones (alcance original de
-  la fila F9), export específico del software del contador (el CSV del diario cubre v1),
-  balance general presentable, apareo de transferencias entre cuentas propias (hoy van a
-  cuenta puente 1.1.06), asiento de apertura asistido.
+- ~~Diferido documentado (**F9-bis**)~~ → **hecho, ver F9-bis abajo** (2026-07-11).
+
+## FASE 9-BIS — Bienes de uso, balance, apertura y export contador ✅ (2026-07-11)
+
+**Entregable: el módulo Contabilidad queda completo para el contador — cuadro de bienes
+de uso con amortizaciones derivadas, balance general con ecuación verificada, asiento de
+apertura asistido, paquete de export y transferencias entre cuentas propias sin cuenta
+puente.** Diseño en `docs/DISENO-CONTABILIDAD.md` §6. Cierra los 5 diferidos de la F9.
+
+- [x] **Migración 016** (aditiva/idempotente): `activo_categorias` (catálogo con vida
+  útil sugerida, seed lazy junto al plan: Rodados 60 · Muebles 120 · Computación 36 ·
+  Instalaciones 120 · Maquinarias 120 · Inmuebles 600) + `activos_fijos` (baja =
+  fecha+motivo; error de carga = anulado_at) con RLS; `banco_movimientos.contrapartida_id`
+  (apareo simétrico). Sin permisos nuevos.
+- [x] **Bienes de uso**: el ALTA no deriva asiento (el bien entró por su documento —
+  evita doble conteo); el motor deriva **amortización lineal mensual** (cuota r2, la
+  última absorbe el redondeo; devenga desde el mes de inicio hasta agotar vida útil o el
+  mes ANTERIOR a la baja; UN asiento por mes con un par de líneas por activo, fechado a
+  fin de mes) y el **asiento de baja** (amort. acumulada + resultado por baja a valor de
+  origen). Cuentas nuevas del plan base (re-seed lazy en tenants ya sembrados): 1.4/1.4.01/
+  1.4.02, 5.1.07, 5.1.08; mapeos `bienes_uso`/`amort_acumulada`/`amort_ejercicio` por
+  categoría + `baja_bienes_uso`. Cuadro al corte (valor origen / amort. acumulada / valor
+  contable) + CSV. Tab "Bienes de uso" en el front.
+- [x] **Apareo de transferencias entre cuentas propias**: candidatos (tipo opuesto, mismo
+  importe, otra cuenta) → aparear/desaparear; anular desaparea al otro. El par deriva UN
+  asiento banco a banco (origen `banco_transfer`, anclado en la salida) sin pasar por la
+  puente 1.1.06. UI en Bancos → Cuentas (chip "apareada" + modal de candidatos).
+- [x] **Balance general** (`GET /contabilidad/balance[.csv]?hasta=`): saldos al corte en
+  el árbol del plan (rollup a no imputables), resultado del ejercicio inyectado en PN,
+  ecuación A = P + PN verificada. Tab "Balance" con impresión.
+- [x] **Export al contador** (`GET /contabilidad/export-contador.zip?desde&hasta`): ZIP
+  con 4 CSV es-AR (plan, diario por línea, sumas y saldos, mayor completo). Genérico
+  importable — formatos propietarios (Tango/Bejerman) recién con la spec de un contador
+  usuario real.
+- [x] **Asiento de apertura asistido**: `GET /apertura/sugerencia` (saldos vivos: bancos,
+  deudores, proveedores, cheques en cartera/diferidos, stock valorizado + contrapartida a
+  Capital) → editable → `POST /apertura` con origen `apertura` (la regeneración NUNCA lo
+  borra, UNO vivo por tenant, anulable marcado). Botón "Apertura asistida" en el Diario.
+- [x] Verificado 2026-07-11: **50/50 pruebas en vivo** (`tools/test_f9bis_dev.py`) +
+  regresiones F9 39/39 · mini-fase 014 53/53 · F8 31/31 + build TS limpio.
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
@@ -551,7 +587,7 @@ Contabilizabilidad ya en producción como base.
 |---|---|---|---|
 | 7 ✅ | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal); **domicilios normalizados OSM** (estándar de suite heredado de ZGE: proxy Nominatim + AddressSearch + lat/lon en entidades/sucursales + `entidad_domicilios` — ver `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1; hacerlo ANTES de cargar entidades masivamente); **ABM de sucursales** (la tabla existe desde la 001, falta la UI) + sucursal en cajas POS | **CÓDIGO COMPLETO 2026-07-06** (ver detalle abajo) |
 | 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
-| 9 ✅ | **Contabilidad** (módulo activable) | **v1 EN PRODUCCIÓN 2026-07-11** (sección FASE 9 arriba): motor derivado regenerable + plan argentino + mapeos + diario/mayor/sumas y saldos + períodos + asiento manual + CSV. Pendiente **F9-bis**: activos fijos + amortizaciones, export específico del software del contador, balance presentable | Gate levantado por César 2026-07-11 (la mini-fase Contabilizabilidad ya estaba en prod) |
+| 9 ✅ | **Contabilidad** (módulo activable) | **v1 EN PRODUCCIÓN 2026-07-11** (sección FASE 9 arriba): motor derivado regenerable + plan argentino + mapeos + diario/mayor/sumas y saldos + períodos + asiento manual + CSV. **F9-bis completada 2026-07-11** (sección propia arriba): bienes de uso + amortizaciones derivadas, balance general, apertura asistida, export contador ZIP, apareo de transferencias | Gate levantado por César 2026-07-11 (la mini-fase Contabilizabilidad ya estaba en prod) |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 | Vendedores y comisiones | Liquidación por venta / por cobranza | — |
 | 12 | **POS por perfiles** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | Demanda ex clientes RevoSolution; por perfil: ≥1 piloto del rubro. Balanza y despiece son **adelantables sueltos** (el despiece es stock puro, no depende del POS) |
@@ -565,7 +601,7 @@ Contabilizabilidad ya en producción como base.
 | Capacidad | Veredicto |
 |---|---|
 | BI / reportería propia | **FOSO-light, evolución de F7** — export universal ya, vistas guardadas + envío programado cuando haya plan pago. NO report-builder/cubos propio temprano (mantenimiento alto, free-tier no banca OLAP) |
-| Activos fijos / amortizaciones | **IN — dentro de F9** (mantenimiento bajo, paridad SAP B1 ante el contador) |
+| Activos fijos / amortizaciones | **IN — hecho en F9-bis 2026-07-11** (mantenimiento bajo, paridad SAP B1 ante el contador) |
 | Flujo de fondos proyectado | **IN — dentro de F8** (vista de tesorería, no fase propia) |
 | Multi-empresa (usuario ↔ N tenants) / consolidación | **IN diferido** — switch de empresa barato cuando haya demanda de estudios contables; consolidación va con Contabilidad/BI |
 | Multi-moneda completa (mayor multimoneda) | **OUT salvo demanda de exportadores** — se mantiene precios USD + factura DOL (diferida F3); WSFEX ya estaba fuera |

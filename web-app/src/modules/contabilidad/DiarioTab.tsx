@@ -7,7 +7,7 @@ import { ApiError, apiDescargar, apiGet, apiPost } from "../../lib/api";
 import { AlertError, AlertOk } from "../../components/Alertas";
 import Paginado from "../../components/Paginado";
 import { useDialogos } from "../../components/dialogos";
-import type { Asiento, Cuenta, Periodo } from "./tipos";
+import type { AperturaLinea, Asiento, Cuenta, Periodo } from "./tipos";
 import { ORIGEN_LABEL, fmt, hoy, primeroDelMes } from "./tipos";
 
 const POR_PAGINA = 50;
@@ -135,6 +135,134 @@ function AsientoManualModal({
   );
 }
 
+// Asiento de apertura asistido (F9-bis §6.5): trae la sugerencia calculada
+// desde los datos vivos (bancos, cta. cte., cheques, stock) y deja editarla
+// antes de confirmar. Solo puede haber UNA apertura viva por tenant.
+function AperturaModal({
+  cuentas,
+  onCerrar,
+}: {
+  cuentas: Cuenta[];
+  onCerrar: (refrescar: boolean) => void;
+}) {
+  const imputables = cuentas.filter((c) => c.imputable && c.activa);
+  const [fecha, setFecha] = useState(hoy());
+  const [lineas, setLineas] = useState<{ cuenta_id: string; debe: string; haber: string; detalle: string }[]>([]);
+  const [advertencia, setAdvertencia] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data } = await apiGet<{ lineas: AperturaLinea[]; advertencia: string }>(
+          "/contabilidad/apertura/sugerencia",
+        );
+        setLineas(
+          data.lineas
+            .filter((l) => l.cuenta_id)
+            .map((l) => ({
+              cuenta_id: l.cuenta_id as string,
+              debe: Number(l.debe) > 0 ? l.debe : "",
+              haber: Number(l.haber) > 0 ? l.haber : "",
+              detalle: l.detalle ?? "",
+            })),
+        );
+        setAdvertencia(data.advertencia);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo calcular la sugerencia");
+      }
+    })();
+  }, []);
+
+  const totalDebe = lineas.reduce((a, l) => a + Number(l.debe || 0), 0);
+  const totalHaber = lineas.reduce((a, l) => a + Number(l.haber || 0), 0);
+
+  async function guardar() {
+    setError(null);
+    setGuardando(true);
+    try {
+      await apiPost("/contabilidad/apertura", {
+        fecha,
+        descripcion: "Asiento de apertura",
+        lineas: lineas
+          .filter((l) => l.cuenta_id && (Number(l.debe) > 0 || Number(l.haber) > 0))
+          .map((l) => ({
+            cuenta_id: l.cuenta_id,
+            debe: l.debe || "0",
+            haber: l.haber || "0",
+            detalle: l.detalle.trim() || null,
+          })),
+      });
+      onCerrar(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la apertura");
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="drawer-backdrop" onClick={() => onCerrar(false)}>
+      <div className="modal modal-ancho" onClick={(ev) => ev.stopPropagation()}>
+        <h2>Asiento de apertura</h2>
+        <AlertError>{error}</AlertError>
+        {advertencia && <p className="hint-mono">{advertencia}</p>}
+        <div className="fila">
+          <div className="field">
+            <label>Fecha</label>
+            <input type="date" className="input" value={fecha} onChange={(ev) => setFecha(ev.target.value)} />
+          </div>
+        </div>
+        {lineas.map((l, i) => (
+          <div className="fila" key={i}>
+            <div className="field" style={{ flex: 2 }}>
+              <select className="select" value={l.cuenta_id}
+                onChange={(ev) => setLineas(lineas.map((x, j) => (j === i ? { ...x, cuenta_id: ev.target.value } : x)))}>
+                <option value="">— cuenta —</option>
+                {imputables.map((c) => (
+                  <option key={c.id} value={c.id}>{c.codigo} — {c.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <input className="input" placeholder="detalle" value={l.detalle}
+                onChange={(ev) => setLineas(lineas.map((x, j) => (j === i ? { ...x, detalle: ev.target.value } : x)))} />
+            </div>
+            <div className="field">
+              <input className="input mono" type="number" step="0.01" min="0" placeholder="debe" value={l.debe}
+                onChange={(ev) => setLineas(lineas.map((x, j) => (j === i ? { ...x, debe: ev.target.value, haber: "" } : x)))} />
+            </div>
+            <div className="field">
+              <input className="input mono" type="number" step="0.01" min="0" placeholder="haber" value={l.haber}
+                onChange={(ev) => setLineas(lineas.map((x, j) => (j === i ? { ...x, haber: ev.target.value, debe: "" } : x)))} />
+            </div>
+            <button type="button" className="mini-btn" onClick={() => setLineas(lineas.filter((_, j) => j !== i))}>
+              quitar
+            </button>
+          </div>
+        ))}
+        <div className="toolbar">
+          <button type="button" className="mini-btn"
+            onClick={() => setLineas([...lineas, { cuenta_id: "", debe: "", haber: "", detalle: "" }])}>
+            + línea
+          </button>
+          <span className="mono" style={{ marginLeft: "auto" }}>
+            Debe $ {fmt.format(totalDebe)} · Haber $ {fmt.format(totalHaber)}
+          </span>
+        </div>
+        <div className="drawer-acciones">
+          <button type="button" className="btn btn-ghost" onClick={() => onCerrar(false)}>Cancelar</button>
+          <button className="btn btn-primary"
+            disabled={guardando || totalDebe === 0 || Math.abs(totalDebe - totalHaber) > 0.005}
+            onClick={() => void guardar()}>
+            {guardando ? "Guardando…" : "Crear apertura"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DiarioTab({ cuentas }: { cuentas: Cuenta[] }) {
   const [desde, setDesde] = useState(primeroDelMes());
   const [hasta, setHasta] = useState(hoy());
@@ -147,6 +275,7 @@ export default function DiarioTab({ cuentas }: { cuentas: Cuenta[] }) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [modalManual, setModalManual] = useState(false);
+  const [modalApertura, setModalApertura] = useState(false);
   const { confirmar, dialogos } = useDialogos();
 
   const cargar = useCallback(async () => {
@@ -230,6 +359,7 @@ export default function DiarioTab({ cuentas }: { cuentas: Cuenta[] }) {
           {ocupado ? "Generando…" : "Regenerar asientos"}
         </button>
         <button className="btn" onClick={() => setModalManual(true)}>+ Asiento manual</button>
+        <button className="btn" onClick={() => setModalApertura(true)}>Apertura asistida</button>
         <button className="btn" onClick={() => void apiDescargar(
           `/contabilidad/diario.csv?desde=${desde}&hasta=${hasta}`, "libro-diario.csv")}>
           Exportar CSV
@@ -312,6 +442,15 @@ export default function DiarioTab({ cuentas }: { cuentas: Cuenta[] }) {
           cuentas={cuentas}
           onCerrar={(refrescar) => {
             setModalManual(false);
+            if (refrescar) void cargar();
+          }}
+        />
+      )}
+      {modalApertura && (
+        <AperturaModal
+          cuentas={cuentas}
+          onCerrar={(refrescar) => {
+            setModalApertura(false);
             if (refrescar) void cargar();
           }}
         />

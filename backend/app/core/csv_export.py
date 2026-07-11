@@ -30,12 +30,16 @@ def _celda(valor: object) -> str:
     return s
 
 
-def csv_response(nombre: str, encabezado: list[str], filas: list[list]) -> Response:
+def csv_texto(encabezado: list[str], filas: list[list]) -> str:
+    """El contenido CSV como texto (BOM + CRLF) — para empaquetar en ZIP."""
     lineas = [";".join(_celda(c) for c in encabezado)]
     lineas += [";".join(_celda(c) for c in fila) for fila in filas]
-    contenido = BOM + "\r\n".join(lineas) + "\r\n"
+    return BOM + "\r\n".join(lineas) + "\r\n"
+
+
+def csv_response(nombre: str, encabezado: list[str], filas: list[list]) -> Response:
     return Response(
-        content=contenido.encode("utf-8"),
+        content=csv_texto(encabezado, filas).encode("utf-8"),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
     )

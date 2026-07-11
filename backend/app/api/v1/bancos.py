@@ -98,7 +98,12 @@ class MovimientoOut(BaseModel):
     conciliado: bool
     fecha_conciliacion: date | None
     origen: str
+    contrapartida_id: uuid.UUID | None = None  # apareo de transferencias (016)
     model_config = {"from_attributes": True}
+
+
+class AparearIn(BaseModel):
+    contrapartida_id: uuid.UUID
 
 
 # ===== Helpers =====
@@ -341,10 +346,123 @@ async def borrar_movimiento(
         raise HTTPException(status_code=409, detail="Solo se borran movimientos manuales")
     if mov.conciliado:
         raise HTTPException(status_code=409, detail="Desconciliar antes de borrar")
+    # anular un movimiento apareado lo desaparea primero (el otro queda suelto)
+    if mov.contrapartida_id is not None:
+        otro = await db.scalar(
+            select(BancoMovimiento).where(BancoMovimiento.id == mov.contrapartida_id)
+        )
+        if otro is not None:
+            otro.contrapartida_id = None
+        mov.contrapartida_id = None
     # 014: eliminar = marcar (queda como historia con fecha cierta)
     mov.anulado_at = datetime.now(timezone.utc)
     mov.anulado_por = usuario.id
     await db.commit()
+
+
+# ===== Apareo de transferencias entre cuentas propias (016, F9-bis §6.2) =====
+
+async def _mov_vivo(db: AsyncSession, tenant_id: uuid.UUID, mov_id: uuid.UUID) -> BancoMovimiento:
+    mov = await db.scalar(
+        select(BancoMovimiento).where(
+            BancoMovimiento.id == mov_id,
+            BancoMovimiento.tenant_id == tenant_id,
+            BancoMovimiento.anulado_at.is_(None),
+        )
+    )
+    if mov is None:
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    return mov
+
+
+@router.get("/movimientos/{mov_id}/candidatos-apareo", response_model=list[dict])
+async def candidatos_apareo(
+    mov_id: uuid.UUID,
+    usuario: Usuario = Depends(requiere("bancos", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Movimientos de OTRA cuenta propia, de tipo opuesto, mismo importe, vivos
+    y sin aparear — para elegir la contrapartida de la transferencia."""
+    mov = await _mov_vivo(db, usuario.tenant_id, mov_id)
+    if mov.tipo not in ("transferencia_in", "transferencia_out"):
+        raise HTTPException(status_code=422, detail="Solo se aparean transferencias")
+    opuesto = "transferencia_out" if mov.tipo == "transferencia_in" else "transferencia_in"
+    filas = (
+        await db.execute(
+            select(BancoMovimiento, CuentaBancaria.banco, CuentaBancaria.numero)
+            .join(CuentaBancaria, BancoMovimiento.cuenta_id == CuentaBancaria.id)
+            .where(
+                BancoMovimiento.tenant_id == usuario.tenant_id,
+                BancoMovimiento.tipo == opuesto,
+                BancoMovimiento.importe == mov.importe,
+                BancoMovimiento.cuenta_id != mov.cuenta_id,
+                BancoMovimiento.anulado_at.is_(None),
+                BancoMovimiento.contrapartida_id.is_(None),
+            )
+            .order_by(BancoMovimiento.fecha.desc())
+            .limit(20)
+        )
+    ).all()
+    return [
+        {
+            "id": str(m.id),
+            "cuenta": f"{banco} {numero or ''}".strip(),
+            "fecha": m.fecha.isoformat(),
+            "tipo": m.tipo,
+            "importe": str(m.importe),
+            "descripcion": m.descripcion,
+        }
+        for m, banco, numero in filas
+    ]
+
+
+@router.post("/movimientos/{mov_id}/aparear", response_model=MovimientoOut)
+async def aparear_movimiento(
+    mov_id: uuid.UUID,
+    body: AparearIn,
+    usuario: Usuario = Depends(requiere("bancos", "editar")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Marca dos transferencias (salida ↔ entrada, mismo importe, cuentas
+    distintas) como el mismo hecho: el motor contable deriva UN asiento banco a
+    banco en vez de dos contra la cuenta puente."""
+    mov = await _mov_vivo(db, usuario.tenant_id, mov_id)
+    otro = await _mov_vivo(db, usuario.tenant_id, body.contrapartida_id)
+    if {mov.tipo, otro.tipo} != {"transferencia_in", "transferencia_out"}:
+        raise HTTPException(
+            status_code=422, detail="Se aparean una transferencia enviada y una recibida"
+        )
+    if mov.cuenta_id == otro.cuenta_id:
+        raise HTTPException(status_code=422, detail="Deben ser cuentas distintas")
+    if Decimal(mov.importe) != Decimal(otro.importe):
+        raise HTTPException(status_code=422, detail="Los importes deben coincidir")
+    if mov.contrapartida_id is not None or otro.contrapartida_id is not None:
+        raise HTTPException(status_code=409, detail="Alguno de los movimientos ya está apareado")
+    mov.contrapartida_id = otro.id
+    otro.contrapartida_id = mov.id
+    await db.commit()
+    mov = await db.scalar(select(BancoMovimiento).where(BancoMovimiento.id == mov_id))
+    return _mov_out(mov)
+
+
+@router.post("/movimientos/{mov_id}/desaparear", response_model=MovimientoOut)
+async def desaparear_movimiento(
+    mov_id: uuid.UUID,
+    usuario: Usuario = Depends(requiere("bancos", "editar")),
+    db: AsyncSession = Depends(get_db),
+):
+    mov = await _mov_vivo(db, usuario.tenant_id, mov_id)
+    if mov.contrapartida_id is None:
+        raise HTTPException(status_code=409, detail="El movimiento no está apareado")
+    otro = await db.scalar(
+        select(BancoMovimiento).where(BancoMovimiento.id == mov.contrapartida_id)
+    )
+    if otro is not None:
+        otro.contrapartida_id = None
+    mov.contrapartida_id = None
+    await db.commit()
+    mov = await db.scalar(select(BancoMovimiento).where(BancoMovimiento.id == mov_id))
+    return _mov_out(mov)
 
 
 # ===== Conciliación por import de extracto (CSV genérico) =====

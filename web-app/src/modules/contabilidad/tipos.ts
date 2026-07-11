@@ -77,6 +77,61 @@ export interface Periodo {
   cerrado_at: string;
 }
 
+export interface ActivoCategoria {
+  id: string;
+  nombre: string;
+  vida_util_meses: number;
+  es_sistema: boolean;
+  activa: boolean;
+}
+
+export interface ActivoFijo {
+  id: string;
+  nombre: string;
+  categoria_id: string;
+  categoria_nombre: string;
+  fecha_alta: string;
+  inicio_amortizacion: string;
+  valor_origen: string;
+  valor_residual: string;
+  vida_util_meses: number;
+  compra_id: string | null;
+  fecha_baja: string | null;
+  baja_motivo: string | null;
+  observaciones: string | null;
+  anulado: boolean;
+  amort_acumulada: string;
+  valor_contable: string;
+}
+
+export interface BalanceFila {
+  cuenta_id: string;
+  codigo: string;
+  nombre: string;
+  nivel: number;
+  imputable: boolean;
+  saldo: string;
+}
+
+export interface Balance {
+  hasta: string;
+  secciones: { tipo: "activo" | "pasivo" | "pn"; total: string; cuentas: BalanceFila[] }[];
+  activo_total: string;
+  pasivo_total: string;
+  resultado_ejercicio: string;
+  pn_total: string;
+  ecuacion_ok: boolean;
+}
+
+export interface AperturaLinea {
+  cuenta_id: string | null;
+  cuenta_codigo: string;
+  cuenta_nombre: string;
+  debe: string;
+  haber: string;
+  detalle: string | null;
+}
+
 export const TIPO_LABEL: Record<string, string> = {
   activo: "Activo",
   pasivo: "Pasivo",
@@ -104,6 +159,10 @@ export const ORIGEN_LABEL: Record<string, string> = {
   stock_ajuste: "Ajuste inventario",
   arqueo: "Arqueo",
   arqueo_anulacion: "Arqueo (reabierto)",
+  amortizacion: "Amortización",
+  activo_baja: "Baja bien de uso",
+  banco_transfer: "Transferencia propia",
+  apertura: "Apertura",
 };
 
 export const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });

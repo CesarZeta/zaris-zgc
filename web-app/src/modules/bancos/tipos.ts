@@ -53,6 +53,7 @@ export interface BancoMovimiento {
   conciliado: boolean;
   fecha_conciliacion: string | null;
   origen: string;
+  contrapartida_id: string | null;
 }
 
 export interface CashflowPunto {

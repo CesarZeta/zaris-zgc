@@ -44,6 +44,8 @@ from app.models.compras import (
 )
 from app.models.caja import CajaCierre, CajaMovimiento, ConceptoCaja, Retencion
 from app.models.contabilidad import (
+    ActivoCategoria,
+    ActivoFijo,
     Asiento,
     AsientoLinea,
     AsientoMapeo,
@@ -133,4 +135,6 @@ __all__ = [
     "Asiento",
     "AsientoLinea",
     "ContabPeriodo",
+    "ActivoCategoria",
+    "ActivoFijo",
 ]

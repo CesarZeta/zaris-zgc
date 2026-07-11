@@ -179,3 +179,93 @@ La prueba de fuego del diseño: **contabilizar retroactivamente el tenant DEMO
 completo** (3 meses de operaciones sintéticas) sin tocar ningún módulo
 operativo. Si algo no se puede derivar, es un gap del contrato §2 y se
 arregla en el módulo de origen ANTES de construir encima.
+
+## 6. F9-bis — Bienes de uso, balance, apertura, export contador y apareo (2026-07-11)
+
+Cierra los diferidos explícitos de la F9 (v1 en producción 2026-07-11). Migración
+016. Mismos principios: todo lo contable se DERIVA; los documentos fuente cumplen
+el contrato §2.
+
+### 6.1 Activos fijos (bienes de uso) + amortizaciones
+
+- **Modelo**: `activo_categorias` (catálogo por tenant con `vida_util_meses`
+  sugerida; seed lazy junto al plan: Rodados 60 · Muebles y útiles 120 · Equipos
+  de computación 36 · Instalaciones 120 · Maquinarias 120 · Inmuebles 600) y
+  `activos_fijos` (nombre, categoría FK —contrato MAPEABLE—, `fecha_alta`,
+  `inicio_amortizacion` default 1° del mes de alta, `valor_origen`,
+  `valor_residual`, `vida_util_meses`, `compra_id` opcional para trazabilidad,
+  baja = `fecha_baja`+`baja_motivo`, error de carga = `anulado_at/anulado_por`).
+- **El alta NO deriva asiento**: el bien entró al patrimonio por su documento
+  (factura de compra —mapear la familia del ítem a la cuenta Bienes de uso—,
+  asiento de apertura o asiento manual). El motor deriva SOLO amortizaciones y
+  bajas — así no hay doble conteo.
+- **Amortización lineal MENSUAL** (criterio v1; el legacy no amortizaba):
+  cuota = (valor_origen − valor_residual) / vida_util_meses redondeada a 2
+  decimales; la ÚLTIMA cuota absorbe el residuo de redondeo. Devenga desde el
+  mes de `inicio_amortizacion` inclusive hasta agotar vida útil o hasta el mes
+  ANTERIOR a `fecha_baja` (el mes de la baja no amortiza). El asiento es UNO
+  por mes calendario — origen_tipo `amortizacion`, fechado el ÚLTIMO día del
+  mes, con un par de líneas por activo (Debe Amortizaciones del ejercicio /
+  Haber Amortización acumulada, detalle = nombre del activo) — y solo se genera
+  cuando el fin de mes cae dentro del rango regenerado (mes en curso: aparece
+  recién al regenerar con `hasta` ≥ fin de mes).
+- **Baja**: asiento origen_tipo `activo_baja` fechado en `fecha_baja`:
+  Debe Amortización acumulada (todo lo devengado) + Debe Resultado por baja de
+  bienes de uso (valor residual contable) a Haber Bienes de uso (valor_origen).
+  Si la baja fue por VENTA, la factura deriva su ingreso por las reglas de
+  ventas — v1 no aparea venta↔baja (ajuste fino por asiento manual).
+- **Anular un activo** (error de carga) = marcar; al regenerar, sus asientos
+  derivados desaparecen — legítimo porque son artefactos regenerables, no
+  documentos (§1).
+- **Cuentas nuevas del plan base** (el seed lazy las agrega a tenants ya
+  sembrados): 1.4 Bienes de uso (no imputable) · 1.4.01 Bienes de uso ·
+  1.4.02 Amortización acumulada bienes de uso (regularizadora) · 5.1.07
+  Amortizaciones del ejercicio · 5.1.08 Resultado por baja de bienes de uso.
+  Mapeos nuevos (clave = categoria_id, fallback NULL obligatorio):
+  `bienes_uso`, `amort_acumulada`, `amort_ejercicio`; `baja_bienes_uso` solo
+  default.
+- **Cuadro de bienes de uso** (reporte + CSV): valor de origen, amortización
+  acumulada devengada al corte, valor residual contable, estado.
+
+### 6.2 Apareo de transferencias entre cuentas propias
+
+- `banco_movimientos.contrapartida_id` (self-FK, simétrico: se setea en ambos).
+  Aparear exige: ambos vivos, tipos opuestos (`transferencia_out` ↔
+  `transferencia_in`), MISMO importe, cuentas DISTINTAS, ninguno ya apareado.
+  Anular un movimiento apareado lo desaparea primero (el otro queda suelto).
+- **Motor**: un par apareado deriva UN asiento (origen_tipo `banco_transfer`,
+  fechado y anclado en el movimiento de SALIDA): Debe Banco destino / Haber
+  Banco origen — sin pasar por la cuenta puente 1.1.06. El movimiento de
+  entrada apareado se saltea. Sin aparear, sigue derivando por la puente (v1).
+
+### 6.3 Balance general (estado de situación patrimonial)
+
+`GET /contabilidad/balance?hasta=` — saldos por cuenta al corte (asientos
+vivos), presentados en el árbol del plan (rollup a cuentas no imputables) para
+Activo / Pasivo / PN, con el **Resultado del ejercicio** (Σ ingresos − egresos
+acumulados al corte) inyectado como línea del PN. Verifica la ecuación
+Activo = Pasivo + PN. Asume que la historia previa al inicio de la contabilidad
+entró por asiento de apertura (§6.5). Export CSV e impresión desde el front.
+
+### 6.4 Export al contador
+
+`GET /contabilidad/export-contador.zip?desde&hasta` — paquete ZIP (patrón CITI
+de F5) con 4 CSV es-AR: plan de cuentas, libro diario por línea, sumas y
+saldos, y mayor completo (todas las cuentas con movimientos). Formato genérico
+importable; NO se inventan layouts propietarios de terceros (Tango/Bejerman/
+Holistor) sin la especificación real de un contador usuario — cuando un piloto
+lo pida, se agrega como writer nuevo sobre las mismas consultas.
+
+### 6.5 Asiento de apertura asistido
+
+- `GET /contabilidad/apertura/sugerencia` propone las líneas desde los datos
+  vivos del sistema: saldo por cuenta bancaria, Deudores por ventas (saldos
+  cta. cte.), Proveedores (saldos cta. cte.), Valores a depositar (cheques de
+  terceros en cartera), Cheques diferidos a pagar (propios emitidos),
+  Mercaderías (stock valorizado) — y la contrapartida residual a Capital.
+  Advertencia explícita: los saldos son al día de HOY (si la apertura se fecha
+  hacia atrás, revisar a mano).
+- `POST /contabilidad/apertura` crea el asiento con origen_tipo **`apertura`**:
+  la regeneración NUNCA lo borra (el delete del motor excluye `manual` y
+  `apertura`), se anula marcando como los manuales, y solo puede haber UNO
+  vivo por tenant (409).

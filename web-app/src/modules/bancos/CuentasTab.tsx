@@ -37,6 +37,7 @@ export default function CuentasTab() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [form, setForm] = useState<CuentaBancaria | null>(null);
   const [movForm, setMovForm] = useState(false);
+  const [apareando, setApareando] = useState<BancoMovimiento | null>(null);
   const { confirmar, dialogos } = useDialogos();
 
   const cargarCuentas = useCallback(async () => {
@@ -83,6 +84,16 @@ export default function CuentasTab() {
       await cargarDetalle();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo conciliar");
+    }
+  }
+
+  async function desaparear(m: BancoMovimiento) {
+    if (!(await confirmar("¿Desaparear la transferencia? Volverá a derivar por la cuenta puente."))) return;
+    try {
+      await apiPost(`/bancos/movimientos/${m.id}/desaparear`, {});
+      await cargarDetalle();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo desaparear");
     }
   }
 
@@ -141,7 +152,22 @@ export default function CuentasTab() {
             {movs.map((m) => (
               <tr key={m.id}>
                 <td className="mono">{m.fecha}</td>
-                <td>{TIPO_MOV_LABEL[m.tipo] ?? m.tipo}</td>
+                <td>
+                  {TIPO_MOV_LABEL[m.tipo] ?? m.tipo}
+                  {(m.tipo === "transferencia_in" || m.tipo === "transferencia_out") && (
+                    m.contrapartida_id ? (
+                      <>
+                        {" "}<span className="chip chip-ok" title="Apareada con la cuenta propia contraparte">apareada</span>{" "}
+                        <button className="mini-btn" onClick={() => void desaparear(m)}>✕</button>
+                      </>
+                    ) : (
+                      <>
+                        {" "}<button className="mini-btn" title="Aparear con la transferencia espejo de otra cuenta propia"
+                          onClick={() => setApareando(m)}>aparear</button>
+                      </>
+                    )
+                  )}
+                </td>
                 <td>{m.descripcion ?? "—"}{m.cheque_id && " · (cheque)"}</td>
                 <td className="num mono">{m.signo < 0 ? "−" : ""}${fmt.format(Number(m.importe))}</td>
                 <td>
@@ -173,6 +199,15 @@ export default function CuentasTab() {
           cuentaId={det.id}
           onCerrar={() => setMovForm(false)}
           onGuardado={() => { setMovForm(false); void cargarDetalle(); }}
+        />
+      )}
+      {apareando && (
+        <AparearModal
+          mov={apareando}
+          onCerrar={(refrescar) => {
+            setApareando(null);
+            if (refrescar) void cargarDetalle();
+          }}
         />
       )}
       {dialogos}
@@ -284,6 +319,101 @@ function MovForm({ cuentaId, onCerrar, onGuardado }: { cuentaId: string; onCerra
         <div className="drawer-acciones">
           <button className="btn btn-ghost" onClick={onCerrar}>Cancelar</button>
           <button className="btn btn-primary" disabled={ocupado || !f.importe} onClick={() => void guardar()}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Apareo de transferencias entre cuentas propias (F9-bis): elegir la
+// transferencia espejo (tipo opuesto, mismo importe, otra cuenta) para que la
+// contabilidad derive UN asiento banco a banco en vez de dos contra la puente.
+function AparearModal({
+  mov,
+  onCerrar,
+}: {
+  mov: BancoMovimiento;
+  onCerrar: (refrescar: boolean) => void;
+}) {
+  interface Candidato {
+    id: string;
+    cuenta: string;
+    fecha: string;
+    tipo: string;
+    importe: string;
+    descripcion: string | null;
+  }
+  const [candidatos, setCandidatos] = useState<Candidato[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data } = await apiGet<Candidato[]>(
+          `/bancos/movimientos/${mov.id}/candidatos-apareo`,
+        );
+        setCandidatos(data);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "No se pudieron buscar candidatos");
+        setCandidatos([]);
+      }
+    })();
+  }, [mov.id]);
+
+  async function aparear(c: Candidato) {
+    setOcupado(true);
+    setError(null);
+    try {
+      await apiPost(`/bancos/movimientos/${mov.id}/aparear`, { contrapartida_id: c.id });
+      onCerrar(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo aparear");
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <div className="drawer-backdrop" onClick={() => onCerrar(false)}>
+      <div className="modal modal-ancho" onClick={(ev) => ev.stopPropagation()}>
+        <h2>Aparear transferencia</h2>
+        {error && <div className="login-error">{error}</div>}
+        <p className="hint-mono">
+          {TIPO_MOV_LABEL[mov.tipo]} del {mov.fecha} por ${fmt.format(Number(mov.importe))} —
+          elegí su espejo en otra cuenta propia (mismo importe, sentido opuesto).
+        </p>
+        <div className="tabla-card" style={{ maxHeight: 320, overflow: "auto" }}>
+          <table className="tabla">
+            <thead>
+              <tr><th>Cuenta</th><th>Fecha</th><th>Tipo</th><th className="num">Importe</th><th /></tr>
+            </thead>
+            <tbody>
+              {(candidatos ?? []).map((c) => (
+                <tr key={c.id}>
+                  <td>{c.cuenta}</td>
+                  <td className="mono">{c.fecha}</td>
+                  <td>{TIPO_MOV_LABEL[c.tipo] ?? c.tipo}{c.descripcion ? ` · ${c.descripcion}` : ""}</td>
+                  <td className="num mono">${fmt.format(Number(c.importe))}</td>
+                  <td>
+                    <button className="mini-btn" disabled={ocupado} onClick={() => void aparear(c)}>
+                      aparear
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {candidatos !== null && candidatos.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="texto-suave">
+                    Sin candidatos: no hay transferencias del sentido opuesto por el mismo
+                    importe en otra cuenta. Cargá el movimiento espejo primero.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="drawer-acciones">
+          <button className="btn btn-ghost" onClick={() => onCerrar(false)}>Cerrar</button>
         </div>
       </div>
     </div>
