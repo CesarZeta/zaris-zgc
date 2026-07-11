@@ -172,6 +172,11 @@ ZGC/
   permisos de módulos fuera del plan: son inertes y quedan listos para el upgrade.
   Alta de tenants (cualquier plan): `tools/setup_tenant.py` (idempotente, crea hasta
   la caja POS default) — `demo_setup_tenant.py` queda solo para el tenant demo.
+- **Reemplazar una colección hija con UNIQUE que incluye la FK exige flush intermedio**
+  (F12-c, bug real en el PUT de plantillas de despiece): asignar `padre.hijos = [nuevos]`
+  con `cascade="all, delete-orphan"` puede emitir los INSERT antes que los DELETE y
+  chocar el UNIQUE (fk, x). Patrón correcto: `padre.hijos = []` → `await db.flush()` →
+  `padre.hijos = [nuevos]`.
 - **Índices para relaciones `selectin`**: el loader emite `WHERE fk IN (...)` SIN
   `tenant_id` → un índice compuesto `(tenant_id, fk)` NO le sirve (mordió en
   `comprobante_items`/`compra_items`, migraciones 006/007). Toda tabla hija nueva lleva

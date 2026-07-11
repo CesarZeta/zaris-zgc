@@ -691,6 +691,13 @@ Gate levantado por César 2026-07-11. Súper NO se vende standalone (siempre sui
   (`tools/test_f12d_dev.py`, tenant efímero plan `pos`) + E2E navegador.
   **Entrega: licencia POS resto** — validar fino contra piloto real (mesas/
   comandas ya operativas; división de cuenta por ítem y KDS quedan v2).
+- [x] **Deploy a prod (2026-07-11, commit cb9c26c)**: migraciones 019+020+021 +
+  re-005 por psql session pooler ANTES del push (RLS=t verificado en las 7 tablas
+  nuevas) → push (Vercel + Pages success 1er intento) → probe openapi
+  (`codigo_balanza` + rutas `/pos/resto`) → **smoke prod 20/20**
+  (`tools/smoke_f12_prod.py`, tenant efímero creado con `setup_tenant.py` +
+  `.env.prod` temporal y eliminado por psql al terminar) → click-through en Pages
+  (secciones balanza/salones renderizando contra la API nueva, 200 cross-origin).
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
