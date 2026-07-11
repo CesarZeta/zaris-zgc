@@ -36,6 +36,7 @@ from app.models import (
     Comprobante,
     Cotizacion,
     Deposito,
+    PosBalanzaConfig,
     PosCaja,
     PosSesion,
     PuntoVenta,
@@ -74,6 +75,7 @@ class CajaIn(BaseModel):
     deposito_id: uuid.UUID | None = None
     lista_precios: int = Field(1, ge=1, le=4)
     ancho_ticket: int = 80
+    perfil: str = Field("estandar", pattern="^(estandar|resto)$")
 
 
 class CajaUpdate(BaseModel):
@@ -83,6 +85,7 @@ class CajaUpdate(BaseModel):
     deposito_id: uuid.UUID | None = None
     lista_precios: int | None = Field(None, ge=1, le=4)
     ancho_ticket: int | None = None
+    perfil: str | None = Field(None, pattern="^(estandar|resto)$")
     activa: bool | None = None
 
 
@@ -95,6 +98,7 @@ class CajaOut(BaseModel):
     deposito_id: uuid.UUID | None
     lista_precios: int
     ancho_ticket: int
+    perfil: str
     activa: bool
     sesion_abierta: bool
 
@@ -108,6 +112,7 @@ class SesionOut(BaseModel):
     id: uuid.UUID
     caja_id: uuid.UUID
     caja_nombre: str
+    caja_perfil: str = "estandar"
     ancho_ticket: int
     cajero_id: uuid.UUID
     cajero_nombre: str
@@ -152,6 +157,10 @@ class VentaItemIn(BaseModel):
     articulo_id: uuid.UUID
     variante_id: uuid.UUID | None = None
     cantidad: Decimal = Field(gt=0)
+    # F12-b venta por departamento: importe FINAL tipeado por el cajero. El
+    # server solo lo acepta si el artículo tiene venta_por_depto=true — para
+    # el resto, los precios siguen siendo de servidor (regla de la Fase 6).
+    precio_unitario: Decimal | None = Field(None, gt=0)
 
 
 class VentaCalcularIn(BaseModel):
@@ -217,6 +226,15 @@ class VarianteBusqueda(BaseModel):
     precio: Decimal
 
 
+class EnvaseBusqueda(BaseModel):
+    """Envase retornable asociado al artículo (F12-b): el POS agrega la línea
+    del envase junto con la del producto."""
+    articulo_id: uuid.UUID
+    codigo: str
+    descripcion: str
+    precio: Decimal
+
+
 class ResultadoBusqueda(BaseModel):
     articulo_id: uuid.UUID
     variante_id: uuid.UUID | None
@@ -228,6 +246,32 @@ class ResultadoBusqueda(BaseModel):
     exacto: bool                # matcheó código de barras / código tal cual
     tiene_variantes: bool
     variantes: list[VarianteBusqueda]
+    # F12-b: cantidad resuelta desde la etiqueta de balanza (peso en kg, o
+    # importe/precio si la etiqueta embebe importe). None = la elige el cajero.
+    cantidad: Decimal | None = None
+    envase: EnvaseBusqueda | None = None
+
+
+class BalanzaConfigIn(BaseModel):
+    habilitado: bool = True
+    prefijo: str = Field("20", pattern="^2[0-9]$")
+    valor_tipo: str = Field("peso", pattern="^(peso|importe)$")
+    codigo_digitos: int = Field(5, ge=3, le=7)
+
+
+class BalanzaConfigOut(BaseModel):
+    habilitado: bool
+    prefijo: str
+    valor_tipo: str
+    codigo_digitos: int
+    model_config = {"from_attributes": True}
+
+
+class DepartamentoOut(BaseModel):
+    articulo_id: uuid.UUID
+    codigo: str
+    descripcion: str
+    tasa_iva: Decimal
 
 
 # ===== Helpers =====
@@ -313,6 +357,68 @@ async def _etiquetas_valores(
     }
 
 
+def _dv_ean13(doce: str) -> int:
+    """Dígito verificador EAN-13 sobre los primeros 12 dígitos."""
+    suma = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(doce))
+    return (10 - suma % 10) % 10
+
+
+async def _resolver_etiqueta_balanza(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    q: str,
+    caja: PosCaja,
+    cotizacion: Decimal,
+) -> ResultadoBusqueda | None:
+    """Pesables por etiqueta de balanza (F12-b, DISENO-POS-PERFILES.md §1):
+    EAN-13 `P PP CCCCC VVVVV D` con el prefijo configurado por tenant. Devuelve
+    la línea con cantidad = peso (kg) o cantidad = importe/precio si la
+    etiqueta embebe importe. None = no es etiqueta (sigue la búsqueda normal)."""
+    if len(q) != 13 or not q.isdigit():
+        return None
+    cfg = await db.scalar(
+        select(PosBalanzaConfig).where(PosBalanzaConfig.tenant_id == tenant_id)
+    )
+    if cfg is None or not cfg.habilitado or not q.startswith(cfg.prefijo):
+        return None
+    if int(q[12]) != _dv_ean13(q[:12]):
+        return None  # DV no cierra: no es etiqueta válida
+    plu = str(int(q[2 : 2 + cfg.codigo_digitos]))
+    valor = Decimal(q[2 + cfg.codigo_digitos : 12])
+    art = await db.scalar(
+        select(Articulo).where(
+            Articulo.tenant_id == tenant_id,
+            Articulo.codigo_balanza == plu,
+            Articulo.activo.is_(True),
+        )
+    )
+    if art is None:
+        return None
+    precio = _precio_final(art, None, caja.lista_precios, cotizacion)
+    if cfg.valor_tipo == "peso":
+        cantidad = (valor / 1000).quantize(Decimal("0.001"))  # gramos → kg
+    elif precio > 0:
+        importe = valor / 100  # centavos → $
+        cantidad = (importe / precio).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    else:
+        cantidad = None  # sin precio no se puede derivar el peso: lo tipea el cajero
+    if cantidad is not None and cantidad <= 0:
+        cantidad = None
+    return ResultadoBusqueda(
+        articulo_id=art.id,
+        variante_id=None,
+        codigo=art.codigo,
+        descripcion=art.descripcion,
+        precio=precio,
+        tasa_iva=art.tasa_iva,
+        pesable=art.pesable,
+        exacto=True,
+        tiene_variantes=False,
+        variantes=[],
+        cantidad=cantidad,
+    )
+
+
 async def _armar_venta(
     db: AsyncSession,
     tenant: Tenant,
@@ -356,18 +462,35 @@ async def _armar_venta(
         variante = variantes.get(it.variante_id) if it.variante_id else None
         if it.variante_id and variante is None:
             raise HTTPException(status_code=422, detail="Variante inexistente en la empresa")
+        # F12-b venta por departamento: el importe tipeado SOLO vale para
+        # artículos-departamento; el resto mantiene precio de servidor.
+        if it.precio_unitario is not None and not art.venta_por_depto:
+            raise HTTPException(
+                status_code=422,
+                detail="Solo los departamentos (venta por depto.) admiten importe tipeado",
+            )
+        if art.venta_por_depto and it.precio_unitario is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Indicar el importe para {art.descripcion} (venta por departamento)",
+            )
         descripcion = None
         if variante is not None:
             etiqueta = etiquetas.get(variante.id)
             if etiqueta:
                 descripcion = f"{art.descripcion} · {etiqueta}"[:120]
+        precio = (
+            it.precio_unitario.quantize(_C2, rounding=ROUND_HALF_UP)
+            if it.precio_unitario is not None
+            else _precio_final(art, variante, caja.lista_precios, cotizacion)
+        )
         armados.append(
             ItemIn(
                 articulo_id=it.articulo_id,
                 variante_id=it.variante_id,
                 descripcion=descripcion,
                 cantidad=it.cantidad,
-                precio_unitario=_precio_final(art, variante, caja.lista_precios, cotizacion),
+                precio_unitario=precio,
             )
         )
 
@@ -461,6 +584,7 @@ async def _sesion_out(
         id=sesion.id,
         caja_id=sesion.caja_id,
         caja_nombre=sesion.caja.nombre,
+        caja_perfil=sesion.caja.perfil,
         ancho_ticket=sesion.caja.ancho_ticket,
         cajero_id=sesion.cajero_id,
         cajero_nombre=cajero_nombre,
@@ -513,6 +637,7 @@ async def listar_cajas(
             deposito_id=c.deposito_id,
             lista_precios=c.lista_precios,
             ancho_ticket=c.ancho_ticket,
+            perfil=c.perfil,
             activa=c.activa,
             sesion_abierta=c.id in abiertas,
         )
@@ -568,6 +693,7 @@ async def crear_caja(
         deposito_id=body.deposito_id,
         lista_precios=body.lista_precios,
         ancho_ticket=body.ancho_ticket,
+        perfil=body.perfil,
     )
     db.add(caja)
     try:
@@ -585,6 +711,7 @@ async def crear_caja(
         deposito_id=caja.deposito_id,
         lista_precios=caja.lista_precios,
         ancho_ticket=caja.ancho_ticket,
+        perfil=caja.perfil,
         activa=caja.activa,
         sesion_abierta=False,
     )
@@ -628,9 +755,72 @@ async def editar_caja(
         deposito_id=caja.deposito_id,
         lista_precios=caja.lista_precios,
         ancho_ticket=caja.ancho_ticket,
+        perfil=caja.perfil,
         activa=caja.activa,
         sesion_abierta=(abierta or 0) > 0,
     )
+
+
+# ===== Balanza y departamentos (F12-b) =====
+
+@router.get("/balanza-config", response_model=BalanzaConfigOut | None)
+async def obtener_balanza_config(
+    usuario: Usuario = Depends(requiere_alguno(["pos", "configuracion"], "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    cfg = await db.scalar(
+        select(PosBalanzaConfig).where(PosBalanzaConfig.tenant_id == usuario.tenant_id)
+    )
+    return BalanzaConfigOut.model_validate(cfg) if cfg else None
+
+
+@router.put("/balanza-config", response_model=BalanzaConfigOut)
+async def configurar_balanza(
+    body: BalanzaConfigIn,
+    usuario: Usuario = Depends(requiere("configuracion", "editar")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upsert de la config de etiquetas de balanza del tenant (config sensible
+    del POS ⇒ configuracion.editar, regla §6)."""
+    cfg = await db.scalar(
+        select(PosBalanzaConfig).where(PosBalanzaConfig.tenant_id == usuario.tenant_id)
+    )
+    if cfg is None:
+        cfg = PosBalanzaConfig(tenant_id=usuario.tenant_id)
+        db.add(cfg)
+    cfg.habilitado = body.habilitado
+    cfg.prefijo = body.prefijo
+    cfg.valor_tipo = body.valor_tipo
+    cfg.codigo_digitos = body.codigo_digitos
+    cfg.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return BalanzaConfigOut.model_validate(cfg)
+
+
+@router.get("/departamentos", response_model=list[DepartamentoOut])
+async def listar_departamentos(
+    usuario: Usuario = Depends(requiere("pos", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Artículos-departamento (venta_por_depto): tecla de depto + importe para
+    lo no codificado del mostrador."""
+    filas = (
+        await db.scalars(
+            select(Articulo)
+            .where(
+                Articulo.tenant_id == usuario.tenant_id,
+                Articulo.venta_por_depto.is_(True),
+                Articulo.activo.is_(True),
+            )
+            .order_by(Articulo.descripcion)
+        )
+    ).all()
+    return [
+        DepartamentoOut(
+            articulo_id=a.id, codigo=a.codigo, descripcion=a.descripcion, tasa_iva=a.tasa_iva
+        )
+        for a in filas
+    ]
 
 
 # ===== Sesiones (turno de cajero) =====
@@ -825,6 +1015,32 @@ async def buscar(
     if not q:
         return []
 
+    # 0) etiqueta de balanza EAN-13 (F12-b): prefijo configurado + DV válido
+    etiqueta_balanza = await _resolver_etiqueta_balanza(
+        db, usuario.tenant_id, q, caja, cotizacion
+    )
+    if etiqueta_balanza is not None:
+        return [etiqueta_balanza]
+
+    async def _envase_de(art: Articulo) -> EnvaseBusqueda | None:
+        if art.envase_articulo_id is None:
+            return None
+        env = await db.scalar(
+            select(Articulo).where(
+                Articulo.id == art.envase_articulo_id,
+                Articulo.tenant_id == usuario.tenant_id,
+                Articulo.activo.is_(True),
+            )
+        )
+        if env is None:
+            return None
+        return EnvaseBusqueda(
+            articulo_id=env.id,
+            codigo=env.codigo,
+            descripcion=env.descripcion,
+            precio=_precio_final(env, None, caja.lista_precios, cotizacion),
+        )
+
     async def _con_variantes(articulo_ids: list[uuid.UUID]) -> set[uuid.UUID]:
         if not articulo_ids:
             return set()
@@ -867,6 +1083,7 @@ async def buscar(
         exacto: bool,
         tiene_variantes: bool,
         variantes: list[VarianteBusqueda],
+        envase: EnvaseBusqueda | None = None,
     ) -> ResultadoBusqueda:
         descripcion = art.descripcion
         if variante_desc:
@@ -882,6 +1099,7 @@ async def buscar(
             exacto=exacto,
             tiene_variantes=tiene_variantes,
             variantes=variantes,
+            envase=envase,
         )
 
     # 1) código de barras de VARIANTE (exacto)
@@ -900,23 +1118,29 @@ async def buscar(
     if fila is not None:
         variante, art = fila
         etiquetas = await _etiquetas_valores(db, usuario.tenant_id, [variante])
-        return [_item(art, variante, etiquetas.get(variante.id), True, True, [])]
+        return [
+            _item(art, variante, etiquetas.get(variante.id), True, True, [],
+                  await _envase_de(art))
+        ]
 
-    # 2) código de barras o código interno de ARTÍCULO (exacto)
+    # 2) código de barras, código interno o PLU de balanza de ARTÍCULO (exacto)
+    condiciones_exactas = [
+        Articulo.codigo_barras == q,
+        func.upper(Articulo.codigo) == q.upper(),
+    ]
+    if q.isdigit():
+        condiciones_exactas.append(Articulo.codigo_balanza == str(int(q)))
     art = await db.scalar(
         select(Articulo).where(
             Articulo.tenant_id == usuario.tenant_id,
             Articulo.activo.is_(True),
-            or_(
-                Articulo.codigo_barras == q,
-                func.upper(Articulo.codigo) == q.upper(),
-            ),
+            or_(*condiciones_exactas),
         )
     )
     if art is not None:
         tiene = art.id in await _con_variantes([art.id])
         variantes = await _variantes_de(art) if tiene else []
-        return [_item(art, None, None, True, tiene, variantes)]
+        return [_item(art, None, None, True, tiene, variantes, await _envase_de(art))]
 
     # 3) búsqueda por texto
     patron = f"%{q}%"
@@ -941,7 +1165,7 @@ async def buscar(
     for a in filas:
         tiene = a.id in con_variantes
         variantes = await _variantes_de(a) if tiene else []
-        resultados.append(_item(a, None, None, False, tiene, variantes))
+        resultados.append(_item(a, None, None, False, tiene, variantes, await _envase_de(a)))
     return resultados
 
 

@@ -14,6 +14,7 @@ interface Form {
   deposito_id: string;
   lista_precios: number;
   ancho_ticket: number;
+  perfil: "estandar" | "resto";
 }
 
 const VACIO: Form = {
@@ -24,6 +25,7 @@ const VACIO: Form = {
   deposito_id: "",
   lista_precios: 1,
   ancho_ticket: 80,
+  perfil: "estandar",
 };
 
 export default function CajasSection() {
@@ -63,6 +65,7 @@ export default function CajasSection() {
       deposito_id: form.deposito_id || null,
       lista_precios: form.lista_precios,
       ancho_ticket: form.ancho_ticket,
+      perfil: form.perfil,
     };
     try {
       if (form.id) await apiPatch<PosCaja>(`/pos/cajas/${form.id}`, body);
@@ -100,6 +103,7 @@ export default function CajasSection() {
               <th>Depósito</th>
               <th className="num">Lista</th>
               <th className="num">Ticket</th>
+              <th>Perfil</th>
               <th>Estado</th>
               <th></th>
             </tr>
@@ -116,6 +120,7 @@ export default function CajasSection() {
                 <td>{depositos.find((d) => d.id === c.deposito_id)?.nombre ?? "—"}</td>
                 <td className="num">{c.lista_precios}</td>
                 <td className="num">{c.ancho_ticket}mm</td>
+                <td>{c.perfil === "resto" ? <span className="chip chip-variante">resto</span> : "mostrador"}</td>
                 <td>{c.activa ? "activa" : <span className="chip chip-anulado">inactiva</span>}</td>
                 <td>
                   <button
@@ -129,6 +134,7 @@ export default function CajasSection() {
                         deposito_id: c.deposito_id ?? "",
                         lista_precios: c.lista_precios,
                         ancho_ticket: c.ancho_ticket,
+                        perfil: c.perfil,
                       })
                     }
                   >
@@ -142,7 +148,7 @@ export default function CajasSection() {
             ))}
             {cajas.length === 0 && (
               <tr>
-                <td colSpan={8}>Sin cajas todavía.</td>
+                <td colSpan={9}>Sin cajas todavía.</td>
               </tr>
             )}
           </tbody>
@@ -211,6 +217,14 @@ export default function CajasSection() {
           >
             <option value={80}>Ticket 80mm</option>
             <option value={58}>Ticket 58mm</option>
+          </select>
+          <select
+            className="input"
+            value={form.perfil}
+            onChange={(e) => setForm({ ...form, perfil: e.target.value as Form["perfil"] })}
+          >
+            <option value="estandar">Perfil mostrador</option>
+            <option value="resto">Perfil resto (mesas)</option>
           </select>
           <div>
             <button

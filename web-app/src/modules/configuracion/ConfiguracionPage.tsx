@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPut } from "../../lib/api";
 import { tienePermiso } from "../../lib/auth";
 import type { Empresa, Rubro } from "../../lib/types";
+import BalanzaSection from "../pos/BalanzaSection";
 import CajasSection from "../pos/CajasSection";
+import SalonesSection from "../pos/SalonesSection";
 import ArcaConfigSection from "../ventas/ArcaConfigSection";
 import SucursalesSection from "./SucursalesSection";
 import UsuariosSection from "./UsuariosSection";
@@ -14,8 +16,8 @@ const DETALLE: Record<string, string> = {
   electronica: "Variantes destacadas y precios en USD; siembra Color y Capacidad.",
   ferreteria_repuestos: "Precios en USD destacados; siembra el atributo Medida.",
   distribuidora: "Orientado a mayorista; siembra Gusto y Presentación.",
-  carniceria: "Cortes pesables como un súper; el despiece de media res llega con F12-c.",
-  restaurante: "Cajas con perfil resto (mesas y comandas) cuando llegue F12-d.",
+  carniceria: "Cortes pesables + despiece de media res en Stock (plantillas y costeo por valor).",
+  restaurante: "Cajas con perfil resto: salones, mesas y comandas que se facturan al cerrar.",
 };
 
 const PLAN_NOMBRE: Record<string, string> = {
@@ -120,6 +122,10 @@ export default function ConfiguracionPage() {
       <UsuariosSection />
 
       <CajasSection />
+
+      <BalanzaSection />
+
+      <SalonesSection />
 
       <ArcaConfigSection />
     </>

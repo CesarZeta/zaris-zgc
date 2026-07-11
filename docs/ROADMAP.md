@@ -610,7 +610,7 @@ VIAJANTE.DBF + CVIAJ en clientes/ventas/recibos + GV0040 regenerable).
   defaultea al habitual), escalas de comisión por familia/artículo (el legacy
   tampoco las tenía).
 
-## FASE 12 — POS por perfiles + POS standalone 🔶 (en diseño/ejecución desde 2026-07-11)
+## FASE 12 — POS por perfiles + POS standalone ✅ (completada 2026-07-11: a/b/c/d en producción)
 
 **Entregable: el POS se vende como licencia independiente (kiosco, carnicería, resto)
 sobre la misma nube — el tenant POS-only lleva stock, facturación, clientes y listados
@@ -644,19 +644,53 @@ Gate levantado por César 2026-07-11. Súper NO se vende standalone (siempre sui
   en Pages (card "Plan contratado", 8 rubros, suite intacta).
   **Entrega: licencia POS kiosco/almacén vendible** (el POS de F6 ya la cubre)
   con `tools/setup_tenant.py --plan pos`.
-- [ ] **F12-b — Perfil súper/estándar completo**: pesables por etiqueta de balanza
-  (EAN prefijo 20–29, config por tenant peso/importe, `articulos.codigo_balanza`,
-  parsing server-side en `GET /pos/buscar`), envases retornables, venta por
-  departamento.
-- [ ] **F12-c — Despiece / transformación de stock** (gestión, no POS): tipo de
-  movimiento `transformacion` (grupo_id como interdepósito), merma explícita,
-  plantillas con % rendimiento + coeficiente de valor, costeo proporcional al valor,
-  pantalla "Ingreso de media res". **Entrega: licencia POS carnicería.**
-- [ ] **F12-d — POS Resto**: `pos_salones`/`pos_mesas`/`pos_comandas` (+items),
-  grilla de mesas, mozos (rol), comandas a cocina por impresora, mover/unir/dividir,
-  propina %, cierre de mesa → cobro POS → `emitir_core`. Delivery con domicilio OSM.
-  Nada de esto llega a la gestión salvo la venta final (mandato). **Entrega:
-  licencia POS resto.** El más grande — validar contra piloto real.
+- [x] **F12-b — Perfil súper/estándar completo** ✅ 2026-07-11: migración 019
+  (`articulos.codigo_balanza` unique parcial por tenant + `pos_balanza_config`:
+  prefijo 20–29, valor peso/importe, dígitos del PLU — esquema Kretz). Parsing
+  de etiquetas EAN-13 **server-side** en `GET /pos/buscar` (verifica DV, resuelve
+  artículo por PLU y devuelve `cantidad` = kg o importe/precio); PLU tipeado
+  directo también matchea. **Envases retornables**: vínculo producto→envase en el
+  form de artículos (`GET /articulos?es_envase=true`), la búsqueda del POS trae el
+  envase y el front agrega/acumula la línea sola (devolución de envases diferida
+  al primer piloto — el core fiscal no admite líneas negativas). **Venta por
+  departamento**: `GET /pos/departamentos` + `precio_unitario` tipeado en la venta
+  SOLO para artículos `venta_por_depto` (422 para el resto — los precios siguen
+  siendo de servidor); tecla F9 + modal en el POS. Config de balanza en
+  Configuración (GET/PUT `/pos/balanza-config`, guarda `configuracion.editar`).
+  Verificado: **39/39 pruebas en vivo** (`tools/test_f12b_dev.py`, tenant efímero).
+- [x] **F12-c — Despiece / transformación de stock** ✅ 2026-07-11 (gestión, no
+  POS): migración 020 — `transformacion` al CHECK del kardex + `despiece_plantillas`
+  (+cortes: % rendimiento sugerido, coeficiente de valor). `POST /stock/transformacion`:
+  salida del origen + N entradas atadas por `grupo_id` (locks en orden estable,
+  patrón transferencia), merma explícita (≥0, sellada en observaciones), **costeo
+  proporcional al valor** `costo_kg = costo_total × coef / Σ(coef_i × kg_i)` (coef 1
+  = prorrateo por peso), costo_total default = costo vigente × cantidad, costo del
+  corte actualizado en su convención (con/sin IVA, USD — criterio F4). NEUTRA en
+  contabilidad (el motor F9 solo deriva ajuste/inicial — verificado). Plantillas
+  CRUD (`/stock/despiece-plantillas`, inactivar, 409 dup). Pantalla "Despiece /
+  Ingreso de media res" en Stock (plantilla precarga kilos por %, merma en vivo,
+  guardar como plantilla). Verificado: **38/38 pruebas en vivo**
+  (`tools/test_f12c_dev.py`, fórmula del diseño al centavo). **Entrega: licencia
+  POS carnicería** (`setup_tenant.py --plan pos --rubro carniceria`).
+- [x] **F12-d — POS Resto** ✅ 2026-07-11: migración 021 — `pos_cajas.perfil`
+  (estandar/resto) + `pos_salones`/`pos_mesas` (alta por lote, numeración continua
+  por salón) + `pos_comandas` (cuenta abierta: UNA por mesa —unique parcial—, tipo
+  mesa/delivery/takeaway, mozo, propina %, domicilio snapshot OSM, envio_estado)
+  + `pos_comanda_items` (precio de servidor snapshot, observaciones, estado_cocina).
+  Router `/pos/resto`: abrir/editar/anular comanda, ítems (agregar/editar/quitar
+  pre-fiscal), **enviar a cocina** (marca pendientes + payload que el front imprime),
+  **mover/unir mesas**, **cobrar** = factura fiscal vía `emitir_core` con la
+  maquinaria del POS (precios re-resueltos, letra por matriz, medios = total,
+  stock, arqueo de sesión; comanda cerrada con `comprobante_id`, mesa liberada),
+  delivery con estados y **reporte de ventas por mozo EN el POS** (propinas). La
+  propina NO integra la factura ni los medios (se rinde fuera del arqueo fiscal).
+  Front: pantalla RESTO completa (grilla de mesas por salón, panel de comanda,
+  pedidos delivery con AddressSearch OSM, tab mozos, cierre de caja) + ABM salones/
+  mesas y perfil de caja en Configuración. Mandato cumplido: **nada llega a la
+  gestión salvo la venta final**. Verificado: **51/51 pruebas en vivo**
+  (`tools/test_f12d_dev.py`, tenant efímero plan `pos`) + E2E navegador.
+  **Entrega: licencia POS resto** — validar fino contra piloto real (mesas/
+  comandas ya operativas; división de cuenta por ítem y KDS quedan v2).
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
@@ -674,7 +708,7 @@ Gate levantado por César 2026-07-11. Súper NO se vende standalone (siempre sui
 | 9 ✅ | **Contabilidad** (módulo activable) | **v1 EN PRODUCCIÓN 2026-07-11** (sección FASE 9 arriba): motor derivado regenerable + plan argentino + mapeos + diario/mayor/sumas y saldos + períodos + asiento manual + CSV. **F9-bis completada 2026-07-11** (sección propia arriba): bienes de uso + amortizaciones derivadas, balance general, apertura asistida, export contador ZIP, apareo de transferencias | Gate levantado por César 2026-07-11 (la mini-fase Contabilizabilidad ya estaba en prod) |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 ✅ | Vendedores y comisiones | **HECHA 2026-07-11** (sección propia arriba): rol BUE + sellado en ventas/cobranzas + liquidación por venta / por cobranza como documento contabilizable | — |
-| 12 🔶 | **POS por perfiles + POS standalone** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`, ampliado 2026-07-11 con §7: **el POS se vende como módulo independiente** (plan por tenant, sin on-premise) para kiosco/carnicería/resto — súper siempre suite. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | **Gate levantado por César 2026-07-11** ("podemos seguir por el POS", con el mandato standalone). Orden: F12-a → F12-d (ver sección FASE 12) |
+| 12 ✅ | **POS por perfiles + POS standalone** (Súper · Carnicería · Resto) — **COMPLETA 2026-07-11** (a/b/c/d en producción, ver sección FASE 12) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`, ampliado 2026-07-11 con §7: **el POS se vende como módulo independiente** (plan por tenant, sin on-premise) para kiosco/carnicería/resto — súper siempre suite. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | **Gate levantado por César 2026-07-11** ("podemos seguir por el POS", con el mandato standalone). Orden: F12-a → F12-d (ver sección FASE 12) |
 | 12-bis | Logística de entregas | Rol transportista (BUE), `entregas` por remito/factura con domicilio snapshot + estados (pendiente→en reparto→entregada/rechazada), **hojas de ruta** imprimibles, rendición del reparto, mapa opcional. Diseño en `DISENO-LOGISTICA-Y-DOMICILIOS.md` §2. Crecimiento hacia adentro (operativiza el remito que ya existe) | Requiere domicilios OSM (F7). Activación: primer cliente que reparte (distribuidora/mayorista/corralón) |
 | 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |
 | 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |

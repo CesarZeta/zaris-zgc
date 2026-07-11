@@ -10,9 +10,10 @@
 > independiente** (licencia POS-only para kiosco, carnicería, resto — súper no),
 > sin instalación on-premise. Diseño en §7; reordena el plan de ejecución (§6-bis).
 >
-> **Estado: DISEÑO** — nada de esto está implementado (el ABM de sucursales de §4 se
-> hizo en F7). El orden vigente está en §6-bis y en el ROADMAP (F12). Relevamiento del
-> estado real hecho el 2026-07-05 y re-verificado el 2026-07-11 contra código y esquema.
+> **Estado: IMPLEMENTADO (2026-07-11)** — F12-a (plan por tenant, migración 018),
+> F12-b (pesables/envases/depto, migración 019), F12-c (despiece, migración 020) y
+> F12-d (POS resto, migración 021) están EN PRODUCCIÓN. Este doc queda como diseño de
+> referencia; los detalles finales de implementación están en el ROADMAP (FASE 12).
 
 ## 0. Principios
 

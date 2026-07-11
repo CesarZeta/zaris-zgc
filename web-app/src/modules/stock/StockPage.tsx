@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import type { Articulo, Deposito, Movimiento, StockFila, Variante } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
+import DespieceModal from "./DespieceModal";
 
 const POR_PAGINA = 50;
 const fmtCant = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 });
@@ -13,6 +14,7 @@ const TIPOS_MOV: Record<string, string> = {
   transferencia: "Transferencia",
   compra: "Compra",
   venta: "Venta",
+  transformacion: "Transformación",
 };
 
 // ---------- buscador de artículo (autocomplete liviano) ----------
@@ -485,6 +487,7 @@ export default function StockPage() {
   const [ajusteAbierto, setAjusteAbierto] = useState(false);
   const [ajusteInicial, setAjusteInicial] = useState<StockFila | null>(null);
   const [transferAbierto, setTransferAbierto] = useState(false);
+  const [despieceAbierto, setDespieceAbierto] = useState(false);
   const [kardexFila, setKardexFila] = useState<StockFila | null>(null);
 
   useEffect(() => {
@@ -590,6 +593,9 @@ export default function StockPage() {
         </label>
         <button className="btn btn-ghost" onClick={() => setTransferAbierto(true)}>
           Transferencia
+        </button>
+        <button className="btn btn-ghost" onClick={() => setDespieceAbierto(true)}>
+          Despiece
         </button>
         <button
           className="btn btn-primary"
@@ -701,6 +707,15 @@ export default function StockPage() {
           depositos={depositos}
           onCerrar={(r) => {
             setTransferAbierto(false);
+            if (r) void cargar();
+          }}
+        />
+      )}
+      {despieceAbierto && (
+        <DespieceModal
+          depositos={depositos}
+          onCerrar={(r) => {
+            setDespieceAbierto(false);
             if (r) void cargar();
           }}
         />

@@ -63,6 +63,7 @@ class ArticuloIn(BaseModel):
     en_dolares: bool = False
     impuesto_interno: Decimal = Field(Decimal("0"), ge=0)
     pesable: bool = False
+    codigo_balanza: str | None = Field(None, max_length=6)
     venta_por_depto: bool = False
     es_envase_retornable: bool = False
     envase_articulo_id: uuid.UUID | None = None
@@ -94,6 +95,7 @@ class ArticuloOut(BaseModel):
     en_dolares: bool
     impuesto_interno: Decimal
     pesable: bool
+    codigo_balanza: str | None
     venta_por_depto: bool
     es_envase_retornable: bool
     envase_articulo_id: uuid.UUID | None
@@ -146,6 +148,20 @@ CAMPOS_PRECIO = {"costo", "costo_con_iva", "tasa_iva"} | {
 
 
 # ===== Helpers =====
+
+def _normalizar_codigo_balanza(valor: str | None) -> str | None:
+    """PLU de balanza (F12-b): solo dígitos, guardado sin ceros a la izquierda
+    (la etiqueta EAN-13 lo imprime zero-padded). Vacío ⇒ NULL."""
+    if valor is None or not valor.strip():
+        return None
+    valor = valor.strip()
+    if not valor.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El código de balanza (PLU) debe ser numérico",
+        )
+    return str(int(valor))
+
 
 def aplicar_busqueda_articulos(stmt: Select, q: str) -> Select:
     """Multi-palabra AND sobre descripción; los tokens también matchean
@@ -255,6 +271,7 @@ async def crear_articulo(
     datos["codigo"] = datos["codigo"].strip()
     if datos["codigo_barras"]:
         datos["codigo_barras"] = datos["codigo_barras"].strip() or None
+    datos["codigo_balanza"] = _normalizar_codigo_balanza(datos.get("codigo_balanza"))
     datos = completar_precios(datos, body.model_dump(exclude_unset=True).keys() | set())
     await _validar_referencias(db, usuario.tenant_id, datos)
     await _validar_cbarra_contra_variantes(db, usuario.tenant_id, datos["codigo_barras"])
@@ -269,7 +286,7 @@ async def crear_articulo(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ya existe un artículo con ese código o código de barras",
+            detail="Ya existe un artículo con ese código, código de barras o código de balanza",
         )
     return _armar_out(articulo, Decimal("0"))
 
@@ -281,6 +298,7 @@ async def listar_articulos(
     familia_id: uuid.UUID | None = None,
     subfamilia_id: uuid.UUID | None = None,
     marca_id: uuid.UUID | None = None,
+    es_envase: bool | None = None,
     incluir_inactivos: bool = False,
     limit: int = 50,
     offset: int = 0,
@@ -296,6 +314,9 @@ async def listar_articulos(
         stmt = stmt.where(Articulo.subfamilia_id == subfamilia_id)
     if marca_id:
         stmt = stmt.where(Articulo.marca_id == marca_id)
+    if es_envase is not None:
+        # F12-b: el form de artículos lista los envases retornables para el vínculo
+        stmt = stmt.where(Articulo.es_envase_retornable.is_(es_envase))
     stmt = aplicar_busqueda_articulos(stmt, q)
 
     # El COUNT va sin la subquery de stock: sumar el stock del catálogo
@@ -340,6 +361,7 @@ async def actualizar_articulo(
     datos["codigo"] = datos["codigo"].strip()
     if datos["codigo_barras"]:
         datos["codigo_barras"] = datos["codigo_barras"].strip() or None
+    datos["codigo_balanza"] = _normalizar_codigo_balanza(datos.get("codigo_balanza"))
     datos = completar_precios(datos, enviados)
     await _validar_referencias(db, usuario.tenant_id, datos)
     if datos["codigo_barras"] != articulo.codigo_barras:
@@ -360,7 +382,7 @@ async def actualizar_articulo(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ya existe un artículo con ese código o código de barras",
+            detail="Ya existe un artículo con ese código, código de barras o código de balanza",
         )
     articulo = await db.scalar(select(Articulo).where(Articulo.id == articulo_id))
     stock = await db.scalar(

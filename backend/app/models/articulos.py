@@ -122,6 +122,9 @@ class Articulo(Base):
     en_dolares: Mapped[bool] = mapped_column(Boolean, default=False)
     impuesto_interno: Mapped[Decimal] = mapped_column(Numeric(12, 5), default=0)
     pesable: Mapped[bool] = mapped_column(Boolean, default=False)
+    # PLU corto que imprime la balanza (F12-b): único por tenant, sin ceros a
+    # la izquierda. NULL = el artículo no se etiqueta por balanza.
+    codigo_balanza: Mapped[str | None] = mapped_column(String(6))
     venta_por_depto: Mapped[bool] = mapped_column(Boolean, default=False)
     es_envase_retornable: Mapped[bool] = mapped_column(Boolean, default=False)
     envase_articulo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("articulos.id"))
@@ -194,6 +197,44 @@ class ArticuloStock(Base):
     stock_minimo: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
     ubicacion: Mapped[str | None] = mapped_column(String(20))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DespiecePlantilla(Base):
+    """Plantilla de despiece/transformación (F12-c): artículo origen (media
+    res, bolsa a fraccionar) + cortes con % de rendimiento sugerido y
+    coeficiente de valor. Precarga la pantalla; los kilos reales se corrigen
+    a mano en cada ingreso."""
+
+    __tablename__ = "despiece_plantillas"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    articulo_origen_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("articulos.id"))
+    nombre: Mapped[str] = mapped_column(String(60))
+    activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    cortes: Mapped[list["DespiecePlantillaCorte"]] = relationship(
+        lazy="selectin", order_by="DespiecePlantillaCorte.orden", cascade="all, delete-orphan"
+    )
+
+
+class DespiecePlantillaCorte(Base):
+    __tablename__ = "despiece_plantilla_cortes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    plantilla_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("despiece_plantillas.id", ondelete="CASCADE")
+    )
+    articulo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("articulos.id"))
+    rendimiento_pct: Mapped[Decimal] = mapped_column(Numeric(6, 3), default=0)
+    coef_valor: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=1)
+    orden: Mapped[int] = mapped_column(SmallInteger, default=0)
 
 
 class StockMovimiento(Base):

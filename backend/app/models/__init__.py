@@ -6,6 +6,8 @@ from app.models.articulos import (
     AtributoValor,
     Cotizacion,
     Deposito,
+    DespiecePlantilla,
+    DespiecePlantillaCorte,
     Familia,
     Marca,
     StockMovimiento,
@@ -53,7 +55,16 @@ from app.models.contabilidad import (
     PlanCuenta,
 )
 from app.models.nucleo import Rol, RolPermiso, Sucursal, Tenant, Usuario
-from app.models.pos import PosCaja, PosSesion, VentaMedio
+from app.models.pos import (
+    PosBalanzaConfig,
+    PosCaja,
+    PosComanda,
+    PosComandaItem,
+    PosMesa,
+    PosSalon,
+    PosSesion,
+    VentaMedio,
+)
 from app.models.vendedores import (
     ComisionLiquidacion,
     ComisionLiquidacionItem,
@@ -100,6 +111,8 @@ __all__ = [
     "Atributo",
     "AtributoValor",
     "ArticuloVariante",
+    "DespiecePlantilla",
+    "DespiecePlantillaCorte",
     "PuntoVenta",
     "TipoComprobante",
     "Numeracion",
@@ -127,7 +140,12 @@ __all__ = [
     "CajaMovimiento",
     "CajaCierre",
     "Retencion",
+    "PosBalanzaConfig",
     "PosCaja",
+    "PosComanda",
+    "PosComandaItem",
+    "PosMesa",
+    "PosSalon",
     "PosSesion",
     "VentaMedio",
     "CuentaBancaria",

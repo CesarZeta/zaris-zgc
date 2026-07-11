@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ApiError, apiPost, apiPut } from "../../lib/api";
+import { useEffect, useState } from "react";
+import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import type { Articulo, Familia, Marca, Rubro, Unidad } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
 import VariantesSection from "./VariantesSection";
@@ -41,8 +41,10 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
     tasa_iva: a ? String(Number(a.tasa_iva)) : "21",
     en_dolares: a?.en_dolares ?? false,
     pesable: a?.pesable ?? false,
+    codigo_balanza: a?.codigo_balanza ?? "",
     venta_por_depto: a?.venta_por_depto ?? false,
     es_envase_retornable: a?.es_envase_retornable ?? false,
+    envase_articulo_id: a?.envase_articulo_id ?? "",
     observaciones: a?.observaciones ?? "",
     activo: a?.activo ?? true,
     utilidad_1: a ? String(Number(a.utilidad_1)) : "0",
@@ -56,7 +58,21 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
   });
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [envases, setEnvases] = useState<Articulo[]>([]);
   const { pedirTexto, dialogos } = useDialogos();
+
+  // Envases retornables del catálogo, para el vínculo producto → envase (F12-b)
+  useEffect(() => {
+    if (!mostrarFlagsSuper) return;
+    void (async () => {
+      try {
+        const r = await apiGet<Articulo[]>("/articulos?es_envase=true&limit=200");
+        setEnvases(r.data.filter((e) => e.id !== a?.id));
+      } catch {
+        /* sin permiso o sin envases: el select queda vacío */
+      }
+    })();
+  }, []);
 
   function set<K extends keyof typeof form>(campo: K, valor: (typeof form)[K]) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -154,8 +170,10 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
       tasa_iva: n(form.tasa_iva),
       en_dolares: form.en_dolares,
       pesable: form.pesable,
+      codigo_balanza: form.codigo_balanza.trim() || null,
       venta_por_depto: form.venta_por_depto,
       es_envase_retornable: form.es_envase_retornable,
+      envase_articulo_id: form.envase_articulo_id || null,
       observaciones: form.observaciones.trim() || null,
       activo: form.activo,
       utilidad_1: n(form.utilidad_1),
@@ -431,6 +449,39 @@ export default function ArticuloForm({ articulo: a, familias, marcas, unidades, 
               />
               Envase retornable
             </label>
+          </div>
+        )}
+        {mostrarFlagsSuper && (
+          <div className="fila">
+            {form.pesable && (
+              <div className="field">
+                <label>Código de balanza (PLU)</label>
+                <input
+                  className="input num"
+                  maxLength={6}
+                  placeholder="ej. 123"
+                  value={form.codigo_balanza}
+                  onChange={(ev) => set("codigo_balanza", ev.target.value.replace(/\D/g, ""))}
+                />
+              </div>
+            )}
+            {!form.es_envase_retornable && envases.length > 0 && (
+              <div className="field">
+                <label>Envase retornable asociado</label>
+                <select
+                  className="input"
+                  value={form.envase_articulo_id}
+                  onChange={(ev) => set("envase_articulo_id", ev.target.value)}
+                >
+                  <option value="">— Sin envase —</option>
+                  {envases.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.codigo} — {e.descripcion}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 

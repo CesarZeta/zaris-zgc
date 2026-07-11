@@ -128,9 +128,46 @@ turno" libera la caja. Los turnos cerrados alimentan la planilla de caja del dí
 | F3 | Identificar cliente |
 | F6 | Tickets del turno (reimpresión / anulación) |
 | F8 | Cierre de turno |
+| F9 | Venta por departamento (importe tipeado) |
 | F10 | Cobrar |
 | ↑ ↓ / Supr | Seleccionar / quitar línea |
 | Esc | Cerrar el modal abierto |
+
+## 6-bis. Perfil súper: balanza, envases y departamentos (F12-b)
+
+- **Etiquetas de balanza**: se configuran una vez en Configuración → Etiquetas de
+  balanza (prefijo 20–29, si el código embebe peso en gramos o importe en centavos,
+  y cuántos dígitos tiene el PLU). Cada artículo pesable lleva su **código de
+  balanza (PLU)** en el maestro. Al escanear la etiqueta EAN-13, el POS arma la
+  línea solo: artículo + cantidad (kg) o cantidad = importe/precio. El PLU tipeado
+  a mano también funciona como código exacto.
+- **Envases retornables**: si el artículo tiene un envase asociado (maestro de
+  artículos → "Envase retornable asociado"), el POS agrega la línea del envase
+  junto con el producto (misma cantidad, editable). La *devolución* de envases
+  queda para definir con el primer piloto.
+- **Venta por departamento** (F9): para lo no codificado. Se marcan artículos con
+  "Venta por departamento" (uno por rubro de mostrador, ej. VARIOS 21%); en la
+  caja, F9 → elegir departamento → tipear el importe final. Es el ÚNICO caso en
+  que el cajero tipea un precio.
+
+## 6-ter. POS Resto (F12-d)
+
+Una caja con **perfil resto** (Configuración → Cajas POS) abre la pantalla de
+salón en vez del mostrador:
+
+1. **Configurar el salón** (una vez): Configuración → Salones y mesas — crear
+   salones (Salón, Vereda, Barra…) y agregar mesas por lote (numeración automática).
+2. **Operar**: la grilla muestra las mesas por salón (libre / ocupada con total y
+   mozo). Tocar una mesa libre abre la comanda; los platos se buscan como en el
+   mostrador y admiten observaciones ("sin sal"). **Enviar a cocina** imprime la
+   comanda con los ítems nuevos. Mover/unir mesas desde el panel de la comanda.
+3. **Pedidos** (pestaña): delivery y para llevar, con domicilio normalizado (OSM)
+   y estados en preparación → despachado → entregado.
+4. **Cobrar**: cierra la mesa con la pantalla de cobro de siempre (medios múltiples,
+   vuelto) y emite la factura fiscal. La **propina %** es informativa (no integra la
+   factura ni el arqueo). La pestaña **Mozos** muestra ventas y propinas por mozo.
+5. Nada del salón (mesas, comandas, cocina) viaja a la gestión central: solo la
+   venta final emitida.
 
 ## 7. Problemas comunes
 
@@ -149,14 +186,13 @@ turno" libera la caja. Los turnos cerrados alimentan la planilla de caja del dí
 ## 8. Limitaciones actuales y qué viene
 
 - **Sin internet no se factura** (el nodo de sucursal LAN es diseño, sin código — ROADMAP F13).
-- Etiquetas de balanza, envases retornables y venta por departamento: perfil POS
-  Súper, post-MVP (ROADMAP F12).
 - Impresión con diálogo del navegador (QZ Tray diferido hasta que un piloto lo pida).
-- Sin ABM de usuarios en la UI (por script; llega con la Fase 6.5) ni de sucursales (F7).
 - Descuentos por línea/venta: el backend ya los soporta (`descuento_pct`), el POS aún
   no los expone en pantalla.
-- Perfiles de POS por rubro (carnicería con despiece, resto con mesas/mozos/comandas):
-  diseño en `DISENO-POS-PERFILES.md`.
+- Devolución de envases retornables (línea negativa o descuento): a definir con el
+  primer piloto contra la práctica real.
+- Resto v2 (diferidos documentados): recetas/descarga de insumos, modificadores con
+  precio, KDS, reservas, división de cuenta por ítem, integración pedidos online (F13).
 
 ## 9. Apéndice técnico (desarrollo / troubleshooting)
 

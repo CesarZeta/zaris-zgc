@@ -189,6 +189,7 @@ export interface Articulo {
   en_dolares: boolean;
   impuesto_interno: string;
   pesable: boolean;
+  codigo_balanza: string | null;
   venta_por_depto: boolean;
   es_envase_retornable: boolean;
   envase_articulo_id: string | null;
@@ -753,6 +754,8 @@ export interface PosCaja {
   deposito_id: string | null;
   lista_precios: number;
   ancho_ticket: number;
+  /** F12-d: estandar (mostrador) | resto (mesas/comandas) */
+  perfil: "estandar" | "resto";
   activa: boolean;
   sesion_abierta: boolean;
 }
@@ -761,6 +764,7 @@ export interface PosSesion {
   id: string;
   caja_id: string;
   caja_nombre: string;
+  caja_perfil: "estandar" | "resto";
   ancho_ticket: number;
   cajero_id: string;
   cajero_nombre: string;
@@ -797,6 +801,13 @@ export interface PosVarianteBusqueda {
   precio: string;
 }
 
+export interface PosEnvaseBusqueda {
+  articulo_id: string;
+  codigo: string;
+  descripcion: string;
+  precio: string;
+}
+
 export interface PosResultadoBusqueda {
   articulo_id: string;
   variante_id: string | null;
@@ -808,6 +819,129 @@ export interface PosResultadoBusqueda {
   exacto: boolean;
   tiene_variantes: boolean;
   variantes: PosVarianteBusqueda[];
+  /** F12-b: cantidad resuelta desde la etiqueta de balanza (kg, o importe/precio). */
+  cantidad: string | null;
+  envase: PosEnvaseBusqueda | null;
+}
+
+// ===== POS Resto (F12-d) =====
+
+export interface PosSalon {
+  id: string;
+  nombre: string;
+  orden: number;
+  activo: boolean;
+}
+
+export interface PosMesa {
+  id: string;
+  salon_id: string;
+  salon_nombre: string;
+  numero: number;
+  nombre: string | null;
+  activa: boolean;
+  ocupada: boolean;
+  comanda_id: string | null;
+  comanda_total: string | null;
+  mozo_nombre: string | null;
+  abierta_at: string | null;
+}
+
+export interface PosComandaItem {
+  id: string;
+  articulo_id: string;
+  variante_id: string | null;
+  descripcion: string;
+  cantidad: string;
+  precio_unitario: string;
+  importe: string;
+  observaciones: string | null;
+  estado_cocina: "pendiente" | "enviado";
+}
+
+export interface PosComanda {
+  id: string;
+  caja_id: string;
+  mesa_id: string | null;
+  mesa_numero: number | null;
+  salon_nombre: string | null;
+  tipo: "mesa" | "delivery" | "takeaway";
+  estado: "abierta" | "cerrada" | "anulada";
+  mozo_id: string;
+  mozo_nombre: string;
+  cubiertos: number | null;
+  cliente_nombre: string | null;
+  telefono: string | null;
+  domicilio: string | null;
+  localidad: string | null;
+  latitud: string | null;
+  longitud: string | null;
+  envio_estado: "en_preparacion" | "despachado" | "entregado" | null;
+  propina_pct: string;
+  observaciones: string | null;
+  comprobante_id: string | null;
+  abierta_at: string;
+  cerrada_at: string | null;
+  total: string;
+  items: PosComandaItem[];
+}
+
+export interface PosCocina {
+  comanda_id: string;
+  mesa: string | null;
+  tipo: string;
+  mozo_nombre: string;
+  hora: string;
+  items: { cantidad: string; descripcion: string; observaciones: string | null }[];
+}
+
+export interface PosReporteMozo {
+  mozo_id: string;
+  mozo_nombre: string;
+  comandas: number;
+  total_vendido: string;
+  propina_estimada: string;
+}
+
+// ===== Despiece / transformación de stock (F12-c) =====
+
+export interface DespiecePlantillaCorte {
+  articulo_id: string;
+  articulo_codigo: string;
+  articulo_descripcion: string;
+  rendimiento_pct: string;
+  coef_valor: string;
+}
+
+export interface DespiecePlantilla {
+  id: string;
+  nombre: string;
+  articulo_origen_id: string;
+  origen_codigo: string;
+  origen_descripcion: string;
+  activa: boolean;
+  cortes: DespiecePlantillaCorte[];
+}
+
+export interface TransformacionResultado {
+  grupo_id: string;
+  merma: string;
+  costo_total: string;
+  costos_corte: { articulo_id: string; costo_unitario: string }[];
+}
+
+export interface PosBalanzaConfig {
+  habilitado: boolean;
+  prefijo: string;
+  valor_tipo: "peso" | "importe";
+  codigo_digitos: number;
+}
+
+export interface PosDepartamento {
+  articulo_id: string;
+  codigo: string;
+  descripcion: string;
+  tasa_iva: string;
 }
 
 export interface PosItemCalculado {

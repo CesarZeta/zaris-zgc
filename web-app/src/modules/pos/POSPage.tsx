@@ -13,6 +13,7 @@ import type {
   ImpresionPayload,
   PosCaja,
   PosCalculo,
+  PosDepartamento,
   PosResultadoBusqueda,
   PosResumen,
   PosSesion,
@@ -21,6 +22,7 @@ import type {
 } from "../../lib/types";
 import { MEDIOS_PAGO } from "../../lib/types";
 import { imprimirTicket } from "./ticket";
+import RestoPOS from "./RestoPOS";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 const $ = (v: string | number | null | undefined) => fmt.format(Number(v ?? 0));
@@ -33,6 +35,7 @@ interface Linea {
   cantidad: number;
   precio: number; // final estimado; el exacto lo da /calcular
   pesable: boolean;
+  es_depto?: boolean; // venta por departamento: el precio ES el importe tipeado
 }
 
 interface ClienteSel {
@@ -60,10 +63,12 @@ export default function POSPage() {
 
   if (!auth) return <Navigate to="/login" replace />;
   if (cargando) return <div className="pos-pantalla pos-centro">Cargando…</div>;
-  return sesion ? (
-    <VentaView sesion={sesion} onCerrada={() => setSesion(null)} />
+  if (!sesion) return <AperturaView onAbierta={setSesion} />;
+  // F12-d: la caja decide la pantalla — mostrador (F6) o resto (mesas/comandas)
+  return sesion.caja_perfil === "resto" ? (
+    <RestoPOS sesion={sesion} onCerrada={() => setSesion(null)} />
   ) : (
-    <AperturaView onAbierta={setSesion} />
+    <VentaView sesion={sesion} onCerrada={() => setSesion(null)} />
   );
 }
 
@@ -174,9 +179,22 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
   const [cobro, setCobro] = useState<PosCalculo | null>(null);
   const [verTickets, setVerTickets] = useState(false);
   const [verCierre, setVerCierre] = useState(false);
+  const [verDepto, setVerDepto] = useState(false);
+  const [deptos, setDeptos] = useState<PosDepartamento[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await apiGet<PosDepartamento[]>("/pos/departamentos");
+        setDeptos(r.data);
+      } catch {
+        /* sin departamentos configurados */
+      }
+    })();
+  }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const modalAbierto = !!(resultados || pickVariante || buscaCliente || cobro || verTickets || verCierre);
+  const modalAbierto = !!(resultados || pickVariante || buscaCliente || cobro || verTickets || verCierre || verDepto);
 
   const enfocar = useCallback(() => {
     setTimeout(() => inputRef.current?.focus(), 30);
@@ -196,7 +214,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
     const precio = Number(precioVar ?? r.precio);
     setLineas((prev) => {
       const i = prev.findIndex(
-        (l) => l.articulo_id === r.articulo_id && l.variante_id === (varId ?? null),
+        (l) => l.articulo_id === r.articulo_id && l.variante_id === (varId ?? null) && !l.es_depto,
       );
       if (i >= 0) {
         const copia = [...prev];
@@ -215,6 +233,50 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           cantidad,
           precio,
           pesable: r.pesable,
+        },
+      ];
+    });
+    // Envase retornable (F12-b): se agrega/acumula junto con el producto.
+    if (r.envase) {
+      const env = r.envase;
+      setLineas((prev) => {
+        const i = prev.findIndex((l) => l.articulo_id === env.articulo_id && !l.es_depto);
+        if (i >= 0) {
+          const copia = [...prev];
+          copia[i] = { ...copia[i], cantidad: copia[i].cantidad + cantidad };
+          return copia;
+        }
+        return [
+          ...prev,
+          {
+            articulo_id: env.articulo_id,
+            variante_id: null,
+            codigo: env.codigo,
+            descripcion: `${env.descripcion} (envase)`,
+            cantidad,
+            precio: Number(env.precio),
+            pesable: false,
+          },
+        ];
+      });
+    }
+  }
+
+  function agregarDepto(d: PosDepartamento, importe: number) {
+    // Cada venta por departamento es una línea propia (importe tipeado, no se acumula).
+    setLineas((prev) => {
+      setSelec(prev.length);
+      return [
+        ...prev,
+        {
+          articulo_id: d.articulo_id,
+          variante_id: null,
+          codigo: d.codigo,
+          descripcion: d.descripcion,
+          cantidad: 1,
+          precio: importe,
+          pesable: false,
+          es_depto: true,
         },
       ];
     });
@@ -250,7 +312,8 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       const unico = lista[0];
       if (lista.length === 1 && unico.exacto) {
         if (unico.variante_id || !unico.tiene_variantes) {
-          agregarLinea(unico, cantidad);
+          // etiqueta de balanza: la cantidad viene resuelta del servidor (kg o importe/precio)
+          agregarLinea(unico, unico.cantidad ? Number(unico.cantidad) : cantidad);
         } else {
           setPickVariante(unico); // exacto pero hay que elegir talle/color
         }
@@ -300,6 +363,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           articulo_id: l.articulo_id,
           variante_id: l.variante_id,
           cantidad: String(l.cantidad),
+          precio_unitario: l.es_depto ? String(l.precio) : null,
         })),
       });
       setCobro(calculo);
@@ -320,6 +384,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           articulo_id: l.articulo_id,
           variante_id: l.variante_id,
           cantidad: String(l.cantidad),
+          precio_unitario: l.es_depto ? String(l.precio) : null,
         })),
         medios,
       });
@@ -358,6 +423,9 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       } else if (ev.key === "F3") {
         ev.preventDefault();
         if (!modalAbierto) setBuscaCliente(true);
+      } else if (ev.key === "F9") {
+        ev.preventDefault();
+        if (!modalAbierto && deptos.length > 0) setVerDepto(true);
       } else if (ev.key === "Escape") {
         setResultados(null);
         setPickVariante(null);
@@ -365,6 +433,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
         setCobro(null);
         setVerTickets(false);
         setVerCierre(false);
+        setVerDepto(false);
         setMulti(null);
         enfocar();
       } else if (ev.key === "Delete" && !modalAbierto && selec >= 0 && document.activeElement === inputRef.current) {
@@ -380,7 +449,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modalAbierto, lineas.length, selec]);
+  }, [modalAbierto, lineas.length, selec, deptos.length]);
 
   return (
     <div className="pos-pantalla">
@@ -392,6 +461,11 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           <b>{sesion.caja_nombre}</b> · {sesion.cajero_nombre}
         </div>
         <div className="pos-topbar-botones">
+          {deptos.length > 0 && (
+            <button className="btn btn-ghost" onClick={() => setVerDepto(true)}>
+              Depto (F9)
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={() => setVerTickets(true)}>
             Tickets (F6)
           </button>
@@ -550,6 +624,78 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       {verCierre && (
         <CierreModal sesion={sesion} onCerrada={onCerrada} onCerrar={() => setVerCierre(false)} />
       )}
+      {verDepto && (
+        <DeptoModal
+          deptos={deptos}
+          onElegir={(d, importe) => {
+            agregarDepto(d, importe);
+            setVerDepto(false);
+          }}
+          onCerrar={() => setVerDepto(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeptoModal({
+  deptos,
+  onElegir,
+  onCerrar,
+}: {
+  deptos: PosDepartamento[];
+  onElegir: (d: PosDepartamento, importe: number) => void;
+  onCerrar: () => void;
+}) {
+  const [sel, setSel] = useState<PosDepartamento | null>(deptos.length === 1 ? deptos[0] : null);
+  const [importe, setImporte] = useState("");
+  const monto = Number(importe.replace(",", "."));
+  const valido = sel !== null && !Number.isNaN(monto) && monto > 0;
+
+  return (
+    <div className="drawer-backdrop" onClick={onCerrar}>
+      <div className="modal pos-modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Venta por departamento</h2>
+        <div className="pos-resultados">
+          {deptos.map((d) => (
+            <button
+              key={d.articulo_id}
+              className={`pos-resultado${sel?.articulo_id === d.articulo_id ? " activo" : ""}`}
+              onClick={() => setSel(d)}
+            >
+              <span className="mono chico">{d.codigo}</span>
+              <span className="pos-res-desc">{d.descripcion}</span>
+              <span className="chico">IVA {d.tasa_iva}%</span>
+            </button>
+          ))}
+        </div>
+        <label className="pos-campo">
+          Importe (final, IVA incluido)
+          <input
+            className="input num"
+            type="number"
+            min="0"
+            step="0.01"
+            autoFocus
+            value={importe}
+            onChange={(e) => setImporte(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && valido) {
+                e.preventDefault();
+                onElegir(sel, monto);
+              }
+            }}
+          />
+        </label>
+        <div className="pos-cobro-botones">
+          <button className="btn btn-ghost" onClick={onCerrar}>
+            Cancelar (Esc)
+          </button>
+          <button className="btn btn-primary" disabled={!valido} onClick={() => sel && onElegir(sel, monto)}>
+            Agregar (Enter)
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -716,7 +862,7 @@ interface MedioForm {
   referencia: string;
 }
 
-function CobroModal({
+export function CobroModal({
   calculo,
   ocupado,
   onConfirmar,
@@ -1023,7 +1169,7 @@ function AnularModal({
   );
 }
 
-function CierreModal({
+export function CierreModal({
   sesion,
   onCerrada,
   onCerrar,
