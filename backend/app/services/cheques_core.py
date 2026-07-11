@@ -221,12 +221,15 @@ async def rechazar(
         )
         # Solo revierte contra 'a cuenta' disponible del recibo (el dinero del
         # cheque que aún no se imputó a una deuda concreta). Si el recibo ya
-        # imputó ese importe a facturas, se exige regularización manual (evita
-        # dejar recibo.total < recibo.aplicado, que rompería la cta.cte.).
+        # imputó ese importe a facturas, se exige regularización manual.
+        # 014: el total del recibo NUNCA se reescribe (documento inmutable);
+        # lo rechazado se acumula en rechazado_total y el disponible pasa a
+        # ser total − aplicado − rechazado_total. La fecha cierta del hecho
+        # queda en el cheque_evento.
         if recibo and recibo.estado == "emitido":
-            disponible = recibo.total - recibo.aplicado
+            disponible = recibo.total - recibo.aplicado - recibo.rechazado_total
             if disponible >= cheque.importe:
-                recibo.total = recibo.total - cheque.importe
+                recibo.rechazado_total = recibo.rechazado_total + cheque.importe
                 reabierto = {
                     "recibo_id": str(recibo.id),
                     "importe_revertido": str(cheque.importe),

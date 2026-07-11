@@ -13,6 +13,7 @@ import type {
   Variante,
 } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
+import { etiquetaCuenta, useCuentasBancarias } from "../../components/useCuentasBancarias";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 const TASAS = ["0", "2.5", "5", "10.5", "21", "27"];
@@ -315,6 +316,10 @@ export default function CompraForm({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const { confirmar, dialogos } = useDialogos();
+  // medio de pago del contado (014): la contrapartida financiera del documento
+  const [medioPago, setMedioPago] = useState("efectivo");
+  const [cuentaBancariaId, setCuentaBancariaId] = useState("");
+  const cuentas = useCuentasBancarias();
 
   // un click en el backdrop no tira una compra a medio cargar (LOTE TÉCNICO)
   const hayDatos =
@@ -427,9 +432,25 @@ export default function CompraForm({
       };
       const borrador = await apiPost<Compra>("/compras/comprobantes", body);
       if (registrar) {
+        // contado fiscal: se registra el medio de pago con el total REAL del
+        // borrador que calculó el server (014 — contrapartida financiera)
+        const esContadoFiscal = !esRemito && contado;
         const registrada = await apiPost<Compra>(
           `/compras/comprobantes/${borrador.id}/registrar`,
-          {},
+          esContadoFiscal
+            ? {
+                medios: [
+                  {
+                    medio: medioPago,
+                    importe: borrador.total,
+                    cuenta_bancaria_id:
+                      medioPago === "transferencia" && cuentaBancariaId
+                        ? cuentaBancariaId
+                        : null,
+                  },
+                ],
+              }
+            : {},
         );
         onCerrar(true, registrada);
       } else {
@@ -540,6 +561,39 @@ export default function CompraForm({
                 ))}
               </select>
             </div>
+            {contado && (
+              <div className="field">
+                <label>Pago</label>
+                <select
+                  className="select"
+                  value={medioPago}
+                  onChange={(ev) => setMedioPago(ev.target.value)}
+                >
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="mercadopago">MercadoPago</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+            )}
+            {contado && medioPago === "transferencia" && cuentas.length > 0 && (
+              <div className="field">
+                <label>Cuenta bancaria</label>
+                <select
+                  className="select"
+                  value={cuentaBancariaId}
+                  onChange={(ev) => setCuentaBancariaId(ev.target.value)}
+                >
+                  <option value="">— sin especificar —</option>
+                  {cuentas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {etiquetaCuenta(c)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {esNCND && (
               <div className="field">
                 <label>Factura asociada (opcional)</label>

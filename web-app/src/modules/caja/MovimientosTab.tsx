@@ -6,6 +6,7 @@ import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
 import type { CajaMovimiento, ConceptoCaja } from "../../lib/types";
 import { MEDIOS_PAGO } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
+import { etiquetaCuenta, useCuentasBancarias } from "../../components/useCuentasBancarias";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -25,6 +26,8 @@ export default function MovimientosTab() {
   const [medio, setMedio] = useState("efectivo");
   const [importe, setImporte] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  const [cuentaBancariaId, setCuentaBancariaId] = useState("");
+  const cuentas = useCuentasBancarias();
 
   const cargar = useCallback(async () => {
     setError(null);
@@ -61,6 +64,8 @@ export default function MovimientosTab() {
         medio,
         importe,
         descripcion: descripcion.trim() || null,
+        cuenta_bancaria_id:
+          medio === "transferencia" && cuentaBancariaId ? cuentaBancariaId : null,
       });
       setImporte("");
       setDescripcion("");
@@ -124,6 +129,23 @@ export default function MovimientosTab() {
               ))}
             </select>
           </div>
+          {medio === "transferencia" && cuentas.length > 0 && (
+            <div className="field">
+              <label>Cuenta bancaria</label>
+              <select
+                className="select"
+                value={cuentaBancariaId}
+                onChange={(ev) => setCuentaBancariaId(ev.target.value)}
+              >
+                <option value="">— sin especificar —</option>
+                {cuentas.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {etiquetaCuenta(c)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="field">
             <label>Importe</label>
             <input

@@ -44,6 +44,9 @@ class CuentaBancaria(Base):
     alias: Mapped[str | None] = mapped_column(String(40))
     moneda: Mapped[str] = mapped_column(String(3), default="ARS")
     saldo_inicial: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    # fecha de corte del saldo inicial (014): el asiento de apertura del
+    # motor contable necesita "saldo inicial ¿a qué fecha?"
+    saldo_inicial_fecha: Mapped[date | None] = mapped_column(Date)
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
     observaciones: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -137,6 +140,9 @@ class BancoMovimiento(Base):
         ForeignKey("extracto_imports.id", ondelete="SET NULL")
     )
     origen: Mapped[str] = mapped_column(String(8), default="manual")
+    # eliminar = marcar (014): el movimiento nunca se borra físicamente
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

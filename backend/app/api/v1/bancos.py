@@ -10,7 +10,7 @@ conciliados). RBAC `bancos`.
 import csv
 import io
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
@@ -55,6 +55,7 @@ class CuentaIn(BaseModel):
     alias: str | None = Field(None, max_length=40)
     moneda: str = Field("ARS", pattern="^(ARS|USD)$")
     saldo_inicial: Decimal = Field(Decimal("0"))
+    saldo_inicial_fecha: date | None = None  # 014: "saldo inicial ¿a qué fecha?"
     observaciones: str | None = Field(None, max_length=200)
 
 
@@ -68,6 +69,7 @@ class CuentaOut(BaseModel):
     alias: str | None
     moneda: str
     saldo_inicial: Decimal
+    saldo_inicial_fecha: date | None = None
     activa: bool
     observaciones: str | None
     model_config = {"from_attributes": True}
@@ -127,7 +129,10 @@ async def _saldo(db: AsyncSession, cuenta: CuentaBancaria) -> Decimal:
     filas = (
         await db.execute(
             select(BancoMovimiento.tipo, func.coalesce(func.sum(BancoMovimiento.importe), 0))
-            .where(BancoMovimiento.cuenta_id == cuenta.id)
+            .where(
+                BancoMovimiento.cuenta_id == cuenta.id,
+                BancoMovimiento.anulado_at.is_(None),
+            )
             .group_by(BancoMovimiento.tipo)
         )
     ).all()
@@ -168,6 +173,7 @@ async def crear_cuenta(
         alias=(body.alias or "").strip() or None,
         moneda=body.moneda,
         saldo_inicial=body.saldo_inicial,
+        saldo_inicial_fecha=body.saldo_inicial_fecha,
         observaciones=(body.observaciones or "").strip() or None,
     )
     db.add(cuenta)
@@ -192,6 +198,7 @@ async def editar_cuenta(
     cuenta.alias = (body.alias or "").strip() or None
     cuenta.moneda = body.moneda
     cuenta.saldo_inicial = body.saldo_inicial
+    cuenta.saldo_inicial_fecha = body.saldo_inicial_fecha
     cuenta.observaciones = (body.observaciones or "").strip() or None
     await db.commit()
     cuenta = await db.scalar(select(CuentaBancaria).where(CuentaBancaria.id == cuenta_id))
@@ -240,7 +247,9 @@ async def listar_movimientos(
 ):
     await _cuenta(db, usuario.tenant_id, cuenta_id)
     stmt = select(BancoMovimiento).where(
-        BancoMovimiento.cuenta_id == cuenta_id, BancoMovimiento.tenant_id == usuario.tenant_id
+        BancoMovimiento.cuenta_id == cuenta_id,
+        BancoMovimiento.tenant_id == usuario.tenant_id,
+        BancoMovimiento.anulado_at.is_(None),
     )
     if conciliado is not None:
         stmt = stmt.where(BancoMovimiento.conciliado.is_(conciliado))
@@ -295,7 +304,11 @@ async def conciliar_movimiento(
 ):
     mov = await db.scalar(
         select(BancoMovimiento)
-        .where(BancoMovimiento.id == mov_id, BancoMovimiento.tenant_id == usuario.tenant_id)
+        .where(
+            BancoMovimiento.id == mov_id,
+            BancoMovimiento.tenant_id == usuario.tenant_id,
+            BancoMovimiento.anulado_at.is_(None),
+        )
         .with_for_update(of=BancoMovimiento)
     )
     if mov is None:
@@ -315,7 +328,9 @@ async def borrar_movimiento(
 ):
     mov = await db.scalar(
         select(BancoMovimiento).where(
-            BancoMovimiento.id == mov_id, BancoMovimiento.tenant_id == usuario.tenant_id
+            BancoMovimiento.id == mov_id,
+            BancoMovimiento.tenant_id == usuario.tenant_id,
+            BancoMovimiento.anulado_at.is_(None),
         )
     )
     if mov is None:
@@ -326,7 +341,9 @@ async def borrar_movimiento(
         raise HTTPException(status_code=409, detail="Solo se borran movimientos manuales")
     if mov.conciliado:
         raise HTTPException(status_code=409, detail="Desconciliar antes de borrar")
-    await db.delete(mov)
+    # 014: eliminar = marcar (queda como historia con fecha cierta)
+    mov.anulado_at = datetime.now(timezone.utc)
+    mov.anulado_por = usuario.id
     await db.commit()
 
 
@@ -401,6 +418,7 @@ async def preview_extracto(
                 BancoMovimiento.cuenta_id == cuenta_id,
                 BancoMovimiento.tenant_id == usuario.tenant_id,
                 BancoMovimiento.conciliado.is_(False),
+                BancoMovimiento.anulado_at.is_(None),
             )
         )
     ).all()
@@ -478,6 +496,7 @@ async def import_extracto(
                     BancoMovimiento.id == it.match_movimiento_id,
                     BancoMovimiento.cuenta_id == cuenta_id,
                     BancoMovimiento.tenant_id == usuario.tenant_id,
+                    BancoMovimiento.anulado_at.is_(None),
                 )
             )
             if mov and not mov.conciliado:
@@ -520,7 +539,9 @@ async def export_movimientos(
 ):
     await _cuenta(db, usuario.tenant_id, cuenta_id)
     stmt = select(BancoMovimiento).where(
-        BancoMovimiento.cuenta_id == cuenta_id, BancoMovimiento.tenant_id == usuario.tenant_id
+        BancoMovimiento.cuenta_id == cuenta_id,
+        BancoMovimiento.tenant_id == usuario.tenant_id,
+        BancoMovimiento.anulado_at.is_(None),
     )
     if desde:
         stmt = stmt.where(BancoMovimiento.fecha >= desde)

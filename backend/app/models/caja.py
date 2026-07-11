@@ -43,6 +43,12 @@ class CajaMovimiento(Base):
     medio: Mapped[str] = mapped_column(String(15), default="efectivo")
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     descripcion: Mapped[str | None] = mapped_column(String(120))
+    cuenta_bancaria_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_bancarias.id")
+    )
+    # eliminar = marcar (014): el movimiento nunca se borra físicamente
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -65,6 +71,9 @@ class CajaCierre(Base):
     efectivo_contado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     diferencia: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     observaciones: Mapped[str | None] = mapped_column(Text)
+    # reabrir = marcar (014): el cierre sellado nunca se borra físicamente
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     cerrado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -88,5 +97,8 @@ class Retencion(Base):
         ForeignKey("ordenes_pago.id", ondelete="SET NULL")
     )
     descripcion: Mapped[str | None] = mapped_column(String(120))
+    # eliminar = marcar (014)
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

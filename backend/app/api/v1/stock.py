@@ -26,6 +26,7 @@ from app.models import (
     StockMovimiento,
     Usuario,
 )
+from app.services import stock_valor
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
@@ -98,6 +99,7 @@ class MovimientoOut(BaseModel):
     tipo: str
     cantidad: Decimal
     saldo_resultante: Decimal
+    costo_unitario: Decimal | None = None  # sellado desde la 014; NULL = histórico
     comprobante: str | None
     observaciones: str | None
     grupo_id: uuid.UUID | None
@@ -223,6 +225,7 @@ def _mover(
     usuario_id: uuid.UUID,
     observaciones: str | None = None,
     grupo_id: uuid.UUID | None = None,
+    costo_unitario: Decimal | None = None,
 ) -> StockMovimiento:
     fila.cantidad = fila.cantidad + delta
     fila.updated_at = func.now()
@@ -234,12 +237,21 @@ def _mover(
         tipo=tipo,
         cantidad=delta,
         saldo_resultante=fila.cantidad,
+        costo_unitario=costo_unitario,
         observaciones=observaciones,
         grupo_id=grupo_id,
         usuario_id=usuario_id,
     )
     db.add(mov)
     return mov
+
+
+async def _costo_sellado(db: AsyncSession, articulo) -> Decimal:
+    """Costo neto ARS vigente del artículo para sellar el movimiento (014)."""
+    cotizacion = Decimal("1")
+    if articulo.en_dolares:
+        cotizacion = await stock_valor.cotizacion_vigente(db, articulo.tenant_id)
+    return stock_valor.costo_neto_ars(articulo, cotizacion)
 
 
 # ===== Endpoints =====
@@ -365,7 +377,9 @@ async def ajustar_stock(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="El ajuste no cambia el saldo",
         )
-    mov = _mover(db, fila, "ajuste", delta, usuario.id, body.observaciones)
+    costo = await _costo_sellado(db, articulo)
+    mov = _mover(db, fila, "ajuste", delta, usuario.id, body.observaciones,
+                 costo_unitario=costo)
     await db.commit()
     out = MovimientoOut.model_validate(mov)
     if mov.variante_id:
@@ -400,8 +414,11 @@ async def transferir_stock(
     destino = fila_2 if origen is fila_1 else fila_1
 
     grupo = uuid.uuid4()
-    salida = _mover(db, origen, "transferencia", -body.cantidad, usuario.id, body.observaciones, grupo)
-    entrada = _mover(db, destino, "transferencia", body.cantidad, usuario.id, body.observaciones, grupo)
+    costo = await _costo_sellado(db, articulo)
+    salida = _mover(db, origen, "transferencia", -body.cantidad, usuario.id,
+                    body.observaciones, grupo, costo_unitario=costo)
+    entrada = _mover(db, destino, "transferencia", body.cantidad, usuario.id,
+                     body.observaciones, grupo, costo_unitario=costo)
     await db.commit()
     return [MovimientoOut.model_validate(salida), MovimientoOut.model_validate(entrada)]
 

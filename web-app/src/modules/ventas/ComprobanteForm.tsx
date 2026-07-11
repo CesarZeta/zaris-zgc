@@ -14,6 +14,7 @@ import type {
   Variante,
 } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
+import { etiquetaCuenta, useCuentasBancarias } from "../../components/useCuentasBancarias";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 
@@ -272,6 +273,10 @@ export default function ComprobanteForm({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const { confirmar, dialogos } = useDialogos();
+  // medio de cobro del contado (014): la contrapartida financiera del documento
+  const [medioCobro, setMedioCobro] = useState("efectivo");
+  const [cuentaBancariaId, setCuentaBancariaId] = useState("");
+  const cuentas = useCuentasBancarias();
 
   // un click en el backdrop no tira una factura a medio cargar (LOTE TÉCNICO)
   const hayDatos =
@@ -346,9 +351,25 @@ export default function ComprobanteForm({
       };
       const borrador = await apiPost<Comprobante>("/ventas/comprobantes", body);
       if (emitir) {
+        // contado: se registra el medio de cobro con el total REAL que calculó
+        // el server en el borrador (014 — contrapartida financiera)
+        const esContadoFiscal = clase === "factura" && contado;
         const emitido = await apiPost<Comprobante>(
           `/ventas/comprobantes/${borrador.id}/emitir`,
-          {},
+          esContadoFiscal
+            ? {
+                medios: [
+                  {
+                    medio: medioCobro,
+                    importe: borrador.total,
+                    cuenta_bancaria_id:
+                      medioCobro === "transferencia" && cuentaBancariaId
+                        ? cuentaBancariaId
+                        : null,
+                  },
+                ],
+              }
+            : {},
         );
         onCerrar(true, emitido);
       } else {
@@ -421,6 +442,39 @@ export default function ComprobanteForm({
                 ))}
               </select>
             </div>
+            {contado && (
+              <div className="field">
+                <label>Cobro</label>
+                <select
+                  className="select"
+                  value={medioCobro}
+                  onChange={(ev) => setMedioCobro(ev.target.value)}
+                >
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="mercadopago">MercadoPago</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+            )}
+            {contado && medioCobro === "transferencia" && cuentas.length > 0 && (
+              <div className="field">
+                <label>Cuenta bancaria</label>
+                <select
+                  className="select"
+                  value={cuentaBancariaId}
+                  onChange={(ev) => setCuentaBancariaId(ev.target.value)}
+                >
+                  <option value="">— sin especificar —</option>
+                  {cuentas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {etiquetaCuenta(c)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="field">
               <label>Descuento global %</label>
               <input

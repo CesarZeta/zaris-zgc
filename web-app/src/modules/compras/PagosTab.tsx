@@ -9,6 +9,7 @@ import { AlertError } from "../../components/Alertas";
 import ChipEstado from "../../components/ChipEstado";
 import Paginado from "../../components/Paginado";
 import { useDialogos } from "../../components/dialogos";
+import { etiquetaCuenta, useCuentasBancarias } from "../../components/useCuentasBancarias";
 import { BuscadorProveedor } from "./CompraForm";
 
 const POR_PAGINA = 50;
@@ -26,14 +27,15 @@ const MEDIOS = [
 function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }) {
   const [proveedor, setProveedor] = useState<Proveedor | null>(null);
   const [pendientes, setPendientes] = useState<Compra[]>([]);
-  const [medios, setMedios] = useState<{ medio: string; importe: string; referencia: string }[]>([
-    { medio: "transferencia", importe: "", referencia: "" },
-  ]);
+  const [medios, setMedios] = useState<
+    { medio: string; importe: string; referencia: string; cuenta_bancaria_id: string }[]
+  >([{ medio: "transferencia", importe: "", referencia: "", cuenta_bancaria_id: "" }]);
   const [imputar, setImputar] = useState<Record<string, string>>({});
   const [obs, setObs] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const { confirmar, dialogos } = useDialogos();
+  const cuentas = useCuentasBancarias();
 
   useEffect(() => {
     if (!proveedor) {
@@ -71,6 +73,10 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
             medio: m.medio,
             importe: m.importe,
             referencia: m.referencia.trim() || null,
+            cuenta_bancaria_id:
+              m.medio === "transferencia" && m.cuenta_bancaria_id
+                ? m.cuenta_bancaria_id
+                : null,
           })),
         imputaciones: Object.entries(imputar)
           .filter(([, v]) => Number(v) > 0)
@@ -138,6 +144,28 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
                 }
               />
             </div>
+            {m.medio === "transferencia" && cuentas.length > 0 && (
+              <div className="field">
+                <select
+                  className="select"
+                  value={m.cuenta_bancaria_id}
+                  onChange={(ev) =>
+                    setMedios(
+                      medios.map((x, j) =>
+                        j === i ? { ...x, cuenta_bancaria_id: ev.target.value } : x,
+                      ),
+                    )
+                  }
+                >
+                  <option value="">— cuenta bancaria —</option>
+                  {cuentas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {etiquetaCuenta(c)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {medios.length > 1 && (
               <button
                 type="button"
@@ -152,7 +180,12 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
         <button
           type="button"
           className="mini-btn"
-          onClick={() => setMedios([...medios, { medio: "cheque", importe: "", referencia: "" }])}
+          onClick={() =>
+            setMedios([
+              ...medios,
+              { medio: "cheque", importe: "", referencia: "", cuenta_bancaria_id: "" },
+            ])
+          }
         >
           + medio
         </button>

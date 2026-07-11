@@ -135,10 +135,10 @@ ZGC/
   (`/ventas/comprobantes`) y compras (`/compras/comprobantes`); en modo ARCA `simulado`
   no hay validación de secuencia contra AFIP, así que se pueden generar comprobantes con
   fecha pasada por API **de forma segura** (el server mantiene numeración/stock/IVA/cta.cte).
-  Caveat: `stock_movimientos.fecha` se sella con `now()` (el helper `_mover_stock` no
-  expone la fecha) → para un kardex con fechas históricas hay que hacer un `UPDATE`
-  post-generación por SQL, matcheando por el TEXTO del campo `comprobante`
-  (`TIPO 0001-00000123`), no hay FK a comprobantes/compras.
+  RESUELTO en la 014 (2026-07-10): si la fecha del documento ≠ hoy, `_mover_stock` sella
+  `stock_movimientos.fecha` con la fecha del papel — ya NO hace falta el `UPDATE` post-
+  generación por SQL. (Sigue sin haber FK kardex→documento; la referencia es el TEXTO
+  `TIPO 0001-00000123` + `grupo_id` = id del documento.)
 - **`X-Total-Count` cross-origin necesita `Access-Control-Expose-Headers`** — y el
   **proxy de Vite en dev lo enmascara** (same-origin: el CORS no aplica y todo "funciona").
   RESUELTO 2026-07-06 (LOTE TÉCNICO): `expose_headers=["X-Total-Count"]` en el
@@ -209,6 +209,17 @@ ZGC/
   ser `required` si el `*Out` se arma con `model_validate(orm_obj)` — la validación corre ANTES
   de poder setearlo y revienta con "Field required". Darle default y asignarlo tras validar
   (`out = Out.model_validate(m); out.signo = ...`), o construir el dict completo antes de validar.
+- **Contrato de CONTABILIZABILIDAD** (mini-fase 014, 2026-07-10 — leer
+  `docs/DISENO-CONTABILIDAD.md` antes de crear cualquier documento operativo nuevo): todo
+  documento nace (1) COMPLETO — importes discriminados + contrapartida financiera identificada
+  (medio, y `cuenta_bancaria_id` si aplica) —, (2) INMUTABLE — anular = `estado` +
+  `anulado_at`/`anulado_por` o contra-documento; PROHIBIDO `db.delete` y el UPDATE destructivo
+  de importes de un documento emitido/registrado; TODO lector filtra `anulado_at IS NULL`,
+  incluidos los checks de bloqueo (si no, las anuladas bloquean para siempre) — y
+  (3) MAPEABLE — toda categoría que decida una cuenta contable es FK a catálogo, no texto
+  libre. Los movimientos de stock sellan `costo_unitario` neto ARS (`services/stock_valor.py`)
+  y la fecha del documento si viene backdateado. La contabilidad (F9) se DERIVA de los
+  documentos con un motor regenerable; ningún módulo postea asientos en línea.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 

@@ -127,6 +127,8 @@ class Compra(Base):
     observaciones: Mapped[str | None] = mapped_column(Text)
     registrado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     registrado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -138,6 +140,29 @@ class Compra(Base):
     vencimientos: Mapped[list["CompraVencimiento"]] = relationship(
         lazy="selectin", order_by="CompraVencimiento.nro_cuota", cascade="all, delete-orphan"
     )
+    medios: Mapped[list["CompraMedio"]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
+
+
+class CompraMedio(Base):
+    """Medios de pago de una compra CONTADO (014, espejo de venta_medios).
+    Sin filas = comportamiento histórico (sin contrapartida financiera)."""
+
+    __tablename__ = "compra_medios"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
+    compra_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("compras.id", ondelete="CASCADE"))
+    medio: Mapped[str] = mapped_column(String(15))
+    importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    cuenta_bancaria_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_bancarias.id")
+    )
+    referencia: Mapped[str | None] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CompraItem(Base):
@@ -202,6 +227,8 @@ class OrdenPago(Base):
     aplicado: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     estado: Mapped[str] = mapped_column(String(10), default="emitida")
     observaciones: Mapped[str | None] = mapped_column(Text)
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -223,6 +250,9 @@ class OrdenPagoMedio(Base):
     medio: Mapped[str] = mapped_column(String(15))
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     referencia: Mapped[str | None] = mapped_column(String(60))
+    cuenta_bancaria_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_bancarias.id")
+    )
 
 
 class ImputacionCompra(Base):
@@ -242,5 +272,8 @@ class ImputacionCompra(Base):
     compra_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("compras.id", ondelete="CASCADE"))
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    # anulación NO destructiva (014): la imputación se marca, nunca se borra
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

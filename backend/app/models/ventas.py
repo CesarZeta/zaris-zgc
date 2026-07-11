@@ -214,8 +214,13 @@ class Recibo(Base):
     receptor_nombre: Mapped[str] = mapped_column(String(120))
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     aplicado: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    # cheques rechazados (014): el total NO se reescribe; el "a cuenta"
+    # disponible es total − aplicado − rechazado_total
+    rechazado_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     estado: Mapped[str] = mapped_column(String(10), default="emitido")
     observaciones: Mapped[str | None] = mapped_column(Text)
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -236,6 +241,9 @@ class ReciboMedio(Base):
     medio: Mapped[str] = mapped_column(String(15))
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     referencia: Mapped[str | None] = mapped_column(String(60))
+    cuenta_bancaria_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_bancarias.id")
+    )
 
 
 class Imputacion(Base):
@@ -257,6 +265,9 @@ class Imputacion(Base):
     )
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    # anulación NO destructiva (014): la imputación se marca, nunca se borra
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

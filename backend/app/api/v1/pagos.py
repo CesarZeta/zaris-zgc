@@ -8,7 +8,7 @@ compras.saldo y ordenes_pago.total - aplicado (a cuenta).
 
 import re
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -50,6 +50,8 @@ class MedioIn(BaseModel):
     medio: str = Field(pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
     importe: Decimal = Field(gt=0)
     referencia: str | None = Field(None, max_length=60)
+    # contra qué cuenta bancaria fue (transferencia/tarjeta/MP) — 014
+    cuenta_bancaria_id: uuid.UUID | None = None
     # medio='cheque': endosar uno de cartera (endosar_cheque_id) O emitir propio
     # (cheque_propio). Exactamente uno, o ninguno (queda como etiqueta, compat).
     endosar_cheque_id: uuid.UUID | None = None
@@ -73,6 +75,7 @@ class MedioOut(BaseModel):
     medio: str
     importe: Decimal
     referencia: str | None
+    cuenta_bancaria_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}
 
 
@@ -166,6 +169,22 @@ async def crear_orden_pago(
             status_code=422, detail="Lo imputado no puede superar el total de la orden de pago"
         )
 
+    # cuentas bancarias referenciadas por los medios: del propio tenant
+    cuentas_ids = {m.cuenta_bancaria_id for m in body.medios if m.cuenta_bancaria_id}
+    if cuentas_ids:
+        from app.models import CuentaBancaria
+
+        validas = set(
+            await db.scalars(
+                select(CuentaBancaria.id).where(
+                    CuentaBancaria.id.in_(cuentas_ids),
+                    CuentaBancaria.tenant_id == usuario.tenant_id,
+                )
+            )
+        )
+        if cuentas_ids - validas:
+            raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
+
     numero = await sc.proximo_numero_op(db, usuario.tenant_id)
     op = OrdenPago(
         tenant_id=usuario.tenant_id,
@@ -188,6 +207,7 @@ async def crear_orden_pago(
                 medio=m.medio,
                 importe=m.importe,
                 referencia=(m.referencia or "").strip() or None,
+                cuenta_bancaria_id=m.cuenta_bancaria_id,
             )
         )
         if m.medio == "cheque":
@@ -319,11 +339,15 @@ async def anular_orden_pago(
     if op.estado != "emitida":
         raise HTTPException(status_code=409, detail="La orden de pago ya está anulada")
 
+    # anulación NO destructiva (014): las imputaciones se marcan con fecha
+    # cierta, nunca se borran — la reversión contable queda reconstruible
+    ahora = datetime.now(timezone.utc)
     imputaciones = (
         await db.scalars(
             select(ImputacionCompra).where(
                 ImputacionCompra.orden_pago_id == op.id,
                 ImputacionCompra.tenant_id == usuario.tenant_id,
+                ImputacionCompra.anulado_at.is_(None),
             )
         )
     ).all()
@@ -332,9 +356,12 @@ async def anular_orden_pago(
             select(Compra).where(Compra.id == imp.compra_id).with_for_update(of=Compra)
         )
         deuda.saldo = deuda.saldo + imp.importe
-        await db.delete(imp)
+        imp.anulado_at = ahora
+        imp.anulado_por = usuario.id
     op.aplicado = Decimal("0")
     op.estado = "anulada"
+    op.anulado_at = ahora
+    op.anulado_por = usuario.id
     await db.commit()
     op = await db.scalar(select(OrdenPago).where(OrdenPago.id == op_id))
     return _op_out(op)

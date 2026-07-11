@@ -444,6 +444,58 @@ César (2026-07-06): ciclo completo · bancos con conciliación por import · ca
 
 ---
 
+## MINI-FASE — Contabilizabilidad (pre-F9) ✅ (en producción 2026-07-10)
+
+**Entregable: todo documento operativo es contabilizable — completo, inmutable y
+mapeable — para que la F9 Contabilidad derive asientos retroactivamente sin
+re-visitar módulos.** Diseño y contrato en `docs/DISENO-CONTABILIDAD.md`
+(decisión de César 2026-07-10: preparar la contabilidad ANTES de seguir sumando
+módulos; la F9 completa sigue gated por su condición).
+
+> Origen: auditoría de contabilizabilidad de los 5 dominios operativos + legacy
+> (2026-07-10). Veredicto: los documentos eran casi contabilizables; los gaps
+> de inmutabilidad destruían historia con cada anulación (urgentes) y el kardex
+> no era valorizable.
+
+- [x] **Migración 014** (aditiva/idempotente): `anulado_at`/`anulado_por` en
+  recibos, imputaciones, ordenes_pago, compras, imputaciones_compras,
+  caja_movimientos, retenciones, caja_cierres, banco_movimientos; uniques de
+  caja_cierres parciales (re-cierre de fecha reabierta); `recibos.rechazado_total`;
+  `stock_movimientos.costo_unitario`; `cuenta_bancaria_id` en los 4 `*_medios` +
+  caja; tabla nueva `compra_medios` (RLS + índice FK); `cuentas_bancarias.saldo_inicial_fecha`.
+- [x] **Anulaciones no destructivas**: anular recibo/OP/NC de compra marca las
+  imputaciones con fecha cierta (nunca `db.delete`) y restaura saldos; las
+  anuladas no bloquean (anular compra tras anular su OP). Caja (movimientos,
+  retenciones, cierres/reabrir) y bancos (movimientos manuales) pasaron de
+  DELETE físico a soft-delete; todos los lectores (planilla, saldos, resúmenes,
+  KPIs, cashflow, conciliación) filtran vivos.
+- [x] **Rechazo de cheque sin reescribir el documento**: `recibo.total` queda
+  intacto; `rechazado_total` acumula y `a_cuenta = total − aplicado − rechazado_total`
+  (cobranzas, imputación suelta, cta. cte. y saldos ajustados).
+- [x] **Kardex valorizable**: costo unitario NETO ARS sellado en CADA movimiento
+  (compras = costo real del ítem; resto = costo vigente normalizado con
+  `services/stock_valor.py`: neteo IVA + USD→ARS). Movimientos backdateados se
+  sellan con la fecha del documento (adiós al UPDATE por SQL del kardex demo).
+- [x] **Contrapartida financiera**: `POST /emitir` (ventas) y `/registrar`
+  (compras) aceptan `medios` opcionales para CONTADO de gestión (la UI los manda
+  siempre, default efectivo); compras contado con medios entran a la planilla
+  global como pagos por su medio real; `cuenta_bancaria_id` opcional en todos
+  los medios y en caja (select de cuenta cuando el medio es transferencia,
+  oculto si el rol no tiene permiso `bancos`).
+- [x] **Contrato de contabilizabilidad** (DISENO-CONTABILIDAD.md §2 + regla
+  CLAUDE.md §6): completo / inmutable / mapeable — checklist para toda fase nueva.
+- [x] Verificado 2026-07-10: **53/53 pruebas de API en vivo** (`tools/test_contab_dev.py`)
+  + **regresión F8 31/31** + verificación por SQL de que la historia queda
+  marcada (imputaciones/movimientos/cierres anulados presentes) + build TS.
+- [x] Diferidos con destino explícito (no bloquean F9): retención integrada al
+  recibo/OP → F10; desglose otros_tributos/jurisdicción IIBB → F10; moneda en
+  recibos/OP/compras → gated exportadores; ND por cheque rechazado → F9/F10;
+  apareo transferencias entre cuentas propias → F9; PPP/FIFO → F9+ (v1 = costo
+  de reposición sellado).
+- [x] **Deploy a prod (2026-07-10)**: migración 014 por psql session pooler
+  ANTES del push (el backend nuevo mapea las columnas — como la 010) + push a
+  master + smoke contra prod.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -457,7 +509,7 @@ César (2026-07-06): ciclo completo · bancos con conciliación por import · ca
 |---|---|---|---|
 | 7 ✅ | Dashboard + móvil | Indicadores en tiempo real, responsive del dueño; **export CSV/Excel universal** (base de reportería); **padrón ARCA por CUIT** (autocompletar entidades BUE, validar cond. IVA — quick win del motor fiscal); **domicilios normalizados OSM** (estándar de suite heredado de ZGE: proxy Nominatim + AddressSearch + lat/lon en entidades/sucursales + `entidad_domicilios` — ver `DISENO-LOGISTICA-Y-DOMICILIOS.md` §1; hacerlo ANTES de cargar entidades masivamente); **ABM de sucursales** (la tabla existe desde la 001, falta la UI) + sucursal en cajas POS | **CÓDIGO COMPLETO 2026-07-06** (ver detalle abajo) |
 | 8 | Cheques y Bancos | Cartera de cheques, cuentas bancarias, conciliación, import extractos; **cash-flow proyectado** (tesorería sobre vencimientos de ventas/compras + cheques) | — |
-| 9 | **Contabilidad** (módulo activable) | Plan de cuentas, asientos automáticos desde ventas/compras/caja/OP (ya registran todo), libro diario, balances; **activos fijos + amortizaciones**; **export al software del contador** (formaliza los CSV de F5) | **FOSO** — primer cliente de referencia pagando. *Adelantada de F11→F9 (decisión César 2026-07-05): mejor relación valor/mantenimiento (principios estables), palanca de plan pago, habilita F10* |
+| 9 | **Contabilidad** (módulo activable) | **Diseño completo en `DISENO-CONTABILIDAD.md` (2026-07-10)**: contabilidad DERIVADA y regenerable (motor de asientos que lee los documentos operativos — patrón validado por el legacy GV016x), plan de cuentas con seed argentino, `asiento_mapeos` (espejo moderno de los CUENTA C6 del legacy), libro diario, balances; **activos fijos + amortizaciones**; **export al software del contador**. La mini-fase Contabilizabilidad (2026-07-10, EN PROD) dejó los documentos listos para derivar retroactivamente | **FOSO** — primer cliente de referencia pagando. *Adelantada de F11→F9 (decisión César 2026-07-05): mejor relación valor/mantenimiento (principios estables), palanca de plan pago, habilita F10* |
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 | Vendedores y comisiones | Liquidación por venta / por cobranza | — |
 | 12 | **POS por perfiles** (Súper · Carnicería · Resto) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | Demanda ex clientes RevoSolution; por perfil: ≥1 piloto del rubro. Balanza y despiece son **adelantables sueltos** (el despiece es stock puro, no depende del POS) |

@@ -20,7 +20,7 @@ Convenciones:
 import io
 import uuid
 import zipfile
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -580,7 +580,9 @@ async def listar_retenciones(
     usuario: Usuario = Depends(requiere("libros_iva", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Retencion).where(Retencion.tenant_id == usuario.tenant_id)
+    stmt = select(Retencion).where(
+        Retencion.tenant_id == usuario.tenant_id, Retencion.anulado_at.is_(None)
+    )
     if desde:
         stmt = stmt.where(Retencion.fecha >= desde)
     if hasta:
@@ -644,12 +646,16 @@ async def eliminar_retencion(
 ):
     retencion = await db.scalar(
         select(Retencion).where(
-            Retencion.id == retencion_id, Retencion.tenant_id == usuario.tenant_id
+            Retencion.id == retencion_id,
+            Retencion.tenant_id == usuario.tenant_id,
+            Retencion.anulado_at.is_(None),
         )
     )
     if retencion is None:
         raise HTTPException(status_code=404, detail="Retención no encontrada")
-    await db.delete(retencion)
+    # 014: eliminar = marcar (la retención queda como historia con fecha cierta)
+    retencion.anulado_at = datetime.now(timezone.utc)
+    retencion.anulado_por = usuario.id
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -665,7 +671,7 @@ async def resumen_retenciones(
 
     stmt = (
         select(Retencion.tipo, Retencion.regimen, sqlfunc.count(), sqlfunc.sum(Retencion.importe))
-        .where(Retencion.tenant_id == usuario.tenant_id)
+        .where(Retencion.tenant_id == usuario.tenant_id, Retencion.anulado_at.is_(None))
         .group_by(Retencion.tipo, Retencion.regimen)
         .order_by(Retencion.tipo, Retencion.regimen)
     )

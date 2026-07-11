@@ -76,4 +76,7 @@ class VentaMedio(Base):
     medio: Mapped[str] = mapped_column(String(15))
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     referencia: Mapped[str | None] = mapped_column(String(60))
+    cuenta_bancaria_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_bancarias.id")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

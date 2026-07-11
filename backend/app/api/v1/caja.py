@@ -15,7 +15,7 @@ Criterios (espejo del legacy MOVIM/SALCAJA):
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -73,6 +73,8 @@ class MovimientoIn(BaseModel):
     medio: str = Field("efectivo", pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
     importe: Decimal = Field(gt=0)
     descripcion: str | None = Field(None, max_length=120)
+    # contra qué cuenta bancaria fue (transferencia) — 014
+    cuenta_bancaria_id: uuid.UUID | None = None
 
 
 class MovimientoOut(BaseModel):
@@ -85,6 +87,7 @@ class MovimientoOut(BaseModel):
     medio: str
     importe: Decimal
     descripcion: str | None
+    cuenta_bancaria_id: uuid.UUID | None = None
 
 
 class TotalMedio(BaseModel):
@@ -143,13 +146,18 @@ def _mov_out(m: CajaMovimiento) -> MovimientoOut:
         medio=m.medio,
         importe=m.importe,
         descripcion=m.descripcion,
+        cuenta_bancaria_id=m.cuenta_bancaria_id,
     )
 
 
 async def _cierre_de(
     db: AsyncSession, tenant_id: uuid.UUID, fecha: date, sucursal_id: uuid.UUID | None
 ) -> CajaCierre | None:
-    stmt = select(CajaCierre).where(CajaCierre.tenant_id == tenant_id, CajaCierre.fecha == fecha)
+    stmt = select(CajaCierre).where(
+        CajaCierre.tenant_id == tenant_id,
+        CajaCierre.fecha == fecha,
+        CajaCierre.anulado_at.is_(None),
+    )
     stmt = stmt.where(
         CajaCierre.sucursal_id == sucursal_id if sucursal_id else CajaCierre.sucursal_id.is_(None)
     )
@@ -159,7 +167,7 @@ async def _cierre_de(
 async def _fecha_cerrada(
     db: AsyncSession, tenant_id: uuid.UUID, fecha: date, sucursal_id: uuid.UUID | None
 ) -> bool:
-    """Cerrada si existe cierre de esa fecha en el scope del movimiento O global."""
+    """Cerrada si existe cierre VIVO de esa fecha en el scope del movimiento O global."""
     scope = CajaCierre.sucursal_id.is_(None)
     if sucursal_id:
         scope = or_(scope, CajaCierre.sucursal_id == sucursal_id)
@@ -167,7 +175,12 @@ async def _fecha_cerrada(
         await db.scalar(
             select(func.count())
             .select_from(CajaCierre)
-            .where(CajaCierre.tenant_id == tenant_id, CajaCierre.fecha == fecha, scope)
+            .where(
+                CajaCierre.tenant_id == tenant_id,
+                CajaCierre.fecha == fecha,
+                CajaCierre.anulado_at.is_(None),
+                scope,
+            )
         )
     ) > 0
 
@@ -178,7 +191,11 @@ async def _calcular_planilla(
     # --- saldo inicial: saldo_final del último cierre anterior del mismo scope ---
     stmt = (
         select(CajaCierre.saldo_final)
-        .where(CajaCierre.tenant_id == tenant_id, CajaCierre.fecha < fecha)
+        .where(
+            CajaCierre.tenant_id == tenant_id,
+            CajaCierre.fecha < fecha,
+            CajaCierre.anulado_at.is_(None),
+        )
         .order_by(CajaCierre.fecha.desc())
         .limit(1)
     )
@@ -293,14 +310,51 @@ async def _calcular_planilla(
             )
             .group_by(OrdenPagoMedio.medio)
         )
+        acumulado: dict[str, list] = {
+            m: [Decimal(t), c] for m, t, c in (await db.execute(stmt)).all()
+        }
+        # compras CONTADO con medios registrados (014): salida por su medio real,
+        # signo del tipo (NC contado devuelve plata). Las compras contado SIN
+        # medios siguen fuera de la planilla (criterio F5, no retroactivo).
+        from app.models import Compra, CompraMedio, TipoComprobanteCompra
+
+        stmt = (
+            select(
+                CompraMedio.medio,
+                func.coalesce(
+                    func.sum(CompraMedio.importe * TipoComprobanteCompra.signo_cta_cte), 0
+                ),
+                func.count(),
+            )
+            .select_from(CompraMedio)
+            .join(Compra, Compra.id == CompraMedio.compra_id)
+            .join(TipoComprobanteCompra, TipoComprobanteCompra.codigo == Compra.tipo_codigo)
+            .where(
+                Compra.tenant_id == tenant_id,
+                Compra.fecha == fecha,
+                Compra.estado == "registrado",
+                Compra.contado.is_(True),
+            )
+            .group_by(CompraMedio.medio)
+        )
+        for m, t, c in (await db.execute(stmt)).all():
+            if m in acumulado:
+                acumulado[m][0] += Decimal(t)
+                acumulado[m][1] += c
+            else:
+                acumulado[m] = [Decimal(t), c]
         pagos = [
-            TotalMedio(medio=m, total=t, cantidad=c) for m, t, c in (await db.execute(stmt)).all()
+            TotalMedio(medio=m, total=t, cantidad=c) for m, (t, c) in acumulado.items()
         ]
 
-    # --- movimientos manuales del día ---
+    # --- movimientos manuales del día (vivos: los anulados no cuentan) ---
     stmt = (
         select(CajaMovimiento)
-        .where(CajaMovimiento.tenant_id == tenant_id, CajaMovimiento.fecha == fecha)
+        .where(
+            CajaMovimiento.tenant_id == tenant_id,
+            CajaMovimiento.fecha == fecha,
+            CajaMovimiento.anulado_at.is_(None),
+        )
         .order_by(CajaMovimiento.created_at)
     )
     if sucursal_id:
@@ -412,7 +466,10 @@ async def listar_movimientos(
     usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(CajaMovimiento).where(CajaMovimiento.tenant_id == usuario.tenant_id)
+    stmt = select(CajaMovimiento).where(
+        CajaMovimiento.tenant_id == usuario.tenant_id,
+        CajaMovimiento.anulado_at.is_(None),
+    )
     if desde:
         stmt = stmt.where(CajaMovimiento.fecha >= desde)
     if hasta:
@@ -440,6 +497,17 @@ async def crear_movimiento(
     fecha = body.fecha or date.today()
     if await _fecha_cerrada(db, usuario.tenant_id, fecha, body.sucursal_id):
         raise HTTPException(status_code=409, detail="La caja de esa fecha está cerrada")
+    if body.cuenta_bancaria_id is not None:
+        from app.models import CuentaBancaria
+
+        cuenta = await db.scalar(
+            select(CuentaBancaria.id).where(
+                CuentaBancaria.id == body.cuenta_bancaria_id,
+                CuentaBancaria.tenant_id == usuario.tenant_id,
+            )
+        )
+        if cuenta is None:
+            raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
 
     movimiento = CajaMovimiento(
         tenant_id=usuario.tenant_id,
@@ -450,6 +518,7 @@ async def crear_movimiento(
         medio=body.medio,
         importe=body.importe,
         descripcion=body.descripcion,
+        cuenta_bancaria_id=body.cuenta_bancaria_id,
         creado_por=usuario.id,
     )
     db.add(movimiento)
@@ -466,14 +535,18 @@ async def eliminar_movimiento(
 ):
     movimiento = await db.scalar(
         select(CajaMovimiento).where(
-            CajaMovimiento.id == movimiento_id, CajaMovimiento.tenant_id == usuario.tenant_id
+            CajaMovimiento.id == movimiento_id,
+            CajaMovimiento.tenant_id == usuario.tenant_id,
+            CajaMovimiento.anulado_at.is_(None),
         )
     )
     if movimiento is None:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
     if await _fecha_cerrada(db, usuario.tenant_id, movimiento.fecha, movimiento.sucursal_id):
         raise HTTPException(status_code=409, detail="La caja de esa fecha está cerrada")
-    await db.delete(movimiento)
+    # 014: eliminar = marcar (el movimiento queda como historia con fecha cierta)
+    movimiento.anulado_at = datetime.now(timezone.utc)
+    movimiento.anulado_por = usuario.id
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -498,7 +571,9 @@ async def listar_cierres(
     usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(CajaCierre).where(CajaCierre.tenant_id == usuario.tenant_id)
+    stmt = select(CajaCierre).where(
+        CajaCierre.tenant_id == usuario.tenant_id, CajaCierre.anulado_at.is_(None)
+    )
     if desde:
         stmt = stmt.where(CajaCierre.fecha >= desde)
     if hasta:
@@ -551,11 +626,16 @@ async def reabrir_caja(
 ):
     cierre = await db.scalar(
         select(CajaCierre).where(
-            CajaCierre.id == cierre_id, CajaCierre.tenant_id == usuario.tenant_id
+            CajaCierre.id == cierre_id,
+            CajaCierre.tenant_id == usuario.tenant_id,
+            CajaCierre.anulado_at.is_(None),
         )
     )
     if cierre is None:
         raise HTTPException(status_code=404, detail="Cierre no encontrado")
-    await db.delete(cierre)
+    # 014: reabrir = marcar (el cierre sellado queda como historia); la fecha
+    # puede volver a cerrarse (unique parcial de la 014)
+    cierre.anulado_at = datetime.now(timezone.utc)
+    cierre.anulado_por = usuario.id
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

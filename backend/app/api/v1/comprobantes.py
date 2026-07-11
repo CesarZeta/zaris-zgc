@@ -8,7 +8,7 @@ calcula SIEMPRE el servidor (services/ventas.py).
 
 import re
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -39,6 +39,7 @@ from app.models import (
     TipoComprobante,
     Usuario,
 )
+from app.services import stock_valor
 from app.services import ventas as sv
 from app.services.arca import ErrorArca, emitir_fiscal
 from app.services.arca import qr as arca_qr
@@ -704,6 +705,18 @@ async def _mover_stock(
             select(Articulo).where(Articulo.id.in_(ids), Articulo.tenant_id == comp.tenant_id)
         )
     }
+    # 014: costo sellado (neto de IVA, en ARS) + fecha del documento si el
+    # comprobante viene backdateado (si no, el server_default now() conserva
+    # el orden intra-día del kardex). El contra-movimiento de ANULACIÓN se
+    # fecha HOY (el hecho ocurre hoy), nunca con la fecha del papel.
+    cotizacion = Decimal("1")
+    if any(a.en_dolares for a in articulos.values()):
+        cotizacion = await stock_valor.cotizacion_vigente(db, comp.tenant_id)
+    fecha_mov = (
+        datetime.combine(comp.fecha, time.min, tzinfo=timezone.utc)
+        if comp.fecha != date.today() and tipo_mov != "anulacion"
+        else None
+    )
     for item in comp.items:
         art = articulos.get(item.articulo_id) if item.articulo_id else None
         if art is None or not art.controla_stock:
@@ -736,20 +749,22 @@ async def _mover_stock(
         delta = item.cantidad * signo
         fila.cantidad = fila.cantidad + delta
         fila.updated_at = func.now()
-        db.add(
-            StockMovimiento(
-                tenant_id=comp.tenant_id,
-                articulo_id=item.articulo_id,
-                deposito_id=deposito.id,
-                variante_id=item.variante_id,
-                tipo=tipo_mov,
-                cantidad=delta,
-                saldo_resultante=fila.cantidad,
-                comprobante=etiqueta[:30],
-                usuario_id=usuario_id,
-                grupo_id=comp.id,
-            )
+        mov = StockMovimiento(
+            tenant_id=comp.tenant_id,
+            articulo_id=item.articulo_id,
+            deposito_id=deposito.id,
+            variante_id=item.variante_id,
+            tipo=tipo_mov,
+            cantidad=delta,
+            saldo_resultante=fila.cantidad,
+            costo_unitario=stock_valor.costo_neto_ars(art, cotizacion),
+            comprobante=etiqueta[:30],
+            usuario_id=usuario_id,
+            grupo_id=comp.id,
         )
+        if fecha_mov is not None:
+            mov.fecha = fecha_mov
+        db.add(mov)
 
 
 async def _generar_vencimientos(db: AsyncSession, comp: Comprobante) -> None:
@@ -876,9 +891,24 @@ async def emitir_core(
             await _mover_stock(db, comp, usuario.id, +1, "devolucion")
 
 
+class MedioVentaIn(BaseModel):
+    """Medio de cobro de una venta CONTADO de gestión (014): la contrapartida
+    financiera del documento (el POS ya registra los suyos por su propio flujo)."""
+
+    medio: str = Field(pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
+    importe: Decimal = Field(gt=0)
+    referencia: str | None = Field(None, max_length=60)
+    cuenta_bancaria_id: uuid.UUID | None = None
+
+
+class EmitirIn(BaseModel):
+    medios: list[MedioVentaIn] = []
+
+
 @router.post("/{comp_id}/emitir", response_model=ComprobanteOut)
 async def emitir_comprobante(
     comp_id: uuid.UUID,
+    body: EmitirIn | None = None,
     usuario: Usuario = Depends(requiere("ventas", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -886,7 +916,50 @@ async def emitir_comprobante(
     config = await db.scalar(
         select(ArcaConfig).where(ArcaConfig.tenant_id == usuario.tenant_id)
     )
+
+    # Medios de cobro (014, opcional): solo contado fiscal; deben sumar el
+    # total. Sin medios = comportamiento histórico (planilla los asume efectivo).
+    medios = body.medios if body else []
+    if medios:
+        if not comp.contado or comp.tipo.clase not in CLASES_FISCALES:
+            raise HTTPException(
+                status_code=422,
+                detail="Los medios de cobro son solo para comprobantes contado",
+            )
+        if sum((m.importe for m in medios), Decimal("0")) != comp.total:
+            raise HTTPException(
+                status_code=422, detail="Los medios deben sumar el total del comprobante"
+            )
+        cuentas_ids = {m.cuenta_bancaria_id for m in medios if m.cuenta_bancaria_id}
+        if cuentas_ids:
+            from app.models import CuentaBancaria
+
+            validas = set(
+                await db.scalars(
+                    select(CuentaBancaria.id).where(
+                        CuentaBancaria.id.in_(cuentas_ids),
+                        CuentaBancaria.tenant_id == usuario.tenant_id,
+                    )
+                )
+            )
+            if cuentas_ids - validas:
+                raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
+
     await emitir_core(db, comp, usuario, config)
+    if medios:
+        from app.models import VentaMedio
+
+        for m in medios:
+            db.add(
+                VentaMedio(
+                    tenant_id=usuario.tenant_id,
+                    comprobante_id=comp.id,
+                    medio=m.medio,
+                    importe=m.importe,
+                    referencia=(m.referencia or "").strip() or None,
+                    cuenta_bancaria_id=m.cuenta_bancaria_id,
+                )
+            )
     await db.commit()
     comp = await _cargar(db, usuario.tenant_id, comp_id)
     return _out(comp)

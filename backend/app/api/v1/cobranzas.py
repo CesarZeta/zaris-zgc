@@ -8,7 +8,7 @@ crédito según la clase) y recibos.total - recibos.aplicado (a cuenta).
 
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -57,6 +57,8 @@ class MedioIn(BaseModel):
     medio: str = Field(pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
     importe: Decimal = Field(gt=0)
     referencia: str | None = Field(None, max_length=60)
+    # contra qué cuenta bancaria fue (transferencia/tarjeta/MP) — 014
+    cuenta_bancaria_id: uuid.UUID | None = None
     cheque: ChequeMedioIn | None = None
 
 
@@ -78,6 +80,7 @@ class MedioOut(BaseModel):
     medio: str
     importe: Decimal
     referencia: str | None
+    cuenta_bancaria_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}
 
 
@@ -90,6 +93,7 @@ class ReciboOut(BaseModel):
     receptor_nombre: str
     total: Decimal
     aplicado: Decimal
+    rechazado_total: Decimal
     a_cuenta: Decimal
     estado: str
     observaciones: str | None
@@ -115,7 +119,8 @@ def _recibo_out(r: Recibo) -> ReciboOut:
         receptor_nombre=r.receptor_nombre,
         total=r.total,
         aplicado=r.aplicado,
-        a_cuenta=r.total - r.aplicado,
+        rechazado_total=r.rechazado_total,
+        a_cuenta=r.total - r.aplicado - r.rechazado_total,
         estado=r.estado,
         observaciones=r.observaciones,
         medios=[MedioOut.model_validate(m) for m in r.medios],
@@ -179,6 +184,22 @@ async def crear_recibo(
             status_code=422, detail="Lo imputado no puede superar el total del recibo"
         )
 
+    # cuentas bancarias referenciadas por los medios: del propio tenant
+    cuentas_ids = {m.cuenta_bancaria_id for m in body.medios if m.cuenta_bancaria_id}
+    if cuentas_ids:
+        from app.models import CuentaBancaria
+
+        validas = set(
+            await db.scalars(
+                select(CuentaBancaria.id).where(
+                    CuentaBancaria.id.in_(cuentas_ids),
+                    CuentaBancaria.tenant_id == usuario.tenant_id,
+                )
+            )
+        )
+        if cuentas_ids - validas:
+            raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
+
     numero = await sv.proximo_numero(db, usuario.tenant_id, pv.id, "REC")
     recibo = Recibo(
         tenant_id=usuario.tenant_id,
@@ -202,6 +223,7 @@ async def crear_recibo(
                 medio=m.medio,
                 importe=m.importe,
                 referencia=(m.referencia or "").strip() or None,
+                cuenta_bancaria_id=m.cuenta_bancaria_id,
             )
         )
         # Cheque de tercero → materializa en cartera (Fase 8). Si el medio es
@@ -312,11 +334,15 @@ async def anular_recibo(
     if recibo.estado != "emitido":
         raise HTTPException(status_code=409, detail="El recibo ya está anulado")
 
+    # anulación NO destructiva (014): las imputaciones se marcan con fecha
+    # cierta, nunca se borran — la reversión contable queda reconstruible
+    ahora = datetime.now(timezone.utc)
     imputaciones = (
         await db.scalars(
             select(Imputacion).where(
                 Imputacion.recibo_id == recibo.id,
                 Imputacion.tenant_id == usuario.tenant_id,
+                Imputacion.anulado_at.is_(None),
             )
         )
     ).all()
@@ -327,9 +353,12 @@ async def anular_recibo(
             .with_for_update(of=Comprobante)
         )
         deuda.saldo = deuda.saldo + imp.importe
-        await db.delete(imp)
+        imp.anulado_at = ahora
+        imp.anulado_por = usuario.id
     recibo.aplicado = Decimal("0")
     recibo.estado = "anulado"
+    recibo.anulado_at = ahora
+    recibo.anulado_por = usuario.id
     await db.commit()
     recibo = await db.scalar(select(Recibo).where(Recibo.id == recibo_id))
     return _recibo_out(recibo)
@@ -365,7 +394,7 @@ async def imputar(
             raise HTTPException(status_code=404, detail="Recibo no encontrado")
         if recibo.cliente_id != deuda.cliente_id:
             raise HTTPException(status_code=422, detail="Recibo y deuda de clientes distintos")
-        disponible = recibo.total - recibo.aplicado
+        disponible = recibo.total - recibo.aplicado - recibo.rechazado_total
         if body.importe > disponible:
             raise HTTPException(
                 status_code=422, detail=f"El recibo solo tiene ${disponible} a cuenta"
@@ -458,6 +487,7 @@ async def cuenta_corriente(
             Recibo.numero,
             Recibo.total,
             Recibo.aplicado,
+            Recibo.rechazado_total,
         )
         .join(PuntoVenta, Recibo.punto_venta_id == PuntoVenta.id)
         .where(
@@ -494,6 +524,8 @@ async def cuenta_corriente(
             }
         )
     for r in recibos:
+        # el HABER del recibo netea lo rechazado (equivale al viejo criterio
+        # de reducir total, pero sin reescribir el documento — 014)
         movimientos.append(
             {
                 "fecha": r.fecha.isoformat(),
@@ -501,8 +533,8 @@ async def cuenta_corriente(
                 "tipo": "Recibo",
                 "numero": f"{r.pv_numero:04d}-{r.numero:08d}",
                 "debe": "0",
-                "haber": str(r.total),
-                "pendiente": str(r.total - r.aplicado),
+                "haber": str(r.total - r.rechazado_total),
+                "pendiente": str(r.total - r.aplicado - r.rechazado_total),
             }
         )
     movimientos.sort(key=lambda m: (m["fecha"], m["orden"]))
@@ -541,7 +573,9 @@ async def _saldo_cliente(
         )
     )
     a_cuenta = await db.scalar(
-        select(func.coalesce(func.sum(Recibo.total - Recibo.aplicado), 0)).where(
+        select(
+            func.coalesce(func.sum(Recibo.total - Recibo.aplicado - Recibo.rechazado_total), 0)
+        ).where(
             Recibo.tenant_id == tenant_id,
             Recibo.cliente_id == cliente_id,
             Recibo.estado == "emitido",
@@ -581,11 +615,14 @@ async def saldos_por_cliente(
 
     a_cuenta_filas = (
         await db.execute(
-            select(Recibo.cliente_id, func.sum(Recibo.total - Recibo.aplicado))
+            select(
+                Recibo.cliente_id,
+                func.sum(Recibo.total - Recibo.aplicado - Recibo.rechazado_total),
+            )
             .where(
                 Recibo.tenant_id == usuario.tenant_id,
                 Recibo.estado == "emitido",
-                Recibo.total != Recibo.aplicado,
+                Recibo.total - Recibo.aplicado - Recibo.rechazado_total != 0,
             )
             .group_by(Recibo.cliente_id)
         )

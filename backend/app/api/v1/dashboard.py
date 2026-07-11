@@ -137,6 +137,7 @@ async def _saldo_caja(db: AsyncSession, tenant_id, hoy: date) -> Decimal:
             CajaMovimiento.tenant_id == tenant_id,
             CajaMovimiento.fecha == hoy,
             CajaMovimiento.medio == "efectivo",
+            CajaMovimiento.anulado_at.is_(None),
         )
     )
     return (cobrado or Decimal("0")) - (pagado or Decimal("0")) + (manuales or Decimal("0"))

@@ -9,7 +9,7 @@ Incluye el comparativo de precios por proveedor (ART_PROV del legacy).
 
 import re
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -29,6 +29,7 @@ from app.models import (
     ArticuloVariante,
     Compra,
     CompraItem,
+    CompraMedio,
     CompraVencimiento,
     CondicionVenta,
     Deposito,
@@ -40,6 +41,7 @@ from app.models import (
     Usuario,
 )
 from app.services import compras as sc
+from app.services import stock_valor
 
 router = APIRouter(prefix="/compras", tags=["compras"])
 
@@ -110,6 +112,28 @@ class VencimientoOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MedioCompraIn(BaseModel):
+    """Medio de pago de una compra CONTADO (014): la contrapartida financiera
+    del documento. Opcional (sin medios = comportamiento histórico)."""
+
+    medio: str = Field(pattern="^(efectivo|transferencia|cheque|tarjeta|mercadopago|otro)$")
+    importe: Decimal = Field(gt=0)
+    referencia: str | None = Field(None, max_length=60)
+    cuenta_bancaria_id: uuid.UUID | None = None
+
+
+class RegistrarIn(BaseModel):
+    medios: list[MedioCompraIn] = []
+
+
+class MedioCompraOut(BaseModel):
+    medio: str
+    importe: Decimal
+    referencia: str | None
+    cuenta_bancaria_id: uuid.UUID | None = None
+    model_config = {"from_attributes": True}
+
+
 class CompraListaOut(BaseModel):
     """Fila de grilla: la compra sin hijos (items/vencimientos). El detalle
     completo se pide por id (GET /comprobantes/{compra_id})."""
@@ -151,6 +175,7 @@ class CompraListaOut(BaseModel):
 class CompraOut(CompraListaOut):
     items: list[ItemOut]
     vencimientos: list[VencimientoOut]
+    medios: list[MedioCompraOut] = []
 
 
 class ArticuloProveedorUpsert(BaseModel):
@@ -222,6 +247,7 @@ def _out(compra: Compra) -> CompraOut:
         **_campos_base(compra),
         items=[ItemOut.model_validate(i) for i in compra.items],
         vencimientos=[VencimientoOut.model_validate(v) for v in compra.vencimientos],
+        medios=[MedioCompraOut.model_validate(m) for m in compra.medios],
     )
 
 
@@ -526,7 +552,9 @@ async def listar_compras(
     response.headers["X-Total-Count"] = str(total or 0)
     filas = await db.scalars(
         # noload: la grilla no muestra hijos (patrón de ventas)
-        stmt.options(noload(Compra.items), noload(Compra.vencimientos))
+        stmt.options(
+            noload(Compra.items), noload(Compra.vencimientos), noload(Compra.medios)
+        )
         .order_by(Compra.fecha.desc(), Compra.created_at.desc())
         .limit(min(limit, 200))
         .offset(offset)
@@ -553,7 +581,9 @@ async def exportar_compras_csv(
         q, clase, estado, proveedor_id, desde, hasta, con_saldo,
     )
     filas = await db.scalars(
-        stmt.options(noload(Compra.items), noload(Compra.vencimientos))
+        stmt.options(
+            noload(Compra.items), noload(Compra.vencimientos), noload(Compra.medios)
+        )
         .order_by(Compra.fecha.desc(), Compra.created_at.desc())
         .limit(5000)
     )
@@ -690,6 +720,14 @@ async def _mover_stock(
             )
         )
     }
+    # 014: costo REAL del documento sellado por ítem (importe_neto/cantidad;
+    # en B/C el final entero ES el costo) + fecha del papel si difiere de hoy.
+    # El contra-movimiento de ANULACIÓN se fecha HOY (el hecho ocurre hoy).
+    fecha_mov = (
+        datetime.combine(compra.fecha, time.min, tzinfo=timezone.utc)
+        if compra.fecha != date.today() and tipo_mov != "anulacion"
+        else None
+    )
     for item in compra.items:
         art = articulos.get(item.articulo_id) if item.articulo_id else None
         if art is None or not art.controla_stock:
@@ -722,20 +760,22 @@ async def _mover_stock(
         delta = item.cantidad * signo
         fila.cantidad = fila.cantidad + delta
         fila.updated_at = func.now()
-        db.add(
-            StockMovimiento(
-                tenant_id=compra.tenant_id,
-                articulo_id=item.articulo_id,
-                deposito_id=deposito.id,
-                variante_id=item.variante_id,
-                tipo=tipo_mov,
-                cantidad=delta,
-                saldo_resultante=fila.cantidad,
-                comprobante=etiqueta[:30],
-                usuario_id=usuario_id,
-                grupo_id=compra.id,
-            )
+        mov = StockMovimiento(
+            tenant_id=compra.tenant_id,
+            articulo_id=item.articulo_id,
+            deposito_id=deposito.id,
+            variante_id=item.variante_id,
+            tipo=tipo_mov,
+            cantidad=delta,
+            saldo_resultante=fila.cantidad,
+            costo_unitario=stock_valor.costo_item_compra(item.importe_neto, item.cantidad),
+            comprobante=etiqueta[:30],
+            usuario_id=usuario_id,
+            grupo_id=compra.id,
         )
+        if fecha_mov is not None:
+            mov.fecha = fecha_mov
+        db.add(mov)
 
 
 async def _generar_vencimientos(db: AsyncSession, compra: Compra) -> None:
@@ -765,6 +805,7 @@ async def _generar_vencimientos(db: AsyncSession, compra: Compra) -> None:
 @router.post("/comprobantes/{compra_id}/registrar", response_model=CompraOut)
 async def registrar_compra(
     compra_id: uuid.UUID,
+    body: RegistrarIn | None = None,
     usuario: Usuario = Depends(requiere("compras", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -774,6 +815,45 @@ async def registrar_compra(
     if not compra.items:
         raise HTTPException(status_code=422, detail="La compra no tiene ítems")
     clase = compra.tipo.clase
+
+    # Medios de pago (014, opcional): solo compras CONTADO fiscales; deben
+    # sumar el total del papel. Sin medios = comportamiento histórico.
+    medios = body.medios if body else []
+    if medios:
+        if not compra.contado or clase not in CLASES_FISCALES:
+            raise HTTPException(
+                status_code=422,
+                detail="Los medios de pago son solo para compras contado",
+            )
+        if sum((m.importe for m in medios), Decimal("0")) != compra.total:
+            raise HTTPException(
+                status_code=422, detail="Los medios deben sumar el total de la compra"
+            )
+        cuentas_ids = {m.cuenta_bancaria_id for m in medios if m.cuenta_bancaria_id}
+        if cuentas_ids:
+            from app.models import CuentaBancaria
+
+            validas = set(
+                await db.scalars(
+                    select(CuentaBancaria.id).where(
+                        CuentaBancaria.id.in_(cuentas_ids),
+                        CuentaBancaria.tenant_id == usuario.tenant_id,
+                    )
+                )
+            )
+            if cuentas_ids - validas:
+                raise HTTPException(status_code=422, detail="Cuenta bancaria inexistente")
+        for m in medios:
+            db.add(
+                CompraMedio(
+                    tenant_id=usuario.tenant_id,
+                    compra_id=compra.id,
+                    medio=m.medio,
+                    importe=m.importe,
+                    referencia=(m.referencia or "").strip() or None,
+                    cuenta_bancaria_id=m.cuenta_bancaria_id,
+                )
+            )
 
     asociada = None
     if compra.compra_asociada_id is not None:
@@ -840,11 +920,13 @@ async def anular_compra(
         raise HTTPException(status_code=409, detail="Solo se anula una compra registrada")
     clase = compra.tipo.clase
 
+    # solo bloquean las imputaciones VIVAS (las anuladas quedan como historia)
     pagos = (
         await db.scalars(
             select(ImputacionCompra).where(
                 ImputacionCompra.tenant_id == usuario.tenant_id,
                 ImputacionCompra.compra_id == compra.id,
+                ImputacionCompra.anulado_at.is_(None),
             )
         )
     ).all()
@@ -854,13 +936,16 @@ async def anular_compra(
             detail="La compra tiene pagos/créditos imputados: anulá primero la orden de pago o desimputá",
         )
 
+    ahora = datetime.now(timezone.utc)
     if clase == "nota_credito":
-        # revertir las imputaciones donde esta NC fue el crédito
+        # revertir las imputaciones donde esta NC fue el crédito — marcándolas
+        # con fecha cierta, nunca borrándolas (014)
         imputaciones = (
             await db.scalars(
                 select(ImputacionCompra).where(
                     ImputacionCompra.tenant_id == usuario.tenant_id,
                     ImputacionCompra.credito_id == compra.id,
+                    ImputacionCompra.anulado_at.is_(None),
                 )
             )
         ).all()
@@ -869,7 +954,8 @@ async def anular_compra(
                 select(Compra).where(Compra.id == imp.compra_id).with_for_update(of=Compra)
             )
             deuda.saldo = deuda.saldo + imp.importe
-            await db.delete(imp)
+            imp.anulado_at = ahora
+            imp.anulado_por = usuario.id
 
     if compra.actualiza_stock:
         if clase in ("factura", "remito"):
@@ -879,6 +965,8 @@ async def anular_compra(
 
     compra.estado = "anulado"
     compra.saldo = Decimal("0")
+    compra.anulado_at = ahora
+    compra.anulado_por = usuario.id
     compra.updated_at = func.now()
     await db.commit()
     return _out(await _cargar(db, usuario.tenant_id, compra_id))

@@ -212,6 +212,9 @@ class StockMovimiento(Base):
     tipo: Mapped[str] = mapped_column(String(15))
     cantidad: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     saldo_resultante: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+    # costo unitario NETO de IVA en ARS sellado al mover (014).
+    # NULL = movimiento histórico sin costo sellado.
+    costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
     comprobante: Mapped[str | None] = mapped_column(String(30))
     observaciones: Mapped[str | None] = mapped_column(String(120))
     grupo_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))

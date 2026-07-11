@@ -55,7 +55,11 @@ async def _saldo_caja(db: AsyncSession, tenant_id: uuid.UUID) -> Decimal:
             select(ConceptoCaja.tipo, func.coalesce(func.sum(CajaMovimiento.importe), 0))
             .select_from(CajaMovimiento)
             .join(ConceptoCaja, CajaMovimiento.concepto_id == ConceptoCaja.id)
-            .where(CajaMovimiento.tenant_id == tenant_id, CajaMovimiento.medio == "efectivo")
+            .where(
+                CajaMovimiento.tenant_id == tenant_id,
+                CajaMovimiento.medio == "efectivo",
+                CajaMovimiento.anulado_at.is_(None),
+            )
             .group_by(ConceptoCaja.tipo)
         )
     ).all()
@@ -75,7 +79,11 @@ async def _saldo_bancos(db: AsyncSession, tenant_id: uuid.UUID) -> Decimal:
             select(BancoMovimiento.tipo, func.coalesce(func.sum(BancoMovimiento.importe), 0))
             .select_from(BancoMovimiento)
             .join(CuentaBancaria, BancoMovimiento.cuenta_id == CuentaBancaria.id)
-            .where(CuentaBancaria.tenant_id == tenant_id, CuentaBancaria.activa.is_(True))
+            .where(
+                CuentaBancaria.tenant_id == tenant_id,
+                CuentaBancaria.activa.is_(True),
+                BancoMovimiento.anulado_at.is_(None),
+            )
             .group_by(BancoMovimiento.tipo)
         )
     ).all()
