@@ -637,7 +637,13 @@ Gate levantado por César 2026-07-11. Súper NO se vende standalone (siempre sui
   recortado, card de plan, 8 rubros). Lección: el check de orígenes de la suite F9
   asertaba sobre una página `limit=200` de un día compartido (351 asientos) —
   robustecido a consulta por filtro `origen`.
-  **Entrega: licencia POS kiosco/almacén vendible** (el POS de F6 ya la cubre).
+  **Deploy a prod (2026-07-11, commit e94a19d)**: migración 018 por psql session
+  pooler ANTES del push (sin re-005: no hay tablas nuevas) → push (Vercel + Pages
+  success 1er intento) → probe openapi (`EmpresaOut.plan`) → smoke prod **10/10**
+  (`tools/smoke_f12a_prod.py`, ciclo neutro de rubro en tenant demo) + click-through
+  en Pages (card "Plan contratado", 8 rubros, suite intacta).
+  **Entrega: licencia POS kiosco/almacén vendible** (el POS de F6 ya la cubre)
+  con `tools/setup_tenant.py --plan pos`.
 - [ ] **F12-b — Perfil súper/estándar completo**: pesables por etiqueta de balanza
   (EAN prefijo 20–29, config por tenant peso/importe, `articulos.codigo_balanza`,
   parsing server-side en `GET /pos/buscar`), envases retornables, venta por
