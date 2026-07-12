@@ -531,18 +531,62 @@
 .config-lista li { padding: var(--space-2) 0; border-bottom: 1px dashed var(--border-primary); }
 textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); resize: vertical; }
 
-/* ---------- POS Mostrador (Fase 6) ---------- */
+/* ---------- POS Mostrador (Fase 6 · rediseño terminal 2026-07-12) ---------- */
+/* La pantalla vive dentro de un bezel oscuro tipo dispositivo físico: marco
+   con pie grabado «ZARIS · Punto de venta» + LED, layout fijo al viewport
+   (solo scrollean los renglones), header de terminal con marca/PV/reloj. */
+.pos-device {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(140% 110% at 50% 0%, #3a382e 0%, #232219 48%, #14130d 100%);
+  padding: clamp(8px, 1.4vw, 22px);
+  padding-bottom: 0;
+}
 .pos-pantalla {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   background: var(--zaris-cream);
   color: var(--fg-1);
   display: flex;
   flex-direction: column;
   font-family: var(--font-display);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 0 0 3px rgba(255, 255, 255, 0.045),
+    0 18px 50px rgba(0, 0, 0, 0.55);
 }
 .pos-centro { justify-content: center; align-items: center; }
-.pos-logo { font-weight: 700; font-size: var(--size-title-sm); letter-spacing: var(--track-title); }
-.pos-logo span { color: var(--zaris-orange); }
+.pos-centro-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: var(--space-6);
+}
+.pos-bisel-pie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: 6px 0 8px;
+  color: rgba(242, 241, 237, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  user-select: none;
+}
+.pos-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--zaris-orange);
+  box-shadow: 0 0 8px var(--zaris-orange);
+}
 
 .pos-apertura {
   width: min(560px, calc(100% - var(--space-8)));
@@ -568,21 +612,62 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
 .pos-ayuda { color: var(--fg-3); font-size: var(--size-btn); }
 .chico { font-size: var(--size-caption); color: var(--fg-3); }
 
+/* Header de terminal: marca ZARIS + PV a la izquierda, cajero/conexión/reloj
+   a la derecha. El naranja del borde inferior es acento de brand. */
 .pos-topbar {
-  display: flex; align-items: center; gap: var(--space-8);
-  padding: var(--space-4) var(--space-8);
+  display: flex; align-items: center; gap: var(--space-6);
+  padding: var(--space-3) var(--space-6);
   background: var(--zaris-dark); color: var(--zaris-cream);
+  border-bottom: 2px solid var(--zaris-orange);
+  flex-wrap: wrap;
 }
-.pos-topbar .pos-logo { color: var(--zaris-cream); }
-.pos-caja-info { flex: 1; }
-.pos-topbar-botones { display: flex; gap: var(--space-3); }
-.pos-topbar .btn-ghost { background: transparent; color: var(--zaris-cream); border-color: rgba(242, 241, 237, 0.35); }
+.pos-marca { display: flex; align-items: center; gap: var(--space-3); }
+.pos-marca-logo { display: flex; color: var(--zaris-orange); }
+.pos-marca-texto { display: flex; flex-direction: column; line-height: 1.15; }
+.pos-marca-nombre { font-weight: 700; letter-spacing: 0.16em; font-size: var(--size-ui); }
+.pos-marca-sub {
+  font-size: var(--size-caption); color: rgba(242, 241, 237, 0.6);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.pos-topbar-sep { width: 1px; height: 36px; background: rgba(242, 241, 237, 0.22); }
+.pos-caja-info { display: flex; align-items: center; gap: var(--space-4); flex: 1; min-width: 0; }
+.pos-chip-pv {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: var(--size-caption);
+  background: rgba(242, 241, 237, 0.1); border: 1px solid rgba(242, 241, 237, 0.3);
+  border-radius: var(--radius-sm, 4px); padding: 3px 8px; white-space: nowrap;
+}
+.pos-caja-texto { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.pos-caja-texto b, .pos-caja-texto .chico { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos-caja-texto .chico, .pos-cajero .chico { color: rgba(242, 241, 237, 0.55); }
+.pos-topbar-estado { display: flex; align-items: center; gap: var(--space-6); margin-left: auto; }
+.pos-cajero { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.pos-cajero-nombre { font-weight: 600; white-space: nowrap; }
+.pos-online {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--size-caption); color: rgba(242, 241, 237, 0.75); white-space: nowrap;
+}
+.pos-online-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--color-success); box-shadow: 0 0 6px var(--color-success);
+}
+.pos-online.off .pos-online-dot { background: var(--color-error); box-shadow: 0 0 6px var(--color-error); }
+.pos-reloj {
+  display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.pos-reloj-hora { font-size: var(--size-title-sm); font-weight: 700; }
+.pos-reloj-fecha { font-size: var(--size-caption); color: rgba(242, 241, 237, 0.55); }
+.pos-topbar-botones { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.pos-topbar .btn-ghost { background: transparent; color: var(--zaris-cream); border-color: rgba(242, 241, 237, 0.35); min-height: 42px; }
 .pos-topbar .btn-ghost:hover { border-color: var(--zaris-cream); color: #fff; }
+.pos-topbar .btn-ghost.activo { border-color: var(--zaris-orange); color: #fff; }
 
 .pos-cuerpo {
-  flex: 1; display: grid; grid-template-columns: 1fr 300px;
-  gap: var(--space-6); padding: var(--space-6) var(--space-8); align-items: start;
+  flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 320px;
+  gap: var(--space-6); padding: var(--space-5) var(--space-6); align-items: stretch;
 }
+.pos-izquierda { display: flex; flex-direction: column; min-height: 0; }
 .pos-scan { display: flex; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); }
 .pos-input { flex: 1; font-size: var(--size-title-sm); padding: var(--space-5) var(--space-6); font-family: var(--font-mono); }
 .pos-multi {
@@ -599,17 +684,43 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
   border: 1px solid var(--color-success); color: var(--fg-1);
   border-radius: var(--radius-sm, 4px); padding: var(--space-3) var(--space-5); margin-bottom: var(--space-4);
 }
-.pos-lineas { max-height: calc(100vh - 220px); overflow-y: auto; }
+.pos-lineas { flex: 1; min-height: 0; overflow-y: auto; }
 .pos-lineas .tabla td { font-size: var(--size-ui); }
 .pos-selec td { background: color-mix(in srgb, var(--zaris-orange) 9%, transparent); }
 .pos-vacio { text-align: center; color: var(--fg-3); padding: var(--space-16) !important; }
-.pos-cant { width: 84px; text-align: right; padding: var(--space-2) var(--space-3); }
+.pos-cant { width: 76px; text-align: right; padding: var(--space-2) var(--space-3); }
+/* Steppers −/+ por línea (táctil): mismo alto que el input de cantidad. */
+.pos-cant-grupo { display: inline-flex; align-items: center; gap: var(--space-1); }
+.pos-step {
+  width: 36px; height: 36px; flex: none;
+  border: 1px solid var(--border-medium); border-radius: var(--radius-sm, 4px);
+  background: var(--zaris-white); color: var(--fg-2);
+  cursor: pointer; font-size: var(--size-ui); font-weight: 700; line-height: 1;
+}
+.pos-step:hover:not(:disabled) { border-color: var(--zaris-orange); color: var(--fg-1); }
+.pos-step:active:not(:disabled) { transform: translateY(1px); }
+.pos-step:disabled { opacity: 0.35; cursor: default; }
 .btn-quitar {
   border: none; background: transparent; color: var(--color-error);
   cursor: pointer; font-size: var(--size-ui); padding: var(--space-2);
+  min-width: 36px; min-height: 36px;
 }
 
-.pos-derecha { display: flex; flex-direction: column; gap: var(--space-5); position: sticky; top: var(--space-6); }
+.pos-derecha { display: flex; flex-direction: column; gap: var(--space-4); min-height: 0; overflow-y: auto; }
+/* Botonera táctil: las acciones de las teclas F como botones grandes. */
+.pos-botonera { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.pos-btn-tactil {
+  min-height: 58px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: var(--space-2) var(--space-3);
+  background: var(--zaris-white); border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md); cursor: pointer; font: inherit; font-weight: 600;
+  color: var(--fg-1);
+}
+.pos-btn-tactil:hover:not(:disabled) { border-color: var(--zaris-orange); }
+.pos-btn-tactil:active:not(:disabled) { transform: translateY(1px); }
+.pos-btn-tactil:disabled { opacity: 0.45; cursor: default; }
+.pos-btn-tactil .tecla { font-family: var(--font-mono); font-size: var(--size-caption); color: var(--fg-3); }
 .pos-total-card {
   background: var(--zaris-dark); color: var(--zaris-cream);
   border-radius: var(--radius-md); padding: var(--space-8);
@@ -633,6 +744,7 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
   background: var(--zaris-white); border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm, 4px); padding: var(--space-4) var(--space-5);
   cursor: pointer; font: inherit; text-align: left;
+  min-height: 48px; /* target táctil */
 }
 .pos-resultado.activo, .pos-resultado:hover { border-color: var(--zaris-orange); }
 .pos-res-desc { flex: 1; }
@@ -662,8 +774,11 @@ textarea.input { font-family: var(--font-mono); font-size: var(--size-caption); 
 .pos-form-caja > div { grid-column: 1 / -1; }
 
 @media (max-width: 900px) {
-  .pos-cuerpo { grid-template-columns: 1fr; }
-  .pos-derecha { position: static; }
+  .pos-device { padding: 6px; padding-bottom: 0; }
+  .pos-cuerpo { grid-template-columns: 1fr; overflow-y: auto; }
+  .pos-izquierda, .pos-lineas, .pos-derecha { min-height: auto; overflow: visible; flex: none; }
+  .pos-topbar-estado { gap: var(--space-4); }
+  .pos-reloj-fecha, .pos-cajero .chico { display: none; }
 }
 
 /* ---------- Inicio / Dashboard (bienvenida) ---------- */

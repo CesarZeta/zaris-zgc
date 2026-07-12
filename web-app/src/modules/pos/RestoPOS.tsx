@@ -21,6 +21,7 @@ import type {
 import AddressSearch from "../../components/AddressSearch";
 import { useDialogos } from "../../components/dialogos";
 import { CierreModal, CobroModal, SalirCajaBoton } from "./POSPage";
+import POSHeader, { PosDevice } from "./POSHeader";
 import { imprimirTicket } from "./ticket";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
@@ -134,39 +135,31 @@ export default function RestoPOS({
   const salones = [...new Set(mesas.map((m) => m.salon_nombre))];
 
   return (
-    <div className="pos-pantalla">
-      <header className="pos-topbar">
-        <div className="pos-logo">
-          Z<span>GC</span> RESTO
-        </div>
-        <div className="pos-caja-info">
-          <b>{sesion.caja_nombre}</b> · {sesion.cajero_nombre}
-        </div>
-        <div className="pos-topbar-botones">
-          <button
-            className={`btn btn-ghost${tab === "mesas" ? " activo" : ""}`}
-            onClick={() => setTab("mesas")}
-          >
-            Mesas
-          </button>
-          <button
-            className={`btn btn-ghost${tab === "pedidos" ? " activo" : ""}`}
-            onClick={() => setTab("pedidos")}
-          >
-            Pedidos ({pedidos.length})
-          </button>
-          <button
-            className={`btn btn-ghost${tab === "mozos" ? " activo" : ""}`}
-            onClick={() => setTab("mozos")}
-          >
-            Mozos
-          </button>
-          <button className="btn btn-ghost" onClick={() => setVerCierre(true)}>
-            Cierre (F8)
-          </button>
-          <SalirCajaBoton className="btn btn-ghost" label="Salir" />
-        </div>
-      </header>
+    <PosDevice>
+      <POSHeader sesion={sesion} subtitulo="Resto">
+        <button
+          className={`btn btn-ghost${tab === "mesas" ? " activo" : ""}`}
+          onClick={() => setTab("mesas")}
+        >
+          Mesas
+        </button>
+        <button
+          className={`btn btn-ghost${tab === "pedidos" ? " activo" : ""}`}
+          onClick={() => setTab("pedidos")}
+        >
+          Pedidos ({pedidos.length})
+        </button>
+        <button
+          className={`btn btn-ghost${tab === "mozos" ? " activo" : ""}`}
+          onClick={() => setTab("mozos")}
+        >
+          Mozos
+        </button>
+        <button className="btn btn-ghost" onClick={() => setVerCierre(true)}>
+          Cierre (F8)
+        </button>
+        <SalirCajaBoton className="btn btn-ghost" label="Salir" />
+      </POSHeader>
 
       <div className="pos-cuerpo" style={{ display: "block", overflow: "auto", padding: "var(--space-5)" }}>
         {error && <div className="pos-error">{error}</div>}
@@ -265,7 +258,7 @@ export default function RestoPOS({
       {verCierre && (
         <CierreModal sesion={sesion} onCerrada={onCerrada} onCerrar={() => setVerCierre(false)} />
       )}
-    </div>
+    </PosDevice>
   );
 }
 

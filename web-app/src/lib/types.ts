@@ -785,6 +785,11 @@ export interface PosSesion {
   efectivo_contado: string | null;
   diferencia: string | null;
   observaciones: string | null;
+  /** Contexto de terminal para el header del POS (rediseño 2026-07-12);
+   *  viaja solo en la sesión individual, no en el listado. */
+  punto_venta_numero?: number | null;
+  sucursal_nombre?: string | null;
+  empresa_nombre?: string | null;
 }
 
 export interface PosResumen {

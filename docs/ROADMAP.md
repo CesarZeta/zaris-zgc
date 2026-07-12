@@ -774,8 +774,52 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
   navegador (login → /pos, gestión rebota, salir de la caja). **Deploy 2026-07-11
   (commit 82b02de)**: push → probe openapi 1er intento → **smoke prod 8/8**
   (`tools/smoke_pos_login_prod.py`, neutro) → Pages success 1er intento.
-- [ ] **N1/N2/N3** (nodo físico): pendientes de las preguntas §8 restantes
-  (hardware de referencia; prioridad vs. F12-bis Logística).
+- [ ] **N1/N2/N3** (nodo físico): hardware de referencia definido 2026-07-12
+  (**PC Windows dedicada existente en el cliente**, como el server del legacy —
+  el instalador N1 apunta a Windows). César antepuso el rediseño UX del POS;
+  la prioridad de arranque de N1 queda para la próxima decisión.
+
+## REDISEÑO UX DEL POS — terminal con marco de dispositivo ✅ (2026-07-12)
+
+**Entregable: el POS se ve y se opera como una terminal física, no como una página
+web — marco de dispositivo, marca ZARIS + punto de venta arriba a la izquierda,
+datos de contexto en pantalla e interfaz táctil por botones sin perder el flujo
+teclado-first.** Mandato de César 2026-07-12 (la UX anterior era "demasiado
+simplista, una pantalla sin bordes").
+
+- [x] **Marco de dispositivo** (`PosDevice`, `POSHeader.tsx`): bezel oscuro con
+  degradado alrededor de toda la pantalla, esquinas redondeadas, pie grabado
+  «ZARIS · Punto de venta» con LED naranja; layout fijo al viewport (100dvh,
+  solo scrollean los renglones). Aplica a mostrador, resto, apertura y login POS.
+- [x] **Header de terminal** (`POSHeader`): marca ZARIS (logo + wordmark) +
+  «Punto de Venta» arriba a la izquierda; chip `PV nnnn` + caja + sucursal/
+  empresa; a la derecha cajero + hora de apertura, indicador de conexión
+  (online/offline del navegador, antesala del estado de sync del nodo LAN) y
+  **reloj vivo** (HH:MM:SS 24h + fecha, JetBrains Mono). En resto, las tabs
+  Mesas/Pedidos/Mozos viven en el mismo header (activa con borde naranja).
+- [x] **Backend aditivo sin migración**: `SesionOut` suma `punto_venta_numero`,
+  `sucursal_nombre` y `empresa_nombre` vía `_sesion_out(..., con_contexto=True)`
+  SOLO en la sesión individual (abrir/actual/cerrar) — el listado los omite para
+  no reintroducir el N+1 del LOTE TÉCNICO.
+- [x] **Interfaz táctil** (evaluación 2026-07-12, pedida por César): botonera de
+  botones grandes (≥58px) en el panel derecho con las mismas acciones de las
+  teclas F (Descuento F7 · Depto F9 · Tickets F6 · Cierre F8) mostrando la tecla
+  como hint; steppers −/+ por renglón (36px) para cantidad; targets táctiles
+  ≥44-48px en resultados/acciones. **Decisión de diseño: híbrido teclado+táctil**
+  — los atajos F se conservan intactos (el segmento pyme argentino opera con PC
+  Windows + lector USB + teclado, herencia del legacy) y todo queda operable por
+  botón para terminales táctiles. Ninguna acción es solo-teclado.
+- [x] Verificado 2026-07-12: build TS limpio + **suites 23/23 (login POS) ·
+  39/39 (F12-b) · 51/51 (F12-d)** contra backend local + E2E en navegador
+  (login con bezel, apertura, venta con stepper +1 = $55,20, cobro con total de
+  servidor letra B, Esc/F7/F8 intactos, perfil resto con salón y tabs, cierre
+  de sesión) en desktop 1440px y angosto (<900px apila columnas).
+- Regla de producto recordada por César en esta sesión: **una licencia POS = un
+  solo formato** (resto no convive con súper ni kiosco en el mismo cliente); el
+  perfil/rubro es configuración TÉCNICA nuestra (Configuración → Cajas POS /
+  setup_tenant) y **jamás se le expone al usuario final como elección**. La UI
+  del cajero no menciona perfiles: la caja llega configurada y la pantalla se
+  decide sola.
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 

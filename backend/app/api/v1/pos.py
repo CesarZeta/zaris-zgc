@@ -130,6 +130,11 @@ class SesionOut(BaseModel):
     efectivo_contado: Decimal | None
     diferencia: Decimal | None
     observaciones: str | None
+    # Contexto de terminal para el header del POS (rediseño UX 2026-07-12):
+    # solo viaja en la sesión individual (abrir/actual/cerrar), no en listados.
+    punto_venta_numero: int | None = None
+    sucursal_nombre: str | None = None
+    empresa_nombre: str | None = None
 
 
 class TotalMedio(BaseModel):
@@ -579,12 +584,30 @@ async def _resumen_sesion(db: AsyncSession, sesion: PosSesion) -> ResumenOut:
 
 
 async def _sesion_out(
-    db: AsyncSession, sesion: PosSesion, cajero_nombre: str | None = None
+    db: AsyncSession,
+    sesion: PosSesion,
+    cajero_nombre: str | None = None,
+    con_contexto: bool = False,
 ) -> SesionOut:
     if cajero_nombre is None:
         cajero = await db.scalar(select(Usuario).where(Usuario.id == sesion.cajero_id))
         cajero_nombre = cajero.nombre if cajero else ""
+    # con_contexto: PV/sucursal/empresa para el header de la terminal. Queda
+    # apagado en el listado de sesiones (lo re-N+1-earía).
+    contexto: dict = {}
+    if con_contexto:
+        contexto["punto_venta_numero"] = await db.scalar(
+            select(PuntoVenta.numero).where(PuntoVenta.id == sesion.caja.punto_venta_id)
+        )
+        if sesion.caja.sucursal_id is not None:
+            contexto["sucursal_nombre"] = await db.scalar(
+                select(Sucursal.nombre).where(Sucursal.id == sesion.caja.sucursal_id)
+            )
+        tenant = await db.scalar(select(Tenant).where(Tenant.id == sesion.tenant_id))
+        if tenant is not None:
+            contexto["empresa_nombre"] = tenant.nombre_fantasia or tenant.razon_social
     return SesionOut(
+        **contexto,
         id=sesion.id,
         caja_id=sesion.caja_id,
         caja_nombre=sesion.caja.nombre,
@@ -859,7 +882,7 @@ async def abrir_sesion(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Ya hay una sesión abierta para esa caja")
     sesion = await db.scalar(select(PosSesion).where(PosSesion.id == sesion.id))
-    return await _sesion_out(db, sesion)
+    return await _sesion_out(db, sesion, con_contexto=True)
 
 
 @router.get("/sesiones/actual", response_model=SesionOut | None)
@@ -874,7 +897,7 @@ async def sesion_actual(
             PosSesion.estado == "abierta",
         )
     )
-    return await _sesion_out(db, sesion) if sesion else None
+    return await _sesion_out(db, sesion, con_contexto=True) if sesion else None
 
 
 @router.get("/sesiones", response_model=list[SesionOut])
@@ -998,7 +1021,7 @@ async def cerrar_sesion(
     sesion.observaciones = body.observaciones
     await db.commit()
     sesion = await db.scalar(select(PosSesion).where(PosSesion.id == sesion_id))
-    return await _sesion_out(db, sesion)
+    return await _sesion_out(db, sesion, con_contexto=True)
 
 
 # ===== Búsqueda rápida =====

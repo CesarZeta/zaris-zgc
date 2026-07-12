@@ -8,6 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ApiError, apiPost } from "../lib/api";
 import { setSesion } from "../lib/auth";
 import type { Sesion } from "../lib/types";
+import { PosDevice } from "../modules/pos/POSHeader";
 import ZarisLogo from "./ZarisLogo";
 
 export default function POSLoginPage() {
@@ -33,7 +34,7 @@ export default function POSLoginPage() {
   }
 
   return (
-    <div className="login-page">
+    <PosDevice centro>
       <form className="login-card" onSubmit={onSubmit}>
         <div className="login-marca">
           <ZarisLogo size={40} />
@@ -74,6 +75,6 @@ export default function POSLoginPage() {
           <Link to="/login">← Ingresar a la gestión</Link>
         </p>
       </form>
-    </div>
+    </PosDevice>
   );
 }

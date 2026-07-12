@@ -22,6 +22,7 @@ import type {
 } from "../../lib/types";
 import { MEDIOS_PAGO } from "../../lib/types";
 import { imprimirTicket } from "./ticket";
+import POSHeader, { PosDevice } from "./POSHeader";
 import RestoPOS from "./RestoPOS";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
@@ -63,7 +64,7 @@ export default function POSPage() {
   }, []);
 
   if (!auth) return <Navigate to="/pos/login" replace />;
-  if (cargando) return <div className="pos-pantalla pos-centro">Cargando…</div>;
+  if (cargando) return <PosDevice centro>Cargando…</PosDevice>;
   if (!sesion) return <AperturaView onAbierta={setSesion} />;
   // F12-d: la caja decide la pantalla — mostrador (F6) o resto (mesas/comandas)
   return sesion.caja_perfil === "resto" ? (
@@ -130,11 +131,10 @@ function AperturaView({ onAbierta }: { onAbierta: (s: PosSesion) => void }) {
   }
 
   return (
-    <div className="pos-pantalla pos-centro">
+    <PosDevice>
+      <POSHeader />
+      <div className="pos-centro-cuerpo">
       <div className="pos-apertura">
-        <div className="pos-logo">
-          Z<span>GC</span> · Punto de Venta
-        </div>
         {error && <div className="login-error">{error}</div>}
         {cargado && cajas.length === 0 ? (
           <p className="pos-ayuda">
@@ -182,7 +182,8 @@ function AperturaView({ onAbierta }: { onAbierta: (s: PosSesion) => void }) {
           label={getSesion()?.scope === "pos" ? "← Salir de la caja" : "← Volver a la gestión"}
         />
       </div>
-    </div>
+      </div>
+    </PosDevice>
   );
 }
 
@@ -492,36 +493,10 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
   }, [modalAbierto, lineas.length, selec, deptos.length]);
 
   return (
-    <div className="pos-pantalla">
-      <header className="pos-topbar">
-        <div className="pos-logo">
-          Z<span>GC</span> POS
-        </div>
-        <div className="pos-caja-info">
-          <b>{sesion.caja_nombre}</b> · {sesion.cajero_nombre}
-        </div>
-        <div className="pos-topbar-botones">
-          {deptos.length > 0 && (
-            <button className="btn btn-ghost" onClick={() => setVerDepto(true)}>
-              Depto (F9)
-            </button>
-          )}
-          <button
-            className="btn btn-ghost"
-            disabled={lineas.length === 0}
-            onClick={() => setVerDescuento(true)}
-          >
-            Desc. (F7)
-          </button>
-          <button className="btn btn-ghost" onClick={() => setVerTickets(true)}>
-            Tickets (F6)
-          </button>
-          <button className="btn btn-ghost" onClick={() => setVerCierre(true)}>
-            Cierre (F8)
-          </button>
-          <SalirCajaBoton className="btn btn-ghost" label="Salir" />
-        </div>
-      </header>
+    <PosDevice>
+      <POSHeader sesion={sesion}>
+        <SalirCajaBoton className="btn btn-ghost" label="Salir" />
+      </POSHeader>
 
       <div className="pos-cuerpo">
         <div className="pos-izquierda">
@@ -575,14 +550,32 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
                       )}
                     </td>
                     <td className="num">
-                      <input
-                        className="input pos-cant"
-                        type="number"
-                        min="0"
-                        step={l.pesable ? "0.001" : "1"}
-                        value={l.cantidad}
-                        onChange={(e) => cambiarCantidad(i, e.target.value)}
-                      />
+                      <div className="pos-cant-grupo">
+                        <button
+                          className="pos-step"
+                          aria-label="Restar 1"
+                          disabled={l.es_depto || l.cantidad <= 1}
+                          onClick={() => cambiarCantidad(i, String(l.cantidad - 1))}
+                        >
+                          −
+                        </button>
+                        <input
+                          className="input pos-cant"
+                          type="number"
+                          min="0"
+                          step={l.pesable ? "0.001" : "1"}
+                          value={l.cantidad}
+                          onChange={(e) => cambiarCantidad(i, e.target.value)}
+                        />
+                        <button
+                          className="pos-step"
+                          aria-label="Sumar 1"
+                          disabled={l.es_depto}
+                          onClick={() => cambiarCantidad(i, String(l.cantidad + 1))}
+                        >
+                          +
+                        </button>
+                      </div>
                     </td>
                     <td className="num mono">{$(l.precio)}</td>
                     <td className="num mono">
@@ -627,6 +620,31 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
               Volver a Consumidor Final
             </button>
           )}
+          {/* Botonera táctil: las mismas acciones que las teclas F (rediseño 2026-07-12) */}
+          <div className="pos-botonera">
+            <button
+              className="pos-btn-tactil"
+              disabled={lineas.length === 0}
+              onClick={() => setVerDescuento(true)}
+            >
+              Descuento
+              <span className="tecla">F7</span>
+            </button>
+            {deptos.length > 0 && (
+              <button className="pos-btn-tactil" onClick={() => setVerDepto(true)}>
+                Depto
+                <span className="tecla">F9</span>
+              </button>
+            )}
+            <button className="pos-btn-tactil" onClick={() => setVerTickets(true)}>
+              Tickets
+              <span className="tecla">F6</span>
+            </button>
+            <button className="pos-btn-tactil" onClick={() => setVerCierre(true)}>
+              Cierre
+              <span className="tecla">F8</span>
+            </button>
+          </div>
           <button
             className="btn btn-primary btn-block pos-cobrar"
             disabled={lineas.length === 0 || ocupado}
@@ -704,7 +722,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
           onCerrar={() => setVerDescuento(false)}
         />
       )}
-    </div>
+    </PosDevice>
   );
 }
 
