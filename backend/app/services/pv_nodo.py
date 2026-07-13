@@ -18,9 +18,16 @@ from app.models import PosCaja, SucursalNodo
 
 
 async def validar_pv_nodo(
-    db: AsyncSession, tenant_id: uuid.UUID, punto_venta_id: uuid.UUID
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    punto_venta_id: uuid.UUID,
+    accion: str = "emití",
 ) -> None:
-    """422 si el PV no puede numerar en ESTA punta (nodo o nube)."""
+    """422 si el PV no puede operarse en ESTA punta (nodo o nube). `accion`
+    personaliza el mensaje de la nube: emitir un documento nuevo ("emití") o
+    tocar uno existente del nodo ("cobrá"/"anulá" — regla MANUAL-NODO §5:
+    los documentos del nodo se cobran y anulan en el nodo, si no el próximo
+    re-upload pisa el cambio por LWW)."""
     if settings.es_nodo:
         from app.services.sync_nodo import pvs_del_nodo
 
@@ -60,7 +67,7 @@ async def validar_pv_nodo(
         raise HTTPException(
             status_code=422,
             detail=f"Punto de venta operado por el nodo de sucursal «{nodo.nombre}» "
-            "— emití desde el nodo, o revocá el nodo en Configuración",
+            f"— {accion} desde el nodo, o revocá el nodo en Configuración",
         )
 
 

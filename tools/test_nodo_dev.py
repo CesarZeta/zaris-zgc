@@ -554,6 +554,48 @@ def main():
           st == 200 and det["ignoradas"] == 1 and det["aplicadas"] == 0,
           f"{st} {det}")
 
+    # ===== 13-quater. cobranza cruzada BLOQUEADA en la nube (MANUAL-NODO §5) =====
+    # presupuesto del nodo (tipo PRE: no toca la numeración FB que asertan las
+    # secciones 14 y de revocación) para probar la anulación cruzada
+    st, pres = _req("POST", nodo, "/ventas/comprobantes", tok_n, {
+        "clase": "presupuesto", "punto_venta_id": pv_nodo["id"],
+        "items": [{"descripcion": "Presu LAN", "cantidad": "1",
+                   "precio_unitario": "10"}],
+    })
+    st, pres_e = _req("POST", nodo, f"/ventas/comprobantes/{pres['id']}/emitir", tok_n, {})
+    check("presupuesto emitido en el nodo -> 200", st == 200, f"{st} {pres_e}")
+    st, _ = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("presupuesto del nodo convergió a la nube",
+          n_nube(f"select estado from comprobantes where id='{pres['id']}'") == "emitido")
+    st, det = _req("POST", nube, "/cobranzas/recibos", tok, {
+        "punto_venta_id": pv_nube["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": "1"}],
+        "imputaciones": [{"comprobante_id": fcc["id"], "importe": "1"}],
+    })
+    check("nube: recibo imputando la factura del nodo -> 422 (se cobra en el nodo)",
+          st == 422 and "nodo" in str(det).lower(), f"{st} {det}")
+    st, rec_nube = _req("POST", nube, "/cobranzas/recibos", tok, {
+        "punto_venta_id": pv_nube["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": "5"}],
+    })
+    check("nube: recibo a cuenta con su propio PV -> 201 (control)",
+          st in (200, 201), f"{st} {rec_nube}")
+    st, det = _req("POST", nube, "/cobranzas/imputaciones", tok, {
+        "recibo_id": rec_nube["id"], "comprobante_id": fcc["id"], "importe": "1"})
+    check("nube: imputación suelta contra la deuda del nodo -> 422",
+          st == 422 and "nodo" in str(det).lower(), f"{st} {det}")
+    st, det = _req("POST", nube, f"/cobranzas/recibos/{rec['id']}/anular", tok, {})
+    check("nube: anular el recibo del nodo -> 422", st == 422
+          and "nodo" in str(det).lower(), f"{st} {det}")
+    st, det = _req("POST", nube, f"/cobranzas/recibos/{rec_nube['id']}/anular", tok, {})
+    check("nube: anular su propio recibo -> 200 (control)", st == 200, f"{st} {det}")
+    st, det = _req("POST", nube, f"/ventas/comprobantes/{pres['id']}/anular", tok, {})
+    check("nube: anular el presupuesto del nodo -> 422", st == 422
+          and "nodo" in str(det).lower(), f"{st} {det}")
+    st, det = _req("POST", nodo, f"/ventas/comprobantes/{pres['id']}/anular", tok_n, {})
+    check("nodo: anular su presupuesto -> 200 (autoridad del origen)",
+          st == 200, f"{st} {det}")
+
     # ===== 14. N2 — CAE diferido (corte de ARCA simulado por hook) =====
     st, _ = lanzar_nodo("ARCA_SIMULAR_CAIDA=1\n")
     check("nodo relanzado con ARCA caída (hook de prueba)", st == 200, f"{st}")

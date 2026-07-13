@@ -160,6 +160,9 @@ async def _deuda_bloqueada(
         raise HTTPException(
             status_code=422, detail="Solo se imputan facturas/ND emitidas"
         )
+    # cobranza cruzada (MANUAL-NODO §5): una deuda nacida en el nodo se cobra
+    # EN el nodo — si no, el próximo re-upload pisa el saldo por LWW
+    await validar_pv_nodo(db, tenant_id, comp.punto_venta_id, accion="cobrá")
     return comp
 
 
@@ -357,6 +360,7 @@ async def anular_recibo(
         raise HTTPException(status_code=404, detail="Recibo no encontrado")
     if recibo.estado != "emitido":
         raise HTTPException(status_code=409, detail="El recibo ya está anulado")
+    await validar_pv_nodo(db, usuario.tenant_id, recibo.punto_venta_id, accion="anulá")
 
     # anulación NO destructiva (014): las imputaciones se marcan con fecha
     # cierta, nunca se borran — la reversión contable queda reconstruible
@@ -416,6 +420,7 @@ async def imputar(
         )
         if recibo is None:
             raise HTTPException(status_code=404, detail="Recibo no encontrado")
+        await validar_pv_nodo(db, usuario.tenant_id, recibo.punto_venta_id, accion="imputá")
         if recibo.cliente_id != deuda.cliente_id:
             raise HTTPException(status_code=422, detail="Recibo y deuda de clientes distintos")
         disponible = recibo.total - recibo.aplicado - recibo.rechazado_total
@@ -441,6 +446,7 @@ async def imputar(
         )
         if tipo.signo_cta_cte != -1:
             raise HTTPException(status_code=422, detail="El crédito debe ser una NC emitida")
+        await validar_pv_nodo(db, usuario.tenant_id, credito.punto_venta_id, accion="imputá")
         if credito.cliente_id != deuda.cliente_id:
             raise HTTPException(status_code=422, detail="NC y deuda de clientes distintos")
         if body.importe > credito.saldo:

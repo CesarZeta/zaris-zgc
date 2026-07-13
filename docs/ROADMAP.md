@@ -859,14 +859,24 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
   nube es autoridad sobre sus propios PV). Verificado: suite única del nodo
   **95/95** (87 previas + 8 nuevas: recibos en ambas puntas + lotes forjados
   por handshake directo) + regresiones F11 35/35 y mini-014 53/53.
+- [x] **Cobranza cruzada BLOQUEADA** (2026-07-13, edge 1 del cierre de N2 —
+  la regla operativa de MANUAL-NODO §5 ahora la aplica el sistema): la nube
+  responde 422 al intentar tocar un documento cuyo PV lo opera un nodo
+  activo — imputar una deuda del nodo (`_deuda_bloqueada`: cubre el recibo
+  con imputaciones y la imputación suelta), usar como fuente un recibo a
+  cuenta o una NC del nodo, anular un recibo del nodo, y anular un interno
+  del nodo (`anular_interno`). `validar_pv_nodo` ganó el parámetro `accion`
+  para el mensaje (cobrá/imputá/anulá desde el nodo). Revocar el nodo libera
+  todo (la nube retoma la gestión). N3 puede REEMPLAZAR esta guarda por una
+  reconciliación real de cobranzas cruzadas si el piloto la necesita.
+  Verificado: suite única **104/104** (9 casos nuevos: cruces bloqueados +
+  controles de no-bloqueo en ambas puntas) + regresiones F11 35/35,
+  mini-014 53/53 y F8 31/31.
 - [ ] **N3 — Robustez y extras** (gestión local ampliada, comandas resto
-  centralizadas, CAEA, updates automáticos): espera piloto multi-caja real.
-  **Edge conocido que N3 debe cerrar** (registrado al cierre de N2):
-  *cobranza cruzada* — si la NUBE imputa un pago contra una factura nacida
-  en el nodo, el próximo re-upload del nodo puede pisar ese saldo por LWW;
-  en N2 la regla operativa es "los documentos del nodo se cobran en el nodo"
-  (MANUAL-NODO §5). Los otros dos edges del cierre (validación de PV en la
-  subida y guarda de recibos) se cerraron el 2026-07-13 (ítem anterior).
+  centralizadas, CAEA, updates automáticos, y reconciliación de cobranza
+  cruzada si el piloto necesita cobrar documentos del nodo en la nube):
+  espera piloto multi-caja real. Los tres edges registrados al cierre de N2
+  quedaron cerrados el 2026-07-13 (dos ítems anteriores).
 - **Verificaciones pendientes de F13-LAN** (para el arranque del piloto):
   `tools/nodo/instalar_nodo.ps1` NUNCA corrió de punta a punta en una PC
   limpia (la suite levanta uvicorn directo: no ejercita schtasks, firewall

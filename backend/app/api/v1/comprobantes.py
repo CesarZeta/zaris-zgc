@@ -1039,6 +1039,7 @@ async def anular_interno(
         )
     if comp.estado != "emitido":
         raise HTTPException(status_code=409, detail="Solo se anulan documentos emitidos")
+    await validar_pv_nodo(db, usuario.tenant_id, comp.punto_venta_id, accion="anulá")
     if comp.tipo.clase == "remito" and comp.actualiza_stock:
         await _mover_stock(db, comp, usuario.id, +1, "anulacion")
     comp.estado = "anulado"
