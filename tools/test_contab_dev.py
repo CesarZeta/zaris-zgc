@@ -33,11 +33,17 @@ NUM6 = f"{int(SUF, 16) % 1_000_000:06d}"
 
 
 def _cuit_valido(base10: str) -> str:
+    # dv == 10 NO existe como CUIT (mapearlo a 9 da un DV inválido y el alta
+    # revienta con 422 una de cada ~11 corridas): variar la base y reintentar
     mult = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-    s = sum(int(base10[i]) * mult[i] for i in range(10))
-    dv = 11 - (s % 11)
-    dv = 0 if dv == 11 else (9 if dv == 10 else dv)
-    return base10 + str(dv)
+    while True:
+        s = sum(int(base10[i]) * mult[i] for i in range(10))
+        dv = 11 - (s % 11)
+        if dv == 11:
+            dv = 0
+        if dv != 10:
+            return base10 + str(dv)
+        base10 = base10[:9] + str((int(base10[9]) + 1) % 10)
 
 
 def _req(method, base, path, token=None, body=None):

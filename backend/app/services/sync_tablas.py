@@ -35,6 +35,10 @@ from app.models import (
     Atributo,
     AtributoValor,
     Cliente,
+    Comprobante,
+    ComprobanteAlicuota,
+    ComprobanteItem,
+    ComprobanteVencimiento,
     CondicionVenta,
     Cotizacion,
     Deposito,
@@ -42,17 +46,22 @@ from app.models import (
     EntidadContacto,
     EntidadDomicilio,
     Familia,
+    Imputacion,
     Marca,
     Numeracion,
     PosBalanzaConfig,
     PosCaja,
     PosMesa,
     PosSalon,
+    PosSesion,
     Proveedor,
     Provincia,
     PuntoVenta,
+    Recibo,
+    ReciboMedio,
     Rol,
     RolPermiso,
+    StockMovimiento,
     Subfamilia,
     Sucursal,
     Tenant,
@@ -60,6 +69,7 @@ from app.models import (
     Unidad,
     Usuario,
     Vendedor,
+    VentaMedio,
     Zona,
 )
 
@@ -112,6 +122,71 @@ TABLAS_SYNC: list[TablaSync] = [
 POR_NOMBRE: dict[str, TablaSync] = {t.nombre: t for t in TABLAS_SYNC}
 
 
+# ===== Subida nodo → nube (N2, "el origen manda") =====
+#
+# El outbox SON las tablas transaccionales: todas sus filas nacen en el nodo
+# (las transacciones nunca replican hacia abajo) y el UUID es la clave de
+# idempotencia — no hace falta una cola de eventos aparte (evita el
+# doble-write transacción+evento). Checkpoint por tabla:
+#   mutable=True  → filtro por updated_at (trigger de la 024) y upsert LWW
+#                   en la nube (solo pisa si el updated_at entrante es ≥).
+#   mutable=False → insert-only: filtro por created_at y DO NOTHING.
+# La paginación SIEMPRE es keyset por (created_at, id): created_at es
+# inmutable (páginas estables aunque cambie updated_at a mitad de la pasada)
+# y ordena padres antes que hijos en los self-FK (una NC espejo nunca llega
+# a la nube antes que su factura asociada).
+#
+# `hijos`: filas sin timestamps propios (items/alícuotas/vencimientos/medios
+# de recibo) viajan ANIDADAS con su padre en cada re-subida; la nube las
+# inserta DO NOTHING (inmutables). `efecto_stock`: el agregado articulo_stock
+# de la nube NO se pisa — se le aplica el delta de cada movimiento NUEVO
+# (exactamente una vez, vía RETURNING del insert).
+
+
+@dataclass(frozen=True)
+class TablaSubida:
+    nombre: str
+    modelo: type
+    mutable: bool
+    hijos: tuple = ()  # (nombre_tabla, modelo, fk_attr) — anidados con el padre
+    excluir: frozenset = frozenset()  # columnas que no viajan (XML deferred)
+    efecto_stock: bool = False  # delta sobre articulo_stock al insertar en nube
+    # filtro extra del lado nodo: los borradores no viajan (pueden borrarse)
+    solo_no_borrador: bool = False
+
+
+TABLAS_SUBIDA: list[TablaSubida] = [
+    TablaSubida("pos_sesiones", PosSesion, mutable=True),
+    TablaSubida(
+        "comprobantes",
+        Comprobante,
+        mutable=True,
+        hijos=(
+            ("comprobante_items", ComprobanteItem, "comprobante_id"),
+            ("comprobante_alicuotas", ComprobanteAlicuota, "comprobante_id"),
+            ("comprobante_vencimientos", ComprobanteVencimiento, "comprobante_id"),
+        ),
+        # los XML de WSFEv1 quedan como auditoría local del nodo (deferred +
+        # pesados; leerlos acá exigiría undefer en cada pasada)
+        excluir=frozenset({"arca_request", "arca_response"}),
+        solo_no_borrador=True,
+    ),
+    TablaSubida("venta_medios", VentaMedio, mutable=False),
+    TablaSubida(
+        "recibos", Recibo, mutable=True,
+        hijos=(("recibo_medios", ReciboMedio, "recibo_id"),),
+    ),
+    TablaSubida("imputaciones", Imputacion, mutable=True),
+    TablaSubida("stock_movimientos", StockMovimiento, mutable=False, efecto_stock=True),
+    # espejo LWW de la numeración del nodo: la nube retoma la secuencia sola
+    # al revocar (las filas de PVs de la nube que vinieron en la semilla viajan
+    # con updated_at viejo y el LWW impide pisar valores más nuevos)
+    TablaSubida("numeracion", Numeracion, mutable=True),
+]
+
+SUBIDA_POR_NOMBRE: dict[str, TablaSubida] = {t.nombre: t for t in TABLAS_SUBIDA}
+
+
 def columnas(modelo: type) -> dict[str, object]:
     """{nombre_attr: Column} del modelo (attr y columna comparten nombre en ZGC)."""
     return {c.key: c for c in sa_inspect(modelo).columns}
@@ -121,10 +196,12 @@ def pk_columnas(modelo: type) -> list[str]:
     return [c.key for c in sa_inspect(modelo).primary_key]
 
 
-def serializar_fila(modelo: type, obj) -> dict:
+def serializar_fila(modelo: type, obj, excluir: frozenset = frozenset()) -> dict:
     """ORM → dict JSON-friendly (UUID/Decimal → str, fechas → ISO)."""
     fila: dict = {}
     for key in columnas(modelo):
+        if key in excluir:
+            continue
         valor = getattr(obj, key)
         if isinstance(valor, uuid.UUID):
             valor = str(valor)

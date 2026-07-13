@@ -1,8 +1,8 @@
-# ZGC — Manual del Nodo de Sucursal (F13-LAN N1)
+# ZGC — Manual del Nodo de Sucursal (F13-LAN N1 + N2)
 
-> Estado: **N1 en producción** (2026-07-12). Diseño completo en
+> Estado: **N1 + N2 en producción** (2026-07-13). Diseño completo en
 > `DISENO-NODO-LAN.md`. Este manual cubre instalación, conexión de cajas y
-> operación de la sub-fase N1 (nodo mínimo con réplica de bajada).
+> operación: réplica de bajada, sincronización de subida y CAE diferido.
 
 ## 1. Qué es
 
@@ -20,18 +20,16 @@ de la LAN. Con el nodo:
   son **exclusivos del nodo**: la nube se niega a emitir con ellos (422) para
   que la numeración nunca colisione.
 
-### Alcance de N1 (importante)
+### Alcance (N1 + N2 operativos)
 
-| Ya funciona (N1) | Llega en N2/N3 |
+| Ya funciona | Llega en N3 |
 |---|---|
-| Réplica de bajada continua (nube → nodo) | **Subida** de ventas/movimientos a la nube (cola `sync_eventos`) |
-| POS + facturación de gestión con PV propio, offline | CAE diferido al reconectar (hoy: modo `simulado` factura offline; con cert real la emisión fiscal requiere internet) |
-| Maestros de solo lectura en el nodo (403 en escrituras) | Gestión local completa (compras, bancos…) |
-| Monitoreo básico (última conexión/réplica en Configuración → Nodos) | Updates automáticos del nodo |
-
-En N1 las ventas del nodo **quedan en la base local** (no suben solas
-todavía). Para un piloto: el nodo es la autoridad de su sucursal y la nube ve
-el resto; la consolidación llega con N2.
+| Réplica de bajada continua (nube → nodo) de maestros y precios | Gestión local completa (compras, bancos…) |
+| **Subida automática a la nube**: ventas POS y de gestión, NC, recibos, sesiones/arqueos, kardex y numeración convergen solos al reconectar (idempotente; el stock de la nube se ajusta por deltas, nunca se pisa) | Comandas del POS resto centralizadas (hoy quedan locales; la venta final SÍ sube) |
+| **CAE diferido**: con ARCA caída la caja emite igual (ticket con leyenda "pendiente de autorización", sin QR) y el nodo pide el CAE retroactivo al reconectar, en orden de numeración | CAEA (anticipo quincenal) para cortes largos |
+| POS + facturación de gestión con PV propio, offline | Updates automáticos del nodo |
+| Maestros de solo lectura en el nodo (403 en escrituras) | |
+| Monitoreo en Configuración → Nodos: última conexión/réplica + atraso (filas por subir / comprobantes sin CAE) | |
 
 ## 2. Alta del nodo en la suite (una vez, desde la nube)
 
@@ -83,13 +81,17 @@ la nube, como siempre).
 - **Maestros**: se editan SOLO en la gestión de la nube; el nodo los replica
   (60 s). Cualquier intento de escritura de maestros en el nodo responde 403.
 - **Estado de la réplica**: `GET /api/v1/nodo/estado` (logueado) — última
-  réplica OK, último error, checkpoints por tabla. También en la nube:
-  Configuración → Nodos (última conexión / última réplica).
-- **Forzar una réplica**: `POST /api/v1/nodo/sync-ahora`.
+  réplica OK, último error, checkpoints por tabla, filas por subir y
+  comprobantes sin CAE. También en la nube: Configuración → Nodos (última
+  conexión / última réplica / atraso).
+- **Forzar un ciclo**: `POST /api/v1/nodo/sync-ahora` (CAE pendientes +
+  bajada + subida).
 - **Corte de internet**: el POS y la facturación local siguen; la réplica
-  reintenta sola. En modo ARCA `simulado` la emisión funciona offline; con
-  certificado real, la emisión fiscal del nodo requiere internet hasta que N2
-  traiga el CAE diferido.
+  reintenta sola y al volver la conexión todo converge en el mismo ciclo.
+  Si ARCA está caída (o no hay internet) los fiscales salen con la leyenda
+  "COMPROBANTE PENDIENTE DE AUTORIZACIÓN ANTE ARCA" y sin QR; el CAE llega
+  retroactivo. Si ARCA RECHAZA un comprobante emitido offline queda marcado
+  (`arca_resultado = R`) y visible en el monitoreo: resolución manual.
 - **Logs**: la tarea corre uvicorn; `schtasks /Query /TN "ZGC Nodo Sucursal"`.
 
 ## 6. Revocar / reinstalar / actualizar

@@ -1,9 +1,11 @@
 # ZGC — Diseño: Nodo LAN de sucursal y POS autónomo (F13-LAN)
 
-> Estado: **N1 IMPLEMENTADA Y EN PRODUCCIÓN (2026-07-12)** — aparejamiento,
-> réplica de bajada, perfil `nodo`, PV exclusivos e instalador Windows (suite
-> `tools/test_nodo_dev.py`, 52/52; manual operativo en `MANUAL-NODO.md`).
-> N2 (subida + CAE diferido) y N3 (robustez) pendientes. Origen: mandato de
+> Estado: **N1 + N2 IMPLEMENTADAS Y EN PRODUCCIÓN (2026-07-13)** — N1:
+> aparejamiento, réplica de bajada, perfil `nodo`, PV exclusivos, instalador
+> Windows. N2: subida idempotente nodo → nube ("el origen manda"), CAE
+> diferido con resolver al reconectar, espejo de numeración y monitoreo de
+> atraso. Suite `tools/test_nodo_dev.py` (87 checks N1+N2); manual operativo
+> en `MANUAL-NODO.md`. N3 (robustez y extras) pendiente. Origen: mandato de
 > César del 2026-07-11 (sesión post-F12) que baja a tierra la arquitectura
 > híbrida declarada el día 1 (CLAUDE.md §3, decisión "online y red LAN" del
 > 2026-07-03).
@@ -124,13 +126,24 @@ todo sellado con `tenant_id`, las ventas POS con su sesión/caja, kardex con
   clientes, usuarios/roles/permisos, config de cajas/PV/balanza, salones/mesas.
   Borrado lógico viaja como update (`activo=false`) — los maestros del proyecto ya
   se inactivan, no se borran.
-- **Subida (nodo → nube), "el origen manda"**: cola de **eventos inmutables e
-  idempotentes** (`sync_eventos`: id UUID, tipo, payload JSONB, creado_at,
-  enviado_at). La nube aplica cada evento en su transacción con la MISMA maquinaria
-  de la suite (`emitir_core` etc. — regla §6 "reusar el núcleo") y responde ACK por
-  id; re-enviar un evento ya aplicado es un no-op (idempotencia por UUID). Suben:
-  ventas POS (con medios y sesión), movimientos de stock locales (ajustes,
-  transformaciones), sesiones/arqueos, comandas cerradas (resto).
+- **Subida (nodo → nube), "el origen manda"** (implementada en N2 con un
+  ajuste sobre este diseño): NO hay tabla `sync_eventos` — **el outbox SON las
+  tablas transaccionales**: todas sus filas nacen en el nodo, el UUID es la
+  clave de idempotencia y el checkpoint por tabla (`updated_at` con trigger
+  para documentos mutables / `created_at` para insert-only) evita el
+  doble-write transacción+evento. La nube (`POST /sync/subida`) aplica cada
+  lote en una transacción: documentos mutables por **LWW** (`updated_at` más
+  nuevo gana: comprobantes con saldo/estado/CAE, recibos, sesiones,
+  imputaciones), hijos sin timestamps anidados con su padre (items/alícuotas/
+  vencimientos/medios, DO NOTHING), y los AGREGADOS nunca se pisan: el
+  `articulo_stock` de la nube converge aplicando el **delta** de cada
+  movimiento nuevo (exactamente una vez, vía RETURNING). La `numeracion` del
+  nodo sube como espejo LWW: al revocar, la nube retoma la secuencia sola.
+  Paginación keyset por `(created_at, id)` — inmutable ⇒ páginas estables y
+  padres antes que hijos en los self-FK (la NC espejo nunca llega antes que
+  su factura). Suben: ventas POS (con medios y sesión), facturación de
+  gestión, NC, recibos e imputaciones, kardex, sesiones/arqueos y numeración.
+  Comandas resto quedan locales (van con "resto offline completo" de N3).
 - **Conflictos**: maestros no se editan en el nodo (readonly local, se editan en la
   gestión de la nube) → no hay conflicto de maestros en v1. Transacciones son
   inserciones inmutables con UUID → no hay conflicto posible, solo duplicado
@@ -162,7 +175,7 @@ todo sellado con `tenant_id`, las ventas POS con su sesión/caja, kardex con
 | Sub-fase | Contenido | Criterio de listo |
 |---|---|---|
 | **N1 — Nodo mínimo** | Perfil `nodo` del backend, instalador Windows, aparejamiento (`sucursal_nodos` + token), réplica de bajada de maestros, POS servido por el nodo (el login POS ya existe) + **facturación de gestión con el PV propio del nodo** (§0-bis) | Una caja de la LAN vende contra el nodo con precios/artículos replicados, y el nodo factura desde Ventas con su PV (aunque nada suba solo todavía) |
-| **N2 — Sincronización completa** | Cola `sync_eventos` idempotente de subida, CAE diferido al reconectar, monitoreo del nodo en Configuración (last_seen, atraso de cola) | Corte de internet de horas: la sucursal vende, stock y ventas convergen al reconectar, CAE otorgado retroactivo |
+| **N2 — Sincronización completa** ✅ (2026-07-13) | Subida idempotente por checkpoint (sin cola: el outbox son las tablas, ver §5), CAE diferido al reconectar (resolver en el ciclo, `ErrorConexionArca` + fallback en `emitir_core`), monitoreo del nodo en Configuración (last_seen, atraso de subida, sin-CAE) | **CUMPLIDO** — suite 87/87: la sucursal vende con ARCA caída (reinicio real del nodo), stock/ventas/saldos convergen al reconectar (idempotente, deltas), CAE otorgado retroactivo y espejado a la nube |
 | **N3 — Robustez y extras** | **Gestión local ampliada (el "extra" de §0-bis: compras, cta. cte. offline…)**, CAEA evaluado, resto/carnicería offline completos, updates automáticos del nodo | Piloto multi-caja real corriendo semanas sin intervención |
 
 ~~El login POS dedicado puede adelantarse como pieza suelta en la nube~~ →

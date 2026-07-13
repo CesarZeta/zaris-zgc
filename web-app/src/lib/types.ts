@@ -300,6 +300,8 @@ export interface NodoSucursal {
   last_seen_at: string | null;
   last_sync_at: string | null;
   version_app: string | null;
+  subida_pendientes: number;
+  cae_pendientes: number;
   created_at: string;
 }
 

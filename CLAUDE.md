@@ -249,6 +249,10 @@ ZGC/
   (`services/contabilidad.py`); ningún módulo postea asientos en línea. Toda regla de
   `asiento_mapeos` DEBE tener fila default (clave NULL) — un origen sin fallback saltea
   asientos con warning (mordió con los débitos de extracto importado).
+- **Tras un upsert por Core (`pg_insert`), `db.get()` en la MISMA sesión devuelve
+  la instancia VIEJA** (F13-LAN N2, bug real en los checkpoints de sync): el insert
+  de Core no actualiza el identity map del ORM. Para releer un valor recién escrito
+  por Core usar select de COLUMNAS (`select(Modelo.campo)`), que siempre va a la DB.
 - **Marcas de "ya procesado" se DERIVAN, nunca mutan el documento fuente** (F11,
   extensión del contrato de inmutabilidad): un documento está liquidado/exportado/
   procesado si existe un ítem VIVO del documento procesador que lo referencia
@@ -341,6 +345,11 @@ ZGC/
   un `cat >> archivo << 'EOF'` con contenido largo cortó con "unexpected EOF while
   looking for matching quote". Misma regla que los pipelines de PowerShell: todo
   contenido de archivo se escribe con Write/Edit, el shell no toca archivos del repo.
+- **CUIT sintético en fixtures: si el DV calculado da 10, ese CUIT NO EXISTE** —
+  mapearlo a 9 (el atajo que traían 3 suites) produce un DV inválido y el alta
+  revienta con 422 una de cada ~11 corridas (mordió en la regresión de N2). El
+  helper correcto varía la base y recalcula hasta que dv ≠ 10 (ya corregido en
+  `test_f9_dev`/`test_contab_dev`/`test_fase8_dev` — copiar de ahí).
 - **NUNCA recortar la salida de una suite con `| Select-Object -First N`** (lote
   diferidos 2026-07-11): al recibir N objetos PowerShell cierra el pipe y MATA el
   proceso upstream a mitad de corrida — la suite parece crashear (exit 255,

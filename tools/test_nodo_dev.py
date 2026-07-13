@@ -1,15 +1,20 @@
-r"""Suite en vivo del NODO DE SUCURSAL (F13-LAN N1) contra DEV.
+r"""Suite en vivo del NODO DE SUCURSAL (F13-LAN N1 + N2) contra DEV.
 
 Orquesta DOS backends: la "nube" dev de siempre en :8021 (debe estar corriendo
-con la migración 023 aplicada) y un NODO real en :8022 que esta suite levanta
-con perfil `nodo` contra una base local propia (zgc_nodo_test, recreada por
-psql en cada corrida y con TODAS las migraciones aplicadas).
+con las migraciones 023/024 aplicadas) y un NODO real en :8022 que esta suite
+levanta con perfil `nodo` contra una base local propia (zgc_nodo_test,
+recreada por psql en cada corrida y con TODAS las migraciones aplicadas).
 
-Cubre el criterio de listo de N1 (DISENO-NODO-LAN.md §7): aparejamiento con
-token de una sola vez, réplica de bajada (incremental + snapshot con poda +
-semilla inicial), una caja de la LAN vendiendo contra el nodo con maestros
-replicados, la facturación de gestión con el PV propio del nodo, la
-exclusividad de PV en ambas puntas y la revocación.
+Cubre los criterios de listo de N1 y N2 (DISENO-NODO-LAN.md §7):
+- N1: aparejamiento con token de una sola vez, réplica de bajada (incremental
+  + snapshot con poda + semilla inicial), una caja de la LAN vendiendo contra
+  el nodo con maestros replicados, la facturación de gestión con el PV propio
+  del nodo, la exclusividad de PV en ambas puntas y la revocación.
+- N2: la SUBIDA — ventas POS/gestión, sesiones, NC, recibos, imputaciones y
+  kardex del nodo convergen en la nube (idempotente por UUID, stock por
+  deltas, saldos con autoridad del origen) y el CAE DIFERIDO: con ARCA caída
+  (hook ARCA_SIMULAR_CAIDA, reinicio real del proceso del nodo) la caja sigue
+  facturando sin CAE y el resolver lo obtiene retroactivo al reconectar.
 
 Uso:
     cd backend
@@ -138,7 +143,6 @@ def main():
     clave = f"clave-{SUF}"
     env_nodo = RAIZ / "backend" / ".env.nodo"
     log_nodo = RAIZ / "backend" / "uvicorn_nodo_test.log"
-    proc_nodo = None
 
     # ===== 0. base local del nodo: recrear + migraciones completas =====
     rc, _, err = psql("postgres", f'drop database if exists {DB_NODO} with (force)')
@@ -210,26 +214,47 @@ def main():
 
     # ===== 3. levantar el nodo =====
     url_nodo_db = re.sub(r"/[^/]+$", f"/{DB_NODO}", DEV["url"])
-    env_nodo.write_text(
-        f"ENV=nodo-test\nPERFIL=nodo\nDATABASE_URL={url_nodo_db}\n"
-        f"JWT_SECRET={secrets.token_hex(24)}\nNUBE_URL={args.base.rstrip('/')}\n"
-        f"NODO_ID={nodo_creado['id']}\nNODO_TOKEN={nodo_creado['token']}\n"
-        f"SYNC_INTERVALO_SEG=3600\nCORS_ORIGINS=http://localhost:5173\n",
-        encoding="utf-8",
-    )
-    log_f = open(log_nodo, "w", encoding="utf-8")
-    proc_nodo = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app",
-         "--host", "127.0.0.1", "--port", str(NODO_PORT)],
-        cwd=str(RAIZ / "backend"), stdout=log_f, stderr=subprocess.STDOUT,
-        env={**os.environ, "ENV_FILE": ".env.nodo"},
-    )
-    salud = None
-    for _ in range(40):
-        st, salud = _req("GET", f"http://127.0.0.1:{NODO_PORT}", "/health")
-        if st == 200:
-            break
-        time.sleep(1)
+    jwt_nodo = secrets.token_hex(24)
+    proceso: dict = {"p": None, "log": None}
+
+    def matar_nodo():
+        if proceso["p"] is not None:
+            proceso["p"].kill()
+            proceso["p"].wait(timeout=15)
+            proceso["p"] = None
+        if proceso["log"] is not None:
+            proceso["log"].close()
+            proceso["log"] = None
+
+    def lanzar_nodo(extra: str = "") -> tuple[int, dict]:
+        """(Re)escribe .env.nodo, levanta uvicorn :8022 y espera el health.
+        `extra` permite inyectar flags (ARCA_SIMULAR_CAIDA en el test de CAE
+        diferido — la config se lee al arrancar el proceso)."""
+        matar_nodo()
+        env_nodo.write_text(
+            f"ENV=nodo-test\nPERFIL=nodo\nDATABASE_URL={url_nodo_db}\n"
+            f"JWT_SECRET={jwt_nodo}\nNUBE_URL={args.base.rstrip('/')}\n"
+            f"NODO_ID={nodo_creado['id']}\nNODO_TOKEN={nodo_creado['token']}\n"
+            f"SYNC_INTERVALO_SEG=3600\nCORS_ORIGINS=http://localhost:5173\n"
+            + extra,
+            encoding="utf-8",
+        )
+        proceso["log"] = open(log_nodo, "a", encoding="utf-8")
+        proceso["p"] = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "app.main:app",
+             "--host", "127.0.0.1", "--port", str(NODO_PORT)],
+            cwd=str(RAIZ / "backend"), stdout=proceso["log"], stderr=subprocess.STDOUT,
+            env={**os.environ, "ENV_FILE": ".env.nodo"},
+        )
+        st_h, salud_h = 0, None
+        for _ in range(40):
+            st_h, salud_h = _req("GET", f"http://127.0.0.1:{NODO_PORT}", "/health")
+            if st_h == 200:
+                break
+            time.sleep(1)
+        return st_h, salud_h
+
+    st, salud = lanzar_nodo()
     check("nodo levanta con perfil nodo", st == 200 and salud.get("perfil") == "nodo",
           f"{st} {salud}")
 
@@ -388,6 +413,149 @@ def main():
     check("poda snapshot: el rol borrado desapareció del nodo",
           n_nodo(f"select count(*) from roles where id='{rol_nuevo}'") == "0")
 
+    # ===== 11. N2 — las transacciones del nodo CONVERGEN en la nube =====
+    # (los sync-ahora de la sección 9 ya corrieron la fase de subida)
+    def n_nube(sql):
+        return psql_valor(DEV["dbname"], sql)
+
+    st, det = _req("GET", nube, f"/ventas/comprobantes/{venta['id']}", tok)
+    check("venta POS del nodo visible en la nube (mismo id/numero/total)",
+          st == 200 and det["numero"] == venta["numero"]
+          and det["total"] == venta["total"] and det["estado"] == "emitido",
+          f"{st} {det}")
+    check("medios de la venta subieron",
+          n_nube(f"select count(*) from venta_medios where comprobante_id='{venta['id']}'")
+          == "1")
+    check("sesión POS del nodo subió (abierta)",
+          n_nube(f"select estado from pos_sesiones where id='{sesion['id']}'") == "abierta")
+    check("kardex del nodo subió (movimiento de la venta)",
+          n_nube(f"select count(*) from stock_movimientos where grupo_id='{venta['id']}'")
+          == "1")
+    check("stock de la NUBE convergió por delta (-1)",
+          n_nube(f"select cantidad from articulo_stock where articulo_id='{art['id']}'")
+          == "-1.000")
+    st, det = _req("GET", nube, f"/ventas/comprobantes/{emitido['id']}", tok)
+    check("factura de gestión del nodo (PV propio) visible en la nube nro 1",
+          st == 200 and det["numero"] == 1, f"{st} {det}")
+
+    def conteos_nube():
+        return (
+            n_nube(f"select count(*) from comprobantes where tenant_id='{tenant_id}'"),
+            n_nube(f"select count(*) from stock_movimientos where tenant_id='{tenant_id}'"),
+            n_nube(f"select count(*) from venta_medios where tenant_id='{tenant_id}'"),
+        )
+
+    antes = conteos_nube()
+    st, _ = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("idempotencia: re-sync no duplica filas", st == 200 and antes == conteos_nube(),
+          f"{antes} vs {conteos_nube()}")
+    check("idempotencia: el delta de stock no se re-aplica",
+          n_nube(f"select cantidad from articulo_stock where articulo_id='{art['id']}'")
+          == "-1.000")
+
+    # ===== 12. N2 — NC espejo y cierre de sesión convergen =====
+    st, nc = _req("POST", nodo, f"/ventas/comprobantes/{venta['id']}/nota-credito", tok_n, {})
+    check("NC espejo en el nodo -> borrador", st == 200 and nc["estado"] == "borrador",
+          f"{st} {nc}")
+    st, nc_emitida = _req("POST", nodo, f"/ventas/comprobantes/{nc['id']}/emitir", tok_n, {})
+    check("NC emitida en el nodo", st == 200, f"{st} {nc_emitida}")
+    check("stock del nodo devuelto (0)",
+          n_nodo(f"select cantidad from articulo_stock where articulo_id='{art['id']}'")
+          == "0.000")
+    st, _ = _req("POST", nodo, f"/pos/sesiones/{sesion['id']}/cerrar", tok_caja,
+                 {"efectivo_contado": None})
+    check("cierre de sesión POS en el nodo -> 200", st == 200, f"{st}")
+    st, _ = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("NC del nodo convergió emitida",
+          n_nube(f"select estado from comprobantes where id='{nc['id']}'") == "emitido")
+    check("stock de la nube devuelto por delta (0)",
+          n_nube(f"select cantidad from articulo_stock where articulo_id='{art['id']}'")
+          == "0.000")
+    check("cierre de sesión convergió (LWW del documento mutable)",
+          n_nube(f"select estado from pos_sesiones where id='{sesion['id']}'") == "cerrada")
+
+    # ===== 13. N2 — cta. cte.: factura + recibo del nodo convergen =====
+    st, cli = _req("POST", nube, "/clientes", tok,
+                   {"entidad": {"razon_social": f"Cliente Nodo {SUF}",
+                                "tipo_documento": "SD"}})
+    check("alta cliente en la nube -> 201", st in (200, 201), f"{st} {cli}")
+    st, _ = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("cliente replicó al nodo (bajada)",
+          n_nodo(f"select count(*) from clientes where id='{cli['id']}'") == "1")
+    st, fcc = _req("POST", nodo, "/ventas/comprobantes", tok_n, {
+        "clase": "factura", "punto_venta_id": pv_nodo["id"], "cliente_id": cli["id"],
+        "contado": False,
+        "items": [{"descripcion": "Venta cta cte", "cantidad": "1",
+                   "precio_unitario": "1000"}],
+    })
+    st, fcc_e = _req("POST", nodo, f"/ventas/comprobantes/{fcc['id']}/emitir", tok_n, {})
+    check("factura cta cte del nodo: saldo = total",
+          st == 200 and fcc_e["saldo"] == fcc_e["total"] and float(fcc_e["total"]) > 0,
+          f"{st} {fcc_e}")
+    st, rec = _req("POST", nodo, "/cobranzas/recibos", tok_n, {
+        "punto_venta_id": pv_nodo["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": fcc_e["total"]}],
+        "imputaciones": [{"comprobante_id": fcc["id"], "importe": fcc_e["total"]}],
+    })
+    check("recibo en el nodo -> 201", st in (200, 201), f"{st} {rec}")
+    st, _ = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("la factura convergió con saldo 0 (autoridad del origen)",
+          n_nube(f"select saldo from comprobantes where id='{fcc['id']}'") == "0.00")
+    check("recibo + imputación en la nube",
+          n_nube(f"select count(*) from recibos where id='{rec['id']}'") == "1"
+          and n_nube(f"select count(*) from imputaciones where recibo_id='{rec['id']}'")
+          == "1")
+
+    # ===== 14. N2 — CAE diferido (corte de ARCA simulado por hook) =====
+    st, _ = lanzar_nodo("ARCA_SIMULAR_CAIDA=1\n")
+    check("nodo relanzado con ARCA caída (hook de prueba)", st == 200, f"{st}")
+    st, ses2 = _req("POST", nodo, "/pos/sesiones", tok_caja,
+                    {"caja_id": caja_lan["id"], "fondo_inicial": "0"})
+    check("nueva sesión POS tras el reinicio -> 201", st == 201, f"{st} {ses2}")
+    st, venta2 = _req("POST", nodo, "/pos/ventas", tok_caja, {
+        "sesion_id": ses2["id"],
+        "items": [{"articulo_id": art["id"], "cantidad": "1"}],
+        "medios": [{"medio": "efectivo", "importe": "600.00"}],
+    })
+    check("venta POS con ARCA caída -> 201 (la caja NO se detiene)", st == 201,
+          f"{st} {venta2}")
+    check("comprobante local emitido SIN CAE",
+          n_nodo(f"select estado from comprobantes where id='{venta2['id']}'") == "emitido"
+          and n_nodo(f"select cae is null from comprobantes where id='{venta2['id']}'")
+          == "t")
+    st, imp = _req("GET", nodo, f"/ventas/comprobantes/{venta2['id']}/impresion", tok_caja)
+    check("ticket con leyenda PENDIENTE DE AUTORIZACIÓN y sin QR",
+          st == 200 and any("PENDIENTE" in ley for ley in imp["leyendas"])
+          and imp["qr_svg"] is None, f"{st} {imp.get('leyendas')}")
+    st, est2 = _req("GET", nodo, "/nodo/estado", tok_n)
+    check("estado del nodo: 1 CAE pendiente", st == 200 and est2["cae_pendientes"] == 1,
+          f"{st} {est2.get('cae_pendientes')}")
+    st, _ = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("la venta sin CAE igual subió a la nube",
+          n_nube(f"select cae is null from comprobantes where id='{venta2['id']}'") == "t")
+    st, nodos_l = _req("GET", nube, "/nodos", tok)
+    check("monitoreo en la nube: 1 sin CAE", st == 200
+          and nodos_l[0]["cae_pendientes"] == 1, f"{st} {nodos_l}")
+
+    st, _ = lanzar_nodo()  # ARCA "vuelve"
+    check("nodo relanzado sin la caída", st == 200, f"{st}")
+    st, r = _req("POST", nodo, "/nodo/sync-ahora", tok_n, {})
+    check("resolver: CAE otorgado retroactivo", st == 200 and r.get("cae_resueltos") == 1,
+          f"{st} {r}")
+    check("CAE (simulado) sellado en el nodo",
+          n_nodo(f"select cae from comprobantes where id='{venta2['id']}'")
+          == "99999999999999")
+    check("el CAE convergió a la nube en el mismo ciclo",
+          n_nube(f"select cae from comprobantes where id='{venta2['id']}'")
+          == "99999999999999")
+    st, nodos_l = _req("GET", nube, "/nodos", tok)
+    check("monitoreo en la nube: nodo al día", st == 200
+          and nodos_l[0]["cae_pendientes"] == 0 and nodos_l[0]["subida_pendientes"] == 0,
+          f"{st} {nodos_l}")
+    check("numeración del nodo espejada en la nube (FB del PV propio = 2)",
+          n_nube(f"select ultimo from numeracion where punto_venta_id='{pv_nodo['id']}'"
+                 f" and tipo_codigo='FB'") == "2")
+
     # ===== 10. revocación =====
     st, _ = _req("POST", nube, f"/nodos/{nodo_creado['id']}/revocar", tok, {})
     check("revocar nodo -> 200", st == 200, f"{st}")
@@ -396,13 +564,11 @@ def main():
           and "revocado" in str(det).lower(), f"{st} {det}")
     c = borrador_nube(pv_nodo["id"])
     st, det = _req("POST", nube, f"/ventas/comprobantes/{c['id']}/emitir", tok, {})
-    check("nube: el PV del nodo revocado emite de nuevo -> 200", st == 200, f"{st} {det}")
+    check("nube: el PV del nodo revocado emite CONTINUANDO la secuencia (nro 3)",
+          st == 200 and det.get("numero") == 3, f"{st} {det}")
 
     # ===== cleanup =====
-    if proc_nodo is not None:
-        proc_nodo.kill()
-        proc_nodo.wait(timeout=15)
-    log_f.close()
+    matar_nodo()
     psql("postgres", f"drop database if exists {DB_NODO} with (force)")
     env_nodo.unlink(missing_ok=True)
     log_nodo.unlink(missing_ok=True)

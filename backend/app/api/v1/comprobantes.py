@@ -45,7 +45,7 @@ from app.models import (
 )
 from app.services import stock_valor
 from app.services import ventas as sv
-from app.services.arca import ErrorArca, emitir_fiscal
+from app.services.arca import ErrorArca, ErrorConexionArca, emitir_fiscal
 from app.services.arca import qr as arca_qr
 from app.services.arca.wsaa import ErrorWsaa
 from app.services.arca.wsfev1 import ErrorWsfe
@@ -926,19 +926,34 @@ async def emitir_core(
         except ErrorArca as e:
             await db.rollback()
             raise HTTPException(status_code=422, detail=str(e))
+        except ErrorConexionArca as e:
+            # CAE DIFERIDO (F13-LAN N2, §6): en el NODO la caja no se detiene
+            # por un corte — el comprobante sale emitido con su numeración
+            # local (el PV es exclusivo del nodo: la secuencia es correcta por
+            # construcción), SIN CAE ni QR, y el resolver del ciclo de sync lo
+            # autoriza al reconectar. En la nube sigue siendo un error.
+            if not settings.es_nodo:
+                await db.rollback()
+                raise HTTPException(status_code=502, detail=f"Sin conexión con ARCA: {e}")
+            resultado = None
+            comp.numero = numero_local
+            comp.arca_observaciones = (
+                "CAE diferido: ARCA inalcanzable al emitir — se solicitará al reconectar"
+            )
         except (ErrorWsaa, ErrorWsfe) as e:
             await db.rollback()
             raise HTTPException(status_code=502, detail=f"Error de comunicación con ARCA: {e}")
-        comp.numero = resultado.numero
-        comp.cae = resultado.cae
-        comp.cae_vencimiento = resultado.cae_vencimiento
-        comp.arca_resultado = resultado.resultado
-        comp.arca_observaciones = resultado.observaciones or None
-        comp.arca_request = resultado.request_xml
-        comp.arca_response = resultado.response_xml
-        await sv.sincronizar_numero(
-            db, usuario.tenant_id, comp.punto_venta_id, comp.tipo_codigo, resultado.numero
-        )
+        if resultado is not None:
+            comp.numero = resultado.numero
+            comp.cae = resultado.cae
+            comp.cae_vencimiento = resultado.cae_vencimiento
+            comp.arca_resultado = resultado.resultado
+            comp.arca_observaciones = resultado.observaciones or None
+            comp.arca_request = resultado.request_xml
+            comp.arca_response = resultado.response_xml
+            await sv.sincronizar_numero(
+                db, usuario.tenant_id, comp.punto_venta_id, comp.tipo_codigo, resultado.numero
+            )
     else:
         comp.numero = numero_local
 
@@ -1262,6 +1277,9 @@ async def datos_impresion(
         leyendas.append("DOCUMENTO NO VÁLIDO COMO FACTURA")
     if es_simulado:
         leyendas.append("COMPROBANTE NO VÁLIDO — PRUEBA (MODO SIMULADO)")
+    if comp.tipo.fiscal and comp.estado == "emitido" and not comp.cae:
+        # CAE diferido (F13-LAN N2): emitido offline en el nodo, sin QR
+        leyendas.append("COMPROBANTE PENDIENTE DE AUTORIZACIÓN ANTE ARCA")
     transparencia = None
     if comp.tipo.fiscal and comp.letra != "A" and comp.receptor_condicion_iva == "CF":
         transparencia = {

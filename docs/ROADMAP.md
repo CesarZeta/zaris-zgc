@@ -810,10 +810,43 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
     ambas puntas, réplica continua incremental/snapshot/poda, revocación) +
     regresiones **23/23 (login POS) · 39/39 (F12-b) · 51/51 (F12-d) · 40/40
     (diferidos)** + build TS limpio.
-- [ ] **N2 — Sincronización completa** (cola `sync_eventos` de subida, CAE
-  diferido, monitoreo de atraso) y **N3 — Robustez** (gestión local ampliada,
-  CAEA, updates automáticos): prioridad vs. F12-bis Logística queda para la
-  próxima decisión de César.
+- [x] **N2 — Sincronización completa (EN PRODUCCIÓN 2026-07-13, elegida por
+  César sobre F12-bis)**:
+  - **Subida nodo → nube** («el origen manda», migración 024): SIN cola de
+    eventos — el outbox SON las tablas transaccionales (UUID = clave de
+    idempotencia, checkpoint por `updated_at`/`created_at` con triggers,
+    cero doble-write). `POST /sync/subida` aplica lotes en una transacción:
+    documentos mutables por **LWW** (comprobantes con saldo/estado/CAE,
+    recibos, sesiones, imputaciones), hijos anidados DO NOTHING, y el stock
+    de la nube converge por **delta de cada movimiento nuevo** (exactamente
+    una vez vía RETURNING) — el agregado jamás se pisa. Keyset por
+    `(created_at, id)`: páginas estables y padres antes que hijos (la NC
+    espejo nunca llega antes que su factura). Suben: ventas POS y de
+    gestión, NC, recibos/imputaciones, kardex, sesiones/arqueos y
+    **numeración como espejo LWW** (al revocar el nodo, la nube retoma la
+    secuencia sola — sin el espejo, el primer emitir post-revocación
+    colisionaba el UNIQUE: bug cazado por la suite).
+  - **CAE diferido** (§6 del diseño): `ErrorConexionArca` distingue red caída
+    de rechazo (mejora también la nube: 502 limpio en vez de 500); en el
+    nodo `emitir_core` emite igual con numeración local, SIN CAE ni QR y
+    leyenda «PENDIENTE DE AUTORIZACIÓN» en el ticket; el resolver del ciclo
+    pide el CAE retroactivo en orden de numeración (rechazo real ⇒ marca
+    `R` visible, sin reintentos infinitos). Hook `ARCA_SIMULAR_CAIDA` solo
+    para la suite.
+  - **Monitoreo**: el ping reporta atraso (filas por subir / sin CAE) →
+    columnas en Configuración → Nodos y en `GET /nodo/estado`.
+  - Verificado 2026-07-13: **suite única N1+N2 87/87** (`test_nodo_dev.py`:
+    convergencia completa venta POS/gestión/NC/recibo/sesión/kardex,
+    idempotencia de re-sync sin duplicados ni deltas dobles, saldos con
+    autoridad del origen, corte de ARCA con REINICIO REAL del proceso del
+    nodo y CAE retroactivo convergido, secuencia continuada tras revocar) +
+    regresiones **23/23 · 39/39 · 51/51 · 40/40 · F11 35/35 · mini-014
+    53/53** + build TS. Lecciones: `db.get` tras un upsert por Core devuelve
+    la instancia VIEJA del identity map (checkpoints fantasma); el fixture
+    `_cuit_valido` de 3 suites generaba DV inválido cuando dv=10 (flaky 1/11,
+    corregido).
+- [ ] **N3 — Robustez y extras** (gestión local ampliada, comandas resto
+  centralizadas, CAEA, updates automáticos): espera piloto multi-caja real.
 
 ## REDISEÑO UX DEL POS — terminal con marco de dispositivo ✅ (2026-07-12)
 

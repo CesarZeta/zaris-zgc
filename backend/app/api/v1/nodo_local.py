@@ -12,7 +12,14 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.permisos import requiere_alguno
 from app.models import SyncCheckpoint, Usuario
-from app.services.sync_nodo import VERSION_APP, ciclo_sync, contexto_nodo, estado_sync
+from app.services.sync_nodo import (
+    VERSION_APP,
+    ciclo_sync,
+    contar_cae_pendientes,
+    contar_subida_pendiente,
+    contexto_nodo,
+    estado_sync,
+)
 
 router = APIRouter(prefix="/nodo", tags=["nodo"])
 
@@ -33,6 +40,9 @@ async def estado_nodo(
         "ciclos_ok": estado_sync["ciclos_ok"],
         "ultimo_ok": estado_sync["ultimo_ok"],
         "ultimo_error": estado_sync["ultimo_error"],
+        # N2: atraso local (0 = al día con la nube / sin CAE esperando)
+        "subida_pendientes": await contar_subida_pendiente(db),
+        "cae_pendientes": await contar_cae_pendientes(db),
         "checkpoints": [
             {
                 "tabla": c.tabla,

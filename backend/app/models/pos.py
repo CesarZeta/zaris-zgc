@@ -77,6 +77,7 @@ class PosSesion(Base):
     diferencia: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     observaciones: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     caja: Mapped[PosCaja] = relationship(lazy="joined")
 

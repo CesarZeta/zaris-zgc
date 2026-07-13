@@ -34,6 +34,9 @@ class NodoOut(BaseModel):
     last_seen_at: datetime | None
     last_sync_at: datetime | None
     version_app: str | None
+    # monitoreo N2 (lo reporta el ping del ciclo): 0 = al día
+    subida_pendientes: int = 0
+    cae_pendientes: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}

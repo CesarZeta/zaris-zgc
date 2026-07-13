@@ -19,19 +19,30 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import delete, select, tuple_
+from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.models import PosCaja, SyncCheckpoint
-from app.services.sync_tablas import TABLAS_SYNC, TablaSync, fila_a_python, pk_columnas
+from app.models import ArcaConfig, Comprobante, PosCaja, SyncCheckpoint, TipoComprobante
+from app.services.arca import ErrorArca, ErrorConexionArca, emitir_fiscal
+from app.services.sync_tablas import (
+    TABLAS_SUBIDA,
+    TABLAS_SYNC,
+    TablaSubida,
+    TablaSync,
+    columnas,
+    fila_a_python,
+    pk_columnas,
+    serializar_fila,
+)
 
 log = logging.getLogger("zgc.sync_nodo")
 
-VERSION_APP = "n1.0"
+VERSION_APP = "n2.0"
 PAGINA = 500
+LOTE_SUBIDA = 200
 # tope defensivo para la poda por NOT IN (si una tabla snapshot creciera tanto,
 # antes hay que moverla a incremental — se loguea y no se poda)
 PODA_MAX_IDS = 20_000
@@ -139,12 +150,200 @@ async def _podar(db: AsyncSession, t: TablaSync, ids: list, tenant_id: uuid.UUID
     await db.execute(stmt)
 
 
+# ===== CAE diferido (N2 — DISENO-NODO-LAN.md §6) =====
+
+_FILTRO_CAE_PENDIENTE = (
+    Comprobante.estado == "emitido",
+    Comprobante.cae.is_(None),
+    # NULL = nunca respondió ARCA; 'R' = rechazado (queda visible, no reintenta)
+    Comprobante.arca_resultado.is_(None),
+    TipoComprobante.fiscal.is_(True),
+)
+
+
+def _stmt_cae_pendientes():
+    return (
+        select(Comprobante)
+        .join(TipoComprobante, Comprobante.tipo_codigo == TipoComprobante.codigo)
+        .where(*_FILTRO_CAE_PENDIENTE)
+    )
+
+
+async def contar_cae_pendientes(db: AsyncSession) -> int:
+    return (
+        await db.scalar(
+            select(func.count())
+            .select_from(Comprobante)
+            .join(TipoComprobante, Comprobante.tipo_codigo == TipoComprobante.codigo)
+            .where(*_FILTRO_CAE_PENDIENTE)
+        )
+    ) or 0
+
+
+async def resolver_cae_pendientes() -> tuple[int, int]:
+    """Pide el CAE de los comprobantes emitidos offline, en ORDEN de numeración
+    por PV/tipo (WSFEv1 exige secuencia; el PV exclusivo del nodo garantiza el
+    hueco). Devuelve (resueltos, pendientes_restantes). No depende de la nube:
+    solo de ARCA — corre ANTES del handshake en cada ciclo."""
+    resueltos = 0
+    async with SessionLocal() as db:
+        pendientes = (
+            await db.scalars(
+                _stmt_cae_pendientes().order_by(
+                    Comprobante.punto_venta_id, Comprobante.tipo_codigo, Comprobante.numero
+                )
+            )
+        ).all()
+        if not pendientes:
+            return 0, 0
+        config = await db.scalar(
+            select(ArcaConfig).where(ArcaConfig.tenant_id == pendientes[0].tenant_id)
+        )
+        for comp in pendientes:
+            asociado = None
+            if comp.comprobante_asociado_id is not None:
+                asociado = await db.scalar(
+                    select(Comprobante).where(Comprobante.id == comp.comprobante_asociado_id)
+                )
+            try:
+                resultado = await emitir_fiscal(db, comp, config, comp.numero, asociado)
+            except ErrorConexionArca:
+                break  # ARCA sigue inalcanzable: se reintenta el próximo ciclo
+            except ErrorArca as e:
+                # rechazo REAL de un comprobante ya impreso: se marca y queda
+                # visible en el monitoreo — resolución manual (no reintenta)
+                comp.arca_resultado = "R"
+                comp.arca_observaciones = f"CAE diferido RECHAZADO por ARCA: {e}"
+                await db.commit()
+                log.error("CAE diferido rechazado (%s %s): %s", comp.tipo_codigo, comp.numero, e)
+                continue
+            if resultado.numero != comp.numero:
+                # con PV exclusivo no debería pasar: alguien más numeró en ARCA
+                comp.arca_resultado = "R"
+                comp.arca_observaciones = (
+                    f"CAE diferido: ARCA esperaba el número {resultado.numero} y el "
+                    f"local es {comp.numero} — requiere revisión manual"
+                )
+                await db.commit()
+                log.error("CAE diferido: desfasaje de numeración en %s", comp.id)
+                continue
+            comp.cae = resultado.cae
+            comp.cae_vencimiento = resultado.cae_vencimiento
+            comp.arca_resultado = resultado.resultado
+            comp.arca_observaciones = resultado.observaciones or None
+            comp.arca_request = resultado.request_xml
+            comp.arca_response = resultado.response_xml
+            await db.commit()  # el trigger bumpea updated_at ⇒ re-sube al ciclo
+            resueltos += 1
+        restantes = await contar_cae_pendientes(db)
+    return resueltos, restantes
+
+
+# ===== Subida nodo → nube (N2, "el origen manda") =====
+
+
+async def _subir_tabla(
+    db: AsyncSession, client: httpx.AsyncClient, headers: dict, t: TablaSubida
+) -> int:
+    """Empuja las filas nuevas/modificadas de una tabla, paginadas keyset por
+    (created_at, id) — orden estable e inmutable, padres antes que hijos en
+    los self-FK. El checkpoint avanza recién con TODAS las páginas aceptadas."""
+    clave = f"subida:{t.nombre}"
+    # select de columna (no db.get): el checkpoint se escribe por Core upsert
+    # y el identity map de la sesión NO se entera — db.get devolvería la
+    # instancia vieja (bug real cazado por la suite: pendientes fantasma)
+    hasta = await db.scalar(
+        select(SyncCheckpoint.hasta).where(SyncCheckpoint.tabla == clave)
+    )
+    cols = columnas(t.modelo)
+    col_filtro = cols["updated_at" if t.mutable else "created_at"]
+    # keyset inmutable: (created_at, id) — o solo id si la tabla no tiene
+    # created_at (numeracion) y el orden padre-antes-que-hijo no aplica
+    orden = tuple(c for c in (cols.get("created_at"), cols["id"]) if c is not None)
+
+    stmt = select(t.modelo)
+    if hasta is not None:
+        # >= y no >: la fila tocada en el mismo instante del checkpoint no se
+        # pierde; re-enviar es no-op en la nube (DO NOTHING / LWW)
+        stmt = stmt.where(col_filtro >= hasta)
+    if t.solo_no_borrador:
+        stmt = stmt.where(cols["estado"] != "borrador")
+    stmt = stmt.order_by(*orden)
+
+    cursor: tuple | None = None
+    maximo = hasta
+    filas_total = 0
+    while True:
+        page = stmt
+        if cursor is not None:
+            page = page.where(tuple_(*orden) > cursor)
+        objetos = (await db.scalars(page.limit(LOTE_SUBIDA))).all()
+        if not objetos:
+            break
+        ids = [o.id for o in objetos]
+        hijos_por_tabla: dict[str, dict] = {}
+        for nombre_h, modelo_h, fk in t.hijos:
+            cols_h = columnas(modelo_h)
+            agrupados: dict = {}
+            for h in (await db.scalars(select(modelo_h).where(cols_h[fk].in_(ids)))).all():
+                agrupados.setdefault(getattr(h, fk), []).append(serializar_fila(modelo_h, h))
+            hijos_por_tabla[nombre_h] = agrupados
+        entradas = []
+        for o in objetos:
+            entrada: dict = {"fila": serializar_fila(t.modelo, o, excluir=t.excluir)}
+            if t.hijos:
+                entrada["hijos"] = {
+                    nombre_h: hijos_por_tabla[nombre_h].get(o.id, [])
+                    for nombre_h, _m, _f in t.hijos
+                }
+            entradas.append(entrada)
+            valor = getattr(o, col_filtro.key)
+            if maximo is None or valor > maximo:
+                maximo = valor
+        r = await client.post(
+            "/api/v1/sync/subida", json={"tabla": t.nombre, "filas": entradas}, headers=headers
+        )
+        r.raise_for_status()
+        filas_total += len(entradas)
+        cursor = tuple(getattr(objetos[-1], c.key) for c in orden)
+        if len(objetos) < LOTE_SUBIDA:
+            break
+    await _guardar_checkpoint(db, clave, maximo, filas_total)
+    await db.commit()
+    return filas_total
+
+
+async def contar_subida_pendiente(db: AsyncSession) -> int:
+    """Filas que todavía no viajaron (estrictamente > checkpoint): el atraso
+    que reporta el ping. 0 = al día."""
+    total = 0
+    for t in TABLAS_SUBIDA:
+        hasta = await db.scalar(
+            select(SyncCheckpoint.hasta).where(SyncCheckpoint.tabla == f"subida:{t.nombre}")
+        )
+        cols = columnas(t.modelo)
+        col_filtro = cols["updated_at" if t.mutable else "created_at"]
+        stmt = select(func.count()).select_from(t.modelo.__table__)
+        if hasta is not None:
+            stmt = stmt.where(col_filtro > hasta)
+        if t.solo_no_borrador:
+            stmt = stmt.where(cols["estado"] != "borrador")
+        total += (await db.scalar(stmt)) or 0
+    return total
+
+
 async def ciclo_sync() -> dict:
     """Un ciclo completo de réplica. Lanza excepción si la nube no responde o
     rechaza el nodo (revocado ⇒ HTTP 403 en el handshake)."""
     if not (settings.NUBE_URL and settings.NODO_ID and settings.NODO_TOKEN):
         raise RuntimeError("Perfil nodo sin NUBE_URL / NODO_ID / NODO_TOKEN configurados")
     async with _lock:
+        # CAE diferido primero: depende de ARCA, no de la nube (si ARCA sigue
+        # caída corta solo; los resueltos re-suben en la fase de subida de ESTE
+        # mismo ciclo porque el trigger les movió updated_at)
+        cae_resueltos, cae_pend = await resolver_cae_pendientes()
+        if cae_resueltos:
+            log.info("CAE diferido: %s comprobantes autorizados", cae_resueltos)
         async with httpx.AsyncClient(
             base_url=settings.NUBE_URL.rstrip("/"), timeout=60.0
         ) as client:
@@ -237,11 +436,24 @@ async def ciclo_sync() -> dict:
                     await _podar(db, t, ids, tenant_id)
                 await db.commit()
 
+                # ===== subida (N2): las transacciones del nodo a la nube =====
+                resumen["subidas"] = 0
+                for ts in TABLAS_SUBIDA:
+                    resumen["subidas"] += await _subir_tabla(db, client, headers, ts)
+                pend_subida = await contar_subida_pendiente(db)
+
             await client.post(
                 "/api/v1/sync/ping",
-                json={**resumen, "version_app": VERSION_APP},
+                json={
+                    **resumen,
+                    "version_app": VERSION_APP,
+                    "subida_pendientes": pend_subida,
+                    "cae_pendientes": cae_pend,
+                },
                 headers=headers,
             )
+            resumen["cae_resueltos"] = cae_resueltos
+            resumen["cae_pendientes"] = cae_pend
             return resumen
 
 

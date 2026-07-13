@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     NODO_TOKEN: str = ""  # token de aparejamiento (se muestra UNA vez al crear)
     SYNC_INTERVALO_SEG: int = 60
     NODO_WEB_DIR: str = ""  # build de React a servir en / (vacío = solo API)
+    # Hook EXCLUSIVO de la suite del nodo (test_nodo_dev.py): simula ARCA
+    # caída para probar el CAE diferido sin tocar la red. Jamás en prod.
+    ARCA_SIMULAR_CAIDA: bool = False
 
     @property
     def es_nodo(self) -> bool:

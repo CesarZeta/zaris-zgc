@@ -15,15 +15,17 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import verify_password
 from app.core.config import settings
 from app.core.db import get_db
-from app.models import PuntoVenta, Sucursal, SucursalNodo
+from app.models import ArticuloStock, PuntoVenta, Sucursal, SucursalNodo
 from app.services.sync_tablas import (
     POR_NOMBRE,
+    SUBIDA_POR_NOMBRE,
     TABLAS_SYNC,
     TablaSync,
     columnas,
@@ -187,10 +189,121 @@ async def bajada(
     return {"tabla": tabla, "modo": t.modo, "filas": filas, "cursor": cursor_sig}
 
 
+# ===== Subida nodo → nube (N2, "el origen manda") =====
+
+
+class SubidaIn(BaseModel):
+    tabla: str
+    # [{"fila": {...}, "hijos": {"comprobante_items": [...], ...}}] en orden
+    # (created_at, id) — el nodo garantiza padres antes que hijos (self-FK)
+    filas: list[dict] = Field(min_length=1, max_length=500)
+
+
+async def _aplicar_delta_stock(db: AsyncSession, mov: dict) -> None:
+    """El agregado de la nube NUNCA se pisa: converge aplicando el delta de
+    cada movimiento nuevo del nodo (§5 del diseño). Fila lockeada, patrón
+    _mover_stock."""
+    filtro_variante = (
+        ArticuloStock.variante_id.is_(None)
+        if mov.get("variante_id") is None
+        else ArticuloStock.variante_id == mov["variante_id"]
+    )
+    fila = await db.scalar(
+        select(ArticuloStock)
+        .where(
+            ArticuloStock.tenant_id == mov["tenant_id"],
+            ArticuloStock.articulo_id == mov["articulo_id"],
+            ArticuloStock.deposito_id == mov["deposito_id"],
+            filtro_variante,
+        )
+        .with_for_update()
+    )
+    if fila is None:
+        db.add(
+            ArticuloStock(
+                tenant_id=mov["tenant_id"],
+                articulo_id=mov["articulo_id"],
+                deposito_id=mov["deposito_id"],
+                variante_id=mov.get("variante_id"),
+                cantidad=mov["cantidad"],
+            )
+        )
+        await db.flush()
+    else:
+        fila.cantidad = fila.cantidad + mov["cantidad"]
+        fila.updated_at = func.now()
+
+
+@router.post("/subida")
+async def subida(
+    body: SubidaIn,
+    nodo: SucursalNodo = Depends(get_nodo),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aplica un lote de transacciones del nodo. Idempotente por UUID:
+    re-enviar es no-op (insert-only → DO NOTHING; documentos mutables → LWW
+    por updated_at, el más nuevo gana). Todo el lote en UNA transacción."""
+    t = SUBIDA_POR_NOMBRE.get(body.tabla)
+    if t is None:
+        raise HTTPException(status_code=404, detail=f"Tabla no sincronizable: {body.tabla}")
+    tabla = t.modelo.__table__
+    aplicadas = ignoradas = stock_aplicado = 0
+
+    for entrada in body.filas:
+        cruda = entrada.get("fila")
+        if not isinstance(cruda, dict) or "id" not in cruda:
+            raise HTTPException(status_code=422, detail="Cada entrada lleva fila con id")
+        fila = fila_a_python(t.modelo, cruda)
+        if fila.get("tenant_id") != nodo.tenant_id:
+            raise HTTPException(status_code=403, detail="Fila de otro tenant")
+        ins = pg_insert(tabla).values(fila)
+        if t.mutable:
+            stmt = ins.on_conflict_do_update(
+                index_elements=["id"],
+                set_={k: ins.excluded[k] for k in fila if k != "id"},
+                where=tabla.c.updated_at <= ins.excluded.updated_at,
+            ).returning(tabla.c.id)
+        else:
+            stmt = ins.on_conflict_do_nothing(index_elements=["id"]).returning(tabla.c.id)
+        aplicada = (await db.execute(stmt)).scalar() is not None
+        if aplicada:
+            aplicadas += 1
+        else:
+            ignoradas += 1
+        if t.efecto_stock and aplicada:
+            await _aplicar_delta_stock(db, fila)
+            stock_aplicado += 1
+        for nombre_h, modelo_h, _fk in t.hijos:
+            crudas_h = (entrada.get("hijos") or {}).get(nombre_h) or []
+            if not crudas_h:
+                continue
+            filas_h = [fila_a_python(modelo_h, h) for h in crudas_h]
+            for fh in filas_h:
+                if fh.get("tenant_id") != nodo.tenant_id:
+                    raise HTTPException(status_code=403, detail="Fila hija de otro tenant")
+            await db.execute(
+                pg_insert(modelo_h.__table__)
+                .values(filas_h)
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+
+    nodo.last_seen_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {
+        "tabla": body.tabla,
+        "aplicadas": aplicadas,
+        "ignoradas": ignoradas,
+        "stock_aplicado": stock_aplicado,
+    }
+
+
 class PingIn(BaseModel):
     tablas: int = 0
     filas: int = 0
     version_app: str | None = Field(None, max_length=20)
+    # monitoreo N2: atraso del nodo al cierre del ciclo (0 = al día)
+    subida_pendientes: int = 0
+    cae_pendientes: int = 0
 
 
 @router.post("/ping", status_code=status.HTTP_204_NO_CONTENT)
@@ -203,6 +316,8 @@ async def ping(
     ahora = datetime.now(timezone.utc)
     nodo.last_seen_at = ahora
     nodo.last_sync_at = ahora
+    nodo.subida_pendientes = body.subida_pendientes
+    nodo.cae_pendientes = body.cae_pendientes
     if body.version_app:
         nodo.version_app = body.version_app
     await db.commit()

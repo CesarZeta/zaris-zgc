@@ -68,6 +68,7 @@ class Numeracion(Base):
     )
     tipo_codigo: Mapped[str] = mapped_column(ForeignKey("tipos_comprobante.codigo"))
     ultimo: Mapped[int] = mapped_column(BigInteger, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Comprobante(Base):
@@ -228,6 +229,7 @@ class Recibo(Base):
     anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     punto_venta: Mapped[PuntoVenta] = relationship(lazy="joined")
     medios: Mapped[list["ReciboMedio"]] = relationship(
@@ -275,6 +277,7 @@ class Imputacion(Base):
     anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     creado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ArcaConfig(Base):

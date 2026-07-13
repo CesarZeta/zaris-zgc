@@ -152,6 +152,7 @@ export default function NodosSection() {
               <th>PV propio</th>
               <th>Última conexión</th>
               <th>Última réplica</th>
+              <th>Atraso</th>
               <th>Versión</th>
               <th>Estado</th>
               <th></th>
@@ -171,6 +172,17 @@ export default function NodosSection() {
                 </td>
                 <td className="mono">{fechaCorta(n.last_seen_at)}</td>
                 <td className="mono">{fechaCorta(n.last_sync_at)}</td>
+                <td>
+                  {n.subida_pendientes === 0 && n.cae_pendientes === 0 ? (
+                    "al día"
+                  ) : (
+                    <span className="chip chip-anulado">
+                      {n.subida_pendientes > 0 && `${n.subida_pendientes} por subir`}
+                      {n.subida_pendientes > 0 && n.cae_pendientes > 0 && " · "}
+                      {n.cae_pendientes > 0 && `${n.cae_pendientes} sin CAE`}
+                    </span>
+                  )}
+                </td>
                 <td className="mono">{n.version_app ?? "—"}</td>
                 <td>
                   {n.estado === "activo" ? (
@@ -195,7 +207,7 @@ export default function NodosSection() {
             ))}
             {nodos.length === 0 && (
               <tr>
-                <td colSpan={8}>Sin nodos: todas las sucursales operan online contra la nube.</td>
+                <td colSpan={9}>Sin nodos: todas las sucursales operan online contra la nube.</td>
               </tr>
             )}
           </tbody>

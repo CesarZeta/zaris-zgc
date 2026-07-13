@@ -62,6 +62,7 @@ def main():
     check("openapi expone /nodos", st == 200 and "/api/v1/nodos" in texto, f"{st}")
     check("openapi expone /sync/handshake", "/api/v1/sync/handshake" in texto)
     check("openapi expone /sync/bajada/{tabla}", "/api/v1/sync/bajada/{tabla}" in texto)
+    check("openapi expone /sync/subida (N2)", "/api/v1/sync/subida" in texto)
     check("openapi expone /sync/ping", "/api/v1/sync/ping" in texto)
 
     st, login = _req("POST", "/api/v1/auth/login",
@@ -83,6 +84,12 @@ def main():
     check("bajada con token de usuario -> 401 (scope nodo)", st == 401, f"{st} {det}")
     st, det = _req("GET", "/api/v1/sync/bajada/articulos")
     check("bajada sin token -> 401", st == 401, f"{st} {det}")
+    st, det = _req("POST", "/api/v1/sync/subida", tok,
+                   {"tabla": "comprobantes", "filas": [{"fila": {"id": "x"}}]})
+    check("subida con token de usuario -> 401 (scope nodo)", st == 401, f"{st} {det}")
+    st, nodos = _req("GET", "/api/v1/nodos", tok)
+    check("NodoOut trae monitoreo N2 (contrato)", st == 200 and all(
+        "subida_pendientes" in n and "cae_pendientes" in n for n in nodos), f"{st} {nodos}")
 
     st, _ = _req("GET", "/api/v1/ventas/comprobantes?limit=1", tok)
     check("regresión: listado de ventas -> 200", st == 200, f"{st}")

@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -125,6 +126,9 @@ class SucursalNodo(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     version_app: Mapped[str | None] = mapped_column(String(20))
+    # monitoreo N2: atraso reportado por el ping del ciclo (0 = al día)
+    subida_pendientes: Mapped[int] = mapped_column(Integer, default=0)
+    cae_pendientes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
