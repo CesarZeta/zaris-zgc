@@ -386,6 +386,13 @@ ZGC/
   conocido: los eventos sintéticos (clicks y KeyboardEvents) van **uno por eval** —
   dos despachados en el mismo tick ven el estado viejo (el segundo F-key se ignoró
   con el modal "ya cerrado"); no es un bug del componente.
+- **Repo recreado con el mismo nombre: la integración Git de Vercel MIENTE** (purga
+  2026-07-12): `vercel git connect` dice "already connected" pero el webhook quedó
+  atado al **repo ID viejo** y los pushes NO crean deployments (verificado: el
+  re-push no deployó). Fix: `npx vercel git disconnect --yes` + `git connect --yes`
+  y probar con un push real. Además el primer push a un repo recién creado dispara
+  el workflow de Pages ANTES de habilitar Pages por API — habilitar Pages
+  (`build_type=workflow`) y la variable `API_URL` inmediatamente tras crear el repo.
 - **`git push` colgado con el remoto accesible = credential manager pidiendo credenciales
   interactivas** (F11): `ls-remote`/`fetch` andan pero el push cuelga minutos sin error —
   el Windows Credential Manager quedó esperando un prompt tras un 401 en el receive-pack
