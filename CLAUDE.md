@@ -128,6 +128,9 @@ ZGC/
   dentro de su propia transacción. No duplicar esa lógica. OJO scripts/tests: el
   endpoint `POST /{id}/nota-credito` devuelve la NC en **BORRADOR** — hay que emitirla
   aparte para que impacte (cta. cte., stock, comisiones; mordió en la suite F11).
+  Y la NC espejo es **TOTAL** (revierte la factura entera, deja saldo 0) — no sirve
+  para simular una "devolución parcial"; un guion que después cobra esa factura
+  cobra $0 (mordió en el piloto supermercado).
 - **Pruebas sobre agregados del día** (planilla, resúmenes): asertar **deltas**
   (después − antes), nunca absolutos — el día es compartido entre corridas y sesiones.
 - **Números `Numeric` viajan como STRING en el JSON** de la API (SQLAlchemy los
@@ -154,11 +157,13 @@ ZGC/
   UI la muestra). El catálogo de módulos vive en `app/core/permisos.py` y es ESPEJO del
   seed SQL de la migración 010 — cambiar uno exige cambiar el otro. `usuarios.rol_id
   NULL` = acceso total (compat scripts/seeds). La guarda responde 403, nunca 401.
-  Al AGREGAR un módulo (F8 bancos, F9 contabilidad, F11 vendedores): las comprehensions
-  de `ROLES_BASE` lo toman solas para tenants NUEVOS (iteran `MODULOS`); los existentes
-  necesitan el `INSERT ... ON CONFLICT DO NOTHING` en la migración. Y las sesiones ya
-  logueadas NO ven el ítem nuevo del nav hasta re-loguear (los `permisos` viajan en el
-  login) — no es un bug del deploy.
+  Al AGREGAR un módulo (F8 bancos, F9 contabilidad, F11 vendedores, F12-bis logística):
+  las comprehensions de `ROLES_BASE` lo toman solas para tenants NUEVOS (iteran
+  `MODULOS`); los existentes necesitan el `INSERT ... ON CONFLICT DO NOTHING` en la
+  migración. Las sesiones ya logueadas NO ven el ítem nuevo del nav hasta re-loguear
+  (los `permisos` viajan en el login) — no es un bug del deploy. Y las suites que
+  asertan el TAMAÑO del catálogo (`test_f12a_dev`: "N módulos") se actualizan EN LA
+  MISMA sesión que agrega el módulo (mordió en F12-bis: 13→14).
 - **Plan por tenant encima del RBAC** (F12-a, 2026-07-11 — POS standalone, diseño en
   `DISENO-POS-PERFILES.md` §7): `tenants.plan` (`suite`|`pos`) acota qué módulos
   EXISTEN para el tenant. El catálogo `PLANES` en `permisos.py` es ESPEJO del CHECK
@@ -253,6 +258,10 @@ ZGC/
   la instancia VIEJA** (F13-LAN N2, bug real en los checkpoints de sync): el insert
   de Core no actualiza el identity map del ORM. Para releer un valor recién escrito
   por Core usar select de COLUMNAS (`select(Modelo.campo)`), que siempre va a la DB.
+  Pariente ORM del mismo gotcha (F12-bis, bug real en el PUT de hojas de ruta):
+  cambiar la MEMBRESÍA de una colección `selectin` (asignar/quitar hijos por FK) y
+  re-seleccionar el padre devuelve la instancia vieja con la lista stale — el
+  re-select post-commit lleva `.execution_options(populate_existing=True)`.
 - **Marcas de "ya procesado" se DERIVAN, nunca mutan el documento fuente** (F11,
   extensión del contrato de inmutabilidad): un documento está liquidado/exportado/
   procesado si existe un ítem VIVO del documento procesador que lo referencia
@@ -275,10 +284,23 @@ ZGC/
   `%APPDATA%\postgresql\pgpass.conf` **percent-encoded** con `urllib.parse.quote`).
   **BORRARLO al terminar** — tiene la password en claro (está en `.gitignore` por `.env.*`,
   pero igual eliminarlo). La generación de operaciones sí va por la API pública (Vercel),
-  no por SQL directo.
+  no por SQL directo. Y esos scripts contra prod van en **FOREGROUND**: el clasificador
+  de permisos bloquea la corrida en background pero acepta la misma en foreground
+  (mordió en el piloto supermercado, 2026-07-13).
 - **Setup de un tenant para poder facturar** (no existe como un solo comando): tenant +
   usuario + `arca_config` modo simulado + punto de venta + depósito activo. Lo orquesta
   `tools/demo_setup_tenant.py` (idempotente). Sin depósito activo, `emitir` da 422.
+  OJO: `setup_tenant.py` NO siembra `condiciones_venta` (un tenant nuevo nace sin
+  ninguna → crearla antes de facturar en cta. cte.) y su caja POS default ya se llama
+  "Caja 1" (reconfigurarla con **PATCH** `/pos/cajas/{id}` — no hay PUT).
+- **La fila de HISTORIAL_MIGRACIONES.md se escribe EN LA MISMA SESIÓN que aplica la
+  migración** (junto con código+ROADMAP, criterio de cierre de fase): las sesiones del
+  lote de diferidos y de F13-LAN N1/N2 no anotaron las filas 022/023/024 — se
+  registraron retroactivamente el 2026-07-13. El HISTORIAL es la fuente de verdad de
+  qué migración corrió dónde; una fila faltante obliga a re-verificar contra la DB.
+- **Suites con urllib: los query strings van percent-encoded a mano** (`%20`, no
+  espacio) — `urllib.request` revienta con `InvalidURL: URL can't contain control
+  characters` (mordió en la suite F12-bis; `httpx`/`requests` encodean solos).
 - **psql local (dev)**: no está en el PATH — usar
   `"C:\Program Files\PostgreSQL\17\bin\psql.exe"`; la credencial de `zgc_dev` está en
   `backend/.env.local` (pasarla por `$env:PGPASSWORD`; el pgpass solo tiene la de prod).
