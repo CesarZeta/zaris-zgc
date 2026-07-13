@@ -327,7 +327,11 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
       }
     }
     setEntrada("");
-    setMulti(null);
+    // El multi NO se resetea acá: los modales de resultados/variantes lo
+    // consumen (bug cazado 2026-07-12: "3*yerba" con varios resultados entraba
+    // con cantidad 1). El "3*codigo" inline se sube al estado por si la
+    // búsqueda termina en un modal; se limpia al agregar la línea o con Esc.
+    if (m) setMulti(cantidad);
     try {
       const r = await apiGet<PosResultadoBusqueda[]>(
         `/pos/buscar?q=${encodeURIComponent(codigo)}&caja_id=${sesion.caja_id}`,
@@ -342,6 +346,7 @@ function VentaView({ sesion, onCerrada }: { sesion: PosSesion; onCerrada: () => 
         if (unico.variante_id || !unico.tiene_variantes) {
           // etiqueta de balanza: la cantidad viene resuelta del servidor (kg o importe/precio)
           agregarLinea(unico, unico.cantidad ? Number(unico.cantidad) : cantidad);
+          setMulti(null);
         } else {
           setPickVariante(unico); // exacto pero hay que elegir talle/color
         }

@@ -112,6 +112,19 @@ export default function RestoPOS({
     return () => clearInterval(t);
   }, [cargar]);
 
+  // F8 = cierre de caja, como en el mostrador (hasta 2026-07-12 era solo la
+  // etiqueta del botón). Solo con la grilla a la vista — sin comanda ni modales.
+  useEffect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "F8" && !comanda && !nuevoPedido && !verCierre) {
+        ev.preventDefault();
+        setVerCierre(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [comanda, nuevoPedido, verCierre]);
+
   async function abrirMesa(mesa: PosMesa) {
     setError(null);
     if (mesa.comanda_id) {
