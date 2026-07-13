@@ -80,6 +80,10 @@ la nube, como siempre).
 
 - **Maestros**: se editan SOLO en la gestión de la nube; el nodo los replica
   (60 s). Cualquier intento de escritura de maestros en el nodo responde 403.
+- **Regla de cobranza (hasta N3)**: las facturas en cta. cte. emitidas en el
+  nodo se cobran EN EL NODO. Un pago registrado en la nube contra una factura
+  del nodo puede ser pisado por la próxima sincronización (el origen manda
+  sobre sus documentos).
 - **Estado de la réplica**: `GET /api/v1/nodo/estado` (logueado) — última
   réplica OK, último error, checkpoints por tabla, filas por subir y
   comprobantes sin CAE. También en la nube: Configuración → Nodos (última

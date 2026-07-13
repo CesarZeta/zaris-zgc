@@ -847,6 +847,21 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
     corregido).
 - [ ] **N3 — Robustez y extras** (gestión local ampliada, comandas resto
   centralizadas, CAEA, updates automáticos): espera piloto multi-caja real.
+  **Edges conocidos que N3 debe cerrar** (registrados al cierre de N2):
+  (1) *cobranza cruzada*: si la NUBE imputa un pago contra una factura nacida
+  en el nodo, el próximo re-upload del nodo puede pisar ese saldo por LWW —
+  en N2 la regla operativa es "los documentos del nodo se cobran en el nodo"
+  (MANUAL-NODO §5); (2) *validación profunda de la subida*: hoy la nube
+  valida tenant + tabla whitelisted; falta validar que el PV de cada
+  comprobante subido pertenezca al nodo; (3) recibos del nodo con PV ajeno
+  no tienen guarda de exclusividad (solo comprobantes vía emitir_core).
+- **Verificaciones pendientes de F13-LAN** (para el arranque del piloto):
+  `tools/nodo/instalar_nodo.ps1` NUNCA corrió de punta a punta en una PC
+  limpia (la suite levanta uvicorn directo: no ejercita schtasks, firewall
+  ni el build web en máquina virgen) — probarlo es el día 1 del piloto. El
+  CAE diferido está verificado SOLO en modo `simulado` (hook de caída); la
+  prueba con WSFEv1 real va junto con la homologación ARCA (que César
+  difirió al FINAL del proyecto).
 
 ## REDISEÑO UX DEL POS — terminal con marco de dispositivo ✅ (2026-07-12)
 
