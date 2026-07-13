@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     # caída para probar el CAE diferido sin tocar la red. Jamás en prod.
     ARCA_SIMULAR_CAIDA: bool = False
 
+    # Email transaccional (F16 — DISENO-SALIDA-DOCUMENTOS.md §3). Infraestructura
+    # GLOBAL del SaaS (no por tenant): "simulado" registra sin enviar (default,
+    # patrón ARCA); "resend" envía real (exige RESEND_API_KEY); "deshabilitado"
+    # responde 400. APP_URL arma los links de los emails (reset de contraseña).
+    EMAIL_MODO: str = "simulado"
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "ZARIS <no-reply@zaris.com.ar>"
+    APP_URL: str = "http://localhost:5173"
+
     @property
     def es_nodo(self) -> bool:
         return self.PERFIL == "nodo"

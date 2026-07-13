@@ -1017,6 +1017,56 @@ pantalla con `docs/PILOTO-SUPERMERCADO.md` como guion.** Pedido de César
   capítulo por capítulo + dónde ver cada número en pantalla).
 - Excluido por decisión de César: sueldos (F15 no existe — otro momento).
 
+## FASE 16 — Salida de documentos: PDF + email ✅ (2026-07-13)
+
+**Entregable: "mandame la factura" resuelto — PDF server-side de cualquier comprobante,
+envío por email con el PDF adjunto, y recuperación de contraseña autoservicio desde el
+login — todo con modo simulado hasta que César provisione el proveedor de email.**
+Diseño en `docs/DISENO-SALIDA-DOCUMENTOS.md`. Primera de las 5 piezas aceptadas por
+César el 2026-07-13 (sesión de mejoras de suite; filas 16–20 del cuadro POST-MVP).
+
+- [x] **Migración 026**: `email_envios` (registro por tenant con `modo` sellado —
+  patrón ARCA; `cuerpo` TEXT deferred) + `password_resets` (hash sha256 del token,
+  1 h, un solo uso) con RLS. Sin módulo RBAC nuevo.
+- [x] **PDF server-side** (`services/documentos/pdf_comprobante.py`, fpdf2 puro-Python
+  apto Vercel): layout espejo del HTML RG 1415 (caja de letra + cód. ARCA, IVA
+  discriminado solo letra A, transparencia fiscal 27.743, vencimientos, leyendas,
+  CAE + QR RG 4892 como PNG de segno). El payload de `/impresion` se extrajo a
+  `_payload_impresion()` — única fuente de verdad que consumen impresión HTML, PDF
+  y email (regla §6). `GET /ventas/comprobantes/{id}/pdf` (ventas.ver, 409 borrador).
+  Gotcha cazado: las fuentes core de PDF son latin-1 — el "—" (em-dash) revienta
+  fpdf2; `_t()` translitera la tipografía Unicode común antes de encodear.
+- [x] **Email transaccional** (`services/email_envio.py`, sin commit — patrón core):
+  modos `deshabilitado`/`simulado` (default)/`resend` por env vars GLOBALES
+  (`EMAIL_MODO`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` — no es config por
+  tenant; el reply_to sí es el email del tenant). Todo envío deja fila en
+  `email_envios`, incluso los errores del proveedor (el endpoint comitea el
+  registro ANTES de responder 502). `POST /ventas/comprobantes/{id}/enviar`
+  (ventas.editar): destinatario explícito o email de la entidad del cliente (BUE),
+  422 sin ninguno; adjunta el PDF; la respuesta incluye `estado` y la UI avisa si
+  fue simulado. Bandeja `GET /emails/envios[/{id}]` (configuracion.ver, listado sin
+  cuerpo/detalle con undefer, filtros tipo/ref_id, X-Total-Count).
+- [x] **Recuperación de contraseña autoservicio** (cierra el diferido de F6.5):
+  `POST /auth/recuperar` (público, SIEMPRE el mismo 200 — no filtra existencia;
+  invalida pendientes y emite token nuevo) + `POST /auth/restablecer` (token de un
+  solo uso, 422 inválido/vencido/usado). Front: link "Olvidé mi contraseña" en el
+  login + páginas `/recuperar` y `/restablecer`. El reset por admin (F6.5) sigue.
+- [x] **Frontend**: botones **PDF** (descarga autenticada) y **Enviar por email**
+  (destinatario editable, aviso de modo simulado) en ComprobanteDetalle.
+- [x] Verificado 2026-07-13: **32/32 pruebas en vivo** (`tools/test_f16_dev.py`:
+  PDF real %PDF con 409/404, envío simulado registrado con filtro específico por
+  ref_id, cuerpo deferred solo en detalle, RBAC 403 nunca 401, recuperación
+  completa con token de un solo uso y re-login) + regresiones **mini-014 53/53 ·
+  F11 35/35 · login POS 23/23** + build TS + **E2E navegador** (recuperar →
+  restablecer → login por UI; envío desde el detalle con leyenda de simulado) +
+  **inspección visual del PDF** generado (layout RG 1415 correcto).
+- **Pendiente César (activación del envío real, §7 del diseño)**: cuenta Resend
+  free (3.000/mes) + verificación DNS de zaris.com.ar + 4 env vars en Vercel.
+  Sin tocar código.
+- Diferido documentado (§6): WhatsApp Business API (v1 = compartir el PDF a mano),
+  PDF de recibos/OP/presupuestos de compra, avisos programados (vencimientos,
+  cheques por vencer), UI de bandeja de salida, plantillas por tenant.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -1038,6 +1088,11 @@ pantalla con `docs/PILOTO-SUPERMERCADO.md` como guion.** Pedido de César
 | 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |
 | 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |
 | 15 | **Sueldos y cargas sociales** | Alcance si se construye: legajos, liquidación por convenio, F.931/SICOSS, Libro de Sueldos Digital, ART. **Build-vs-integrar ABIERTO** (ver Decisiones abiertas) | **FOSO MÁXIMO, el más condicional**: F9+F10 maduros + N clientes pagos estables + **asesoría laboral contratada**. Mantenimiento MUY ALTO (paritarias, escalas), riesgo legal ALTO |
+| 16 ✅ | **Salida de documentos (PDF + email)** | **HECHA 2026-07-13** (sección FASE 16 arriba): PDF server-side (fpdf2), envío con adjunto (modos patrón ARCA, registro `email_envios`), recuperación de contraseña autoservicio. Base futura: avisos de vencimientos/cheques, verificación de email del signup (F20) | 1ª en orden de valor de las 5 aceptadas por César 2026-07-13. Modo simulado hasta que César provisione Resend (§7 del diseño) |
+| 17 | **Auditoría de acciones (audit log)** | La mitad operativa de la inmutabilidad contable ya lograda: quién cambió precios masivamente, quién editó matriz de permisos, quién tocó config ARCA, logins fallidos. Decorator/middleware sobre escrituras sensibles (RBAC ya centraliza en `permisos.py`) | **ACEPTADA por César 2026-07-13** (2ª en orden). Barata con la disciplina actual; red de seguridad ante "yo no borré eso" |
+| 18 | **Backup por tenant + observabilidad mínima** | "Descargá todo lo tuyo": ZIP de CSVs de todos los módulos (helper `csv_export` + patrón export-contador ya existen). Argumento de venta contra el miedo al SaaS + obligación con el free tier de Supabase (pausa tras ~1 semana inactivo). Observabilidad: uptime + keep-alive + Sentry free tier | **ACEPTADA por César 2026-07-13** (3ª en orden) |
+| 19 | **Multi-empresa (usuario ↔ N tenants)** | Switch de empresa (el JWT ya lleva tenant — barato con la arquitectura actual). Reprioritizada desde "IN diferido" del cuadro de gaps: los estudios contables son el canal de distribución natural (un contador trae 20 comercios). ANTES que portal de clientes / IA (F14 del cuadro) | **ACEPTADA por César 2026-07-13** (4ª en orden) |
+| 20 | **Signup/onboarding autoservicio** | Registro con email de verificación (la infraestructura la da F16); reemplaza el alta por `setup_tenant.py` para el modelo SaaS free-tier de DEFINICION-PRODUCTO.md | **ACEPTADA por César 2026-07-13** (5ª en orden; requiere F16) |
 
 ### Gaps evaluados 2026-07-05 (clasificación foso / canal / fuera)
 
@@ -1046,11 +1101,11 @@ pantalla con `docs/PILOTO-SUPERMERCADO.md` como guion.** Pedido de César
 | BI / reportería propia | **FOSO-light, evolución de F7** — export universal ya, vistas guardadas + envío programado cuando haya plan pago. NO report-builder/cubos propio temprano (mantenimiento alto, free-tier no banca OLAP) |
 | Activos fijos / amortizaciones | **IN — hecho en F9-bis 2026-07-11** (mantenimiento bajo, paridad SAP B1 ante el contador) |
 | Flujo de fondos proyectado | **IN — dentro de F8** (vista de tesorería, no fase propia) |
-| Multi-empresa (usuario ↔ N tenants) / consolidación | **IN diferido** — switch de empresa barato cuando haya demanda de estudios contables; consolidación va con Contabilidad/BI |
+| Multi-empresa (usuario ↔ N tenants) / consolidación | ~~IN diferido~~ → **reprioritizada como F19** (2026-07-13, sesión de mejoras de suite): el switch es barato y los estudios contables son canal de distribución; consolidación sigue con Contabilidad/BI |
 | Multi-moneda completa (mayor multimoneda) | **OUT salvo demanda de exportadores** — se mantiene precios USD + factura DOL (diferida F3); WSFEX ya estaba fuera |
 | Factura recurrente / abonos (Concepto 2/3) | **IN feature menor de Ventas**, gated por pedido de cliente real (el cliente WSFEv1 ya lo soporta parametrizado) |
 | Producción/MRP, proyectos/obras, gestión de servicios, localización internacional | **FUERA PERMANENTE** (regla hacia-afuera) |
-| Recuperación de contraseña en el login ("olvidé mi clave") | **IN diferido** (pendiente 2026-07-06, César) — hoy solo hay reset por admin (`POST /usuarios/{id}/reset-password`, F6.5); falta autoservicio desde el login. Requiere decidir el canal: envío de email (la app aún NO tiene SMTP configurado) o solo reset asistido. Sin pistas/leyendas de clave (mala práctica de seguridad). Gated por: primer usuario que se autobloquee sin otro admin, o pedido de piloto |
+| Recuperación de contraseña en el login ("olvidé mi clave") | ~~IN diferido~~ → **va dentro de F16 Salida de documentos** (2026-07-13): el canal es email (la pieza de email transaccional de F16 lo resuelve); sin pistas/leyendas de clave (mala práctica de seguridad). El reset por admin (F6.5) sigue existiendo |
 
 ### Decisiones abiertas (César)
 

@@ -17,6 +17,7 @@ from app.api.v1.compras import router as compras_router
 from app.api.v1.comprobantes import router as comprobantes_router
 from app.api.v1.contabilidad import router as contabilidad_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.emails import router as emails_router
 from app.api.v1.empresa import router as empresa_router
 from app.api.v1.entidades import router as entidades_router
 from app.api.v1.geo import router as geo_router
@@ -93,6 +94,7 @@ ROUTERS_NUBE = [
     logistica_router,
     usuarios_router,
     padron_router,
+    emails_router,
     dashboard_router,
     cheques_router,
     bancos_router,

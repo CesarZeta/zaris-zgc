@@ -3,6 +3,8 @@ import AppShell from "./app/AppShell";
 import InicioPage from "./app/InicioPage";
 import LoginPage from "./app/LoginPage";
 import POSLoginPage from "./app/POSLoginPage";
+import RecuperarPage from "./app/RecuperarPage";
+import RestablecerPage from "./app/RestablecerPage";
 import ArticulosPage from "./modules/articulos/ArticulosPage";
 import BancosPage from "./modules/bancos/BancosPage";
 import CajaPage from "./modules/caja/CajaPage";
@@ -23,6 +25,8 @@ export default function App() {
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/recuperar" element={<RecuperarPage />} />
+        <Route path="/restablecer" element={<RestablecerPage />} />
         {/* El POS va fuera del shell: pantalla completa de caja, con su
             propio login (token de alcance POS — adelanto de F13-LAN) */}
         <Route path="/pos/login" element={<POSLoginPage />} />

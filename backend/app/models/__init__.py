@@ -54,6 +54,7 @@ from app.models.contabilidad import (
     ContabPeriodo,
     PlanCuenta,
 )
+from app.models.emails import EmailEnvio, PasswordReset
 from app.models.logistica import Entrega, HojaRuta, Transportista
 from app.models.nucleo import (
     Rol,
@@ -179,4 +180,6 @@ __all__ = [
     "Transportista",
     "HojaRuta",
     "Entrega",
+    "EmailEnvio",
+    "PasswordReset",
 ]

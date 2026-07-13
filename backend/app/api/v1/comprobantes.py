@@ -12,7 +12,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
@@ -33,6 +33,7 @@ from app.models import (
     ComprobanteVencimiento,
     CondicionVenta,
     Deposito,
+    Entidad,
     Imputacion,
     PuntoVenta,
     StockMovimiento,
@@ -47,6 +48,8 @@ from app.services.arca import ErrorArca, ErrorConexionArca, emitir_fiscal
 from app.services.arca import qr as arca_qr
 from app.services.arca.wsaa import ErrorWsaa
 from app.services.arca.wsfev1 import ErrorWsfe
+from app.services.documentos.pdf_comprobante import pdf_comprobante
+from app.services.email_envio import EmailDeshabilitadoError, ErrorEnvioEmail, enviar_email
 from app.services.pv_nodo import validar_pv_nodo
 
 router = APIRouter(prefix="/ventas/comprobantes", tags=["comprobantes"])
@@ -1191,29 +1194,25 @@ async def facturar_presupuesto(
     return _out(await _cargar(db, usuario.tenant_id, factura.id))
 
 
-# ===== Impresión =====
+# ===== Impresión / PDF / envío por email =====
 
-@router.get("/{comp_id}/impresion")
-async def datos_impresion(
-    comp_id: uuid.UUID,
-    usuario: Usuario = Depends(requiere("ventas", "ver")),
-    db: AsyncSession = Depends(get_db),
-):
-    """Payload completo para el HTML imprimible (FACTURACION-ARCA.md §7):
-    emisor, receptor, ítems, alícuotas, CAE, QR (solo CAE real) y leyendas."""
-    comp = await _cargar(db, usuario.tenant_id, comp_id)
-    if comp.estado == "borrador":
-        raise HTTPException(status_code=409, detail="Un borrador no se imprime")
-    tenant = await db.scalar(select(Tenant).where(Tenant.id == usuario.tenant_id))
+async def _payload_impresion(db: AsyncSession, tenant_id: uuid.UUID, comp) -> tuple[dict, str | None]:
+    """Payload completo del comprobante imprimible (FACTURACION-ARCA.md §7):
+    emisor, receptor, ítems, alícuotas, CAE, QR (solo CAE real) y leyendas.
+    ÚNICA fuente de verdad del contenido — la consumen la impresión HTML del
+    front, el PDF server-side y el envío por email (regla §6: reusar el
+    núcleo). Devuelve también la URL del QR para regenerarlo como PNG en el PDF."""
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id))
     config = await db.scalar(
-        select(ArcaConfig).where(ArcaConfig.tenant_id == usuario.tenant_id)
+        select(ArcaConfig).where(ArcaConfig.tenant_id == tenant_id)
     )
 
     es_simulado = comp.arca_resultado == "S"
     qr_svg = None
+    qr_url = None
     if comp.tipo.fiscal and comp.cae and not es_simulado:
         cuit_emisor = (config.cuit if config else None) or tenant.cuit or "0"
-        url = arca_qr.url_qr(
+        qr_url = arca_qr.url_qr(
             fecha=comp.fecha,
             cuit_emisor=cuit_emisor,
             punto_venta=comp.punto_venta.numero,
@@ -1226,7 +1225,7 @@ async def datos_impresion(
             doc_nro=comp.receptor_doc_nro,
             cae=comp.cae,
         )
-        qr_svg = arca_qr.svg_qr(url)
+        qr_svg = arca_qr.svg_qr(qr_url)
 
     leyendas = []
     if not comp.tipo.fiscal:
@@ -1246,7 +1245,7 @@ async def datos_impresion(
 
     condiciones_iva = {"RI": "IVA Responsable Inscripto", "MT": "Responsable Monotributo",
                        "EX": "IVA Exento", "CF": "Consumidor Final"}
-    return {
+    payload = {
         "comprobante": _out(comp).model_dump(mode="json"),
         "emisor": {
             "razon_social": (config.razon_social if config else None) or tenant.razon_social,
@@ -1271,4 +1270,123 @@ async def datos_impresion(
         "leyendas": leyendas,
         "transparencia_fiscal": transparencia,
         "qr_svg": qr_svg,
+    }
+    return payload, qr_url
+
+
+@router.get("/{comp_id}/impresion")
+async def datos_impresion(
+    comp_id: uuid.UUID,
+    usuario: Usuario = Depends(requiere("ventas", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    comp = await _cargar(db, usuario.tenant_id, comp_id)
+    if comp.estado == "borrador":
+        raise HTTPException(status_code=409, detail="Un borrador no se imprime")
+    payload, _ = await _payload_impresion(db, usuario.tenant_id, comp)
+    return payload
+
+
+def _nombre_pdf(payload: dict) -> str:
+    c = payload["comprobante"]
+    base = f"{c['tipo_descripcion']} {c.get('numero_formateado') or ''}".strip()
+    return re.sub(r"[^A-Za-z0-9]+", "-", base).strip("-") + ".pdf"
+
+
+@router.get("/{comp_id}/pdf")
+async def descargar_pdf(
+    comp_id: uuid.UUID,
+    usuario: Usuario = Depends(requiere("ventas", "ver")),
+    db: AsyncSession = Depends(get_db),
+):
+    """PDF A4 server-side (F16): mismo contenido que la impresión HTML."""
+    comp = await _cargar(db, usuario.tenant_id, comp_id)
+    if comp.estado == "borrador":
+        raise HTTPException(status_code=409, detail="Un borrador no se imprime")
+    payload, qr_url = await _payload_impresion(db, usuario.tenant_id, comp)
+    contenido = pdf_comprobante(payload, qr_url)
+    return Response(
+        content=contenido,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{_nombre_pdf(payload)}"'},
+    )
+
+
+class EnviarIn(BaseModel):
+    # Sin email en el body se usa el de la entidad del cliente (BUE)
+    email: EmailStr | None = None
+
+
+@router.post("/{comp_id}/enviar")
+async def enviar_por_email(
+    comp_id: uuid.UUID,
+    body: EnviarIn,
+    usuario: Usuario = Depends(requiere("ventas", "editar")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Envía el comprobante como PDF adjunto por email (F16). En modo
+    simulado no sale nada a la red: queda registrado en `email_envios`
+    (la respuesta incluye `estado` para que la UI lo avise)."""
+    comp = await _cargar(db, usuario.tenant_id, comp_id)
+    if comp.estado == "borrador":
+        raise HTTPException(status_code=409, detail="Un borrador no se envía")
+
+    destinatario = body.email
+    if destinatario is None and comp.cliente_id:
+        destinatario = await db.scalar(
+            select(Entidad.email)
+            .join(Cliente, Cliente.entidad_id == Entidad.id)
+            .where(Cliente.id == comp.cliente_id)
+        )
+    if not destinatario:
+        raise HTTPException(
+            status_code=422,
+            detail="El cliente no tiene email registrado — indicá uno para el envío",
+        )
+
+    payload, qr_url = await _payload_impresion(db, usuario.tenant_id, comp)
+    pdf = pdf_comprobante(payload, qr_url)
+    c = payload["comprobante"]
+    emisor = payload["emisor"]
+    asunto = f"{c['tipo_descripcion']} {c['numero_formateado']} — {emisor['razon_social']}"
+    aviso_simulado = (
+        "<p style='color:#a00'><b>Documento de prueba (modo simulado — sin validez fiscal).</b></p>"
+        if comp.arca_resultado == "S"
+        else ""
+    )
+    cuerpo = (
+        f"<p>Hola {c['receptor_nombre']},</p>"
+        f"<p>Te enviamos adjunto el documento <b>{c['tipo_descripcion']} "
+        f"{c['numero_formateado']}</b> de <b>{emisor['razon_social']}</b> "
+        f"por un total de <b>$ {c['total']}</b> (fecha {c['fecha']}).</p>"
+        f"{aviso_simulado}"
+        f"<p style='color:#777;font-size:12px'>Enviado con ZARIS Gestión Comercial.</p>"
+    )
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == usuario.tenant_id))
+    try:
+        envio = await enviar_email(
+            db,
+            usuario.tenant_id,
+            destinatario=destinatario,
+            asunto=asunto,
+            cuerpo_html=cuerpo,
+            tipo="comprobante",
+            ref_id=comp.id,
+            adjuntos=[(_nombre_pdf(payload), pdf)],
+            reply_to=tenant.email,
+            creado_por=usuario.id,
+        )
+    except EmailDeshabilitadoError:
+        raise HTTPException(status_code=400, detail="El envío de emails está deshabilitado")
+    except ErrorEnvioEmail as exc:
+        # el registro del error debe sobrevivir al 502 (no perder la evidencia)
+        await db.commit()
+        raise HTTPException(status_code=502, detail=str(exc))
+    await db.commit()
+    return {
+        "id": str(envio.id),
+        "destinatario": envio.destinatario,
+        "asunto": envio.asunto,
+        "estado": envio.estado,
+        "modo": envio.modo,
     }

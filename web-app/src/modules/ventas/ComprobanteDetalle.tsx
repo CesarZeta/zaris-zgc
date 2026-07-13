@@ -3,9 +3,9 @@
 // pide el comprobante completo por id.
 
 import { useEffect, useState } from "react";
-import { ApiError, apiGet } from "../../lib/api";
+import { ApiError, apiDescargar, apiGet, apiPost } from "../../lib/api";
 import type { Comprobante, ImpresionPayload } from "../../lib/types";
-import { AlertError } from "../../components/Alertas";
+import { AlertError, AlertOk } from "../../components/Alertas";
 import ChipEstado from "../../components/ChipEstado";
 import { imprimirComprobante } from "./impresion";
 
@@ -20,7 +20,10 @@ export default function ComprobanteDetalle({
 }) {
   const [comp, setComp] = useState<Comprobante | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [enviarAbierto, setEnviarAbierto] = useState(false);
+  const [emailEnvio, setEmailEnvio] = useState("");
 
   useEffect(() => {
     void apiGet<Comprobante>(`/ventas/comprobantes/${id}`)
@@ -37,6 +40,44 @@ export default function ComprobanteDetalle({
       imprimirComprobante(data);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo imprimir");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function descargarPdf() {
+    if (!comp) return;
+    setOcupado(true);
+    setError(null);
+    try {
+      const nombre = `${comp.tipo_descripcion} ${comp.numero_formateado ?? ""}`
+        .trim()
+        .replace(/[^A-Za-z0-9]+/g, "-");
+      await apiDescargar(`/ventas/comprobantes/${id}/pdf`, `${nombre}.pdf`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo descargar el PDF");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function enviarEmail() {
+    setOcupado(true);
+    setError(null);
+    setOk(null);
+    try {
+      const res = await apiPost<{ destinatario: string; estado: string }>(
+        `/ventas/comprobantes/${id}/enviar`,
+        emailEnvio.trim() ? { email: emailEnvio.trim() } : {},
+      );
+      setOk(
+        res.estado === "simulado"
+          ? `Envío registrado en modo simulado (no salió un email real) — destino ${res.destinatario}`
+          : `Enviado a ${res.destinatario}`,
+      );
+      setEnviarAbierto(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo enviar el email");
     } finally {
       setOcupado(false);
     }
@@ -140,20 +181,71 @@ export default function ComprobanteDetalle({
           !error && <p>Cargando…</p>
         )}
         <AlertError>{error}</AlertError>
+        <AlertOk>{ok}</AlertOk>
+
+        {enviarAbierto && (
+          <div className="fila" style={{ gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="email-envio">Enviar a (vacío = email del cliente)</label>
+              <input
+                id="email-envio"
+                className="input"
+                type="email"
+                value={emailEnvio}
+                onChange={(e) => setEmailEnvio(e.target.value)}
+                placeholder="cliente@dominio.com"
+                autoFocus
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={ocupado}
+              onClick={() => void enviarEmail()}
+            >
+              Enviar
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setEnviarAbierto(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
 
         <div className="drawer-acciones">
           <button type="button" className="btn btn-ghost" onClick={onCerrar}>
             Cerrar
           </button>
           {comp?.estado === "emitido" && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={ocupado}
-              onClick={() => void imprimir()}
-            >
-              Imprimir
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={ocupado}
+                onClick={() => void descargarPdf()}
+              >
+                PDF
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={ocupado}
+                onClick={() => setEnviarAbierto((v) => !v)}
+              >
+                Enviar por email
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={ocupado}
+                onClick={() => void imprimir()}
+              >
+                Imprimir
+              </button>
+            </>
           )}
         </div>
       </div>
