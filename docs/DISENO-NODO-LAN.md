@@ -1,9 +1,12 @@
 # ZGC — Diseño: Nodo LAN de sucursal y POS autónomo (F13-LAN)
 
-> Estado: **DISEÑO para revisión de César** (2026-07-11). Nada de esto está
-> implementado. Origen: mandato de César del 2026-07-11 (sesión post-F12) que baja a
-> tierra la arquitectura híbrida declarada el día 1 (CLAUDE.md §3, decisión
-> "online y red LAN" del 2026-07-03).
+> Estado: **N1 IMPLEMENTADA Y EN PRODUCCIÓN (2026-07-12)** — aparejamiento,
+> réplica de bajada, perfil `nodo`, PV exclusivos e instalador Windows (suite
+> `tools/test_nodo_dev.py`, 52/52; manual operativo en `MANUAL-NODO.md`).
+> N2 (subida + CAE diferido) y N3 (robustez) pendientes. Origen: mandato de
+> César del 2026-07-11 (sesión post-F12) que baja a tierra la arquitectura
+> híbrida declarada el día 1 (CLAUDE.md §3, decisión "online y red LAN" del
+> 2026-07-03).
 
 ## 0. Mandatos de César (2026-07-11)
 
@@ -171,11 +174,13 @@ tenants, con o sin nodo, y es el MISMO código que servirá el nodo.
 1. ~~¿Gestión local completa en el nodo?~~ → **RESPONDIDA 2026-07-11** (§0-bis):
    el nodo lleva POS + **facturación de gestión con PV propio** + stock/clientes;
    la gestión completa es un extra (N3).
-2. **Hardware de referencia del nodo**: ¿PC Windows dedicada existente en los
-   clientes tipo (como el server del legacy)? Define el instalador de N1.
+2. ~~Hardware de referencia del nodo~~ → **RESPONDIDA 2026-07-12**: PC Windows
+   dedicada existente en el cliente (como el server del legacy); el instalador
+   de N1 (`tools/nodo/instalar_nodo.ps1`) apunta a Windows.
 3. ~~¿Adelantamos el login POS dedicado?~~ → **HECHA 2026-07-11** (§0-bis).
-4. **Prioridad vs. F12-bis Logística**: el nodo es esfuerzo ALTO (varias sesiones).
-   ¿Va antes, después, o en paralelo con pilotos?
+4. ~~Prioridad vs. F12-bis Logística~~ → **RESUELTA 2026-07-12**: César ordenó
+   avanzar («adelante») tras el rediseño UX del POS; N1 se construyó primero.
+   La prioridad de N2 vs. F12-bis queda para la próxima decisión.
 
 ## 9. Qué NO cambia
 

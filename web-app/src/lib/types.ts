@@ -288,6 +288,21 @@ export interface PuntoVenta {
   activo: boolean;
 }
 
+// Nodo LAN de sucursal (F13-LAN N1)
+export interface NodoSucursal {
+  id: string;
+  nombre: string;
+  sucursal_id: string;
+  sucursal_nombre: string | null;
+  punto_venta_id: string | null;
+  punto_venta_numero: number | null;
+  estado: string;
+  last_seen_at: string | null;
+  last_sync_at: string | null;
+  version_app: string | null;
+  created_at: string;
+}
+
 export interface ArcaConfig {
   modo: string;
   cuit: string | null;

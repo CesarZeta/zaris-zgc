@@ -54,7 +54,15 @@ from app.models.contabilidad import (
     ContabPeriodo,
     PlanCuenta,
 )
-from app.models.nucleo import Rol, RolPermiso, Sucursal, Tenant, Usuario
+from app.models.nucleo import (
+    Rol,
+    RolPermiso,
+    Sucursal,
+    SucursalNodo,
+    SyncCheckpoint,
+    Tenant,
+    Usuario,
+)
 from app.models.pos import (
     PosBalanzaConfig,
     PosCaja,
@@ -90,6 +98,8 @@ __all__ = [
     "Base",
     "Tenant",
     "Sucursal",
+    "SucursalNodo",
+    "SyncCheckpoint",
     "Usuario",
     "Rol",
     "RolPermiso",

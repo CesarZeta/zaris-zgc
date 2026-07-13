@@ -774,10 +774,46 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
   navegador (login → /pos, gestión rebota, salir de la caja). **Deploy 2026-07-11
   (commit 82b02de)**: push → probe openapi 1er intento → **smoke prod 8/8**
   (`tools/smoke_pos_login_prod.py`, neutro) → Pages success 1er intento.
-- [ ] **N1/N2/N3** (nodo físico): hardware de referencia definido 2026-07-12
-  (**PC Windows dedicada existente en el cliente**, como el server del legacy —
-  el instalador N1 apunta a Windows). César antepuso el rediseño UX del POS;
-  la prioridad de arranque de N1 queda para la próxima decisión.
+- [x] **N1 — Nodo mínimo (EN PRODUCCIÓN 2026-07-12, «adelante» de César)**:
+  hardware de referencia = **PC Windows dedicada existente en el cliente**
+  (como el server del legacy). Entregado:
+  - **Aparejamiento** (migración 023): `sucursal_nodos` (token bcrypt mostrado
+    UNA vez, patrón reset-password; un solo nodo activo por sucursal) + UI en
+    Configuración → «Nodos de sucursal (LAN)» (alta con PV propio, revocar,
+    regenerar token, última conexión/réplica). `POST /sync/handshake` → JWT
+    scope `nodo` (12 h) que las guardas de usuario rechazan (y viceversa).
+  - **Réplica de bajada** (`/sync/bajada/{tabla}`, keyset paginado): 33 tablas
+    en 3 modos (`services/sync_tablas.py`) — *incremental* por `updated_at`
+    (entidades/clientes/artículos/variantes, con trigger DB `zgc_touch_
+    updated_at` de la 023 para que el checkpoint sea confiable), *snapshot*
+    con poda FK-safe en orden inverso (roles/`rol_permisos` sufren hard
+    deletes, colecciones de domicilios/contactos, catálogos) y *semilla
+    inicial* que NO se reaplica (stock y numeración: el nodo pasa a ser
+    autoridad local).
+  - **Perfil `nodo`** (`PERFIL=nodo`, mismo código): monta POS + facturación
+    de gestión + maestros de consulta; middleware de **solo lectura de
+    maestros** (403 fuera de pos/ventas/cobranzas/stock/auth); sirve el build
+    del POS web con fallback SPA; task de polling (60 s) + `GET /nodo/estado`
+    y `POST /nodo/sync-ahora` locales.
+  - **PV exclusivos** (`_validar_pv_nodo` en `emitir_core`, ambas puntas): con
+    nodo activo, su PV propio y los de las cajas POS de la sucursal emiten
+    SOLO en el nodo (la nube responde 422 y viceversa); revocar libera los PV.
+  - **Instalador Windows** `tools/nodo/instalar_nodo.ps1` (idempotente: DB
+    local + migraciones + venv + build web + `.env.nodo` con JWT propio +
+    tarea programada ONSTART + firewall) y manual operativo
+    `docs/MANUAL-NODO.md` (alcance N1 vs N2/N3 explícito).
+  - Verificado 2026-07-12: **52/52 en vivo** (`tools/test_nodo_dev.py`:
+    levanta un nodo REAL en :8022 contra base `zgc_nodo_test` recreada con
+    las 23 migraciones + la nube dev en :8021 — criterio de listo N1 completo:
+    caja LAN vende en el nodo con maestros replicados, stock local −1 sin
+    tocar la nube, gestión emite con PV propio numerando 1, exclusividad en
+    ambas puntas, réplica continua incremental/snapshot/poda, revocación) +
+    regresiones **23/23 (login POS) · 39/39 (F12-b) · 51/51 (F12-d) · 40/40
+    (diferidos)** + build TS limpio.
+- [ ] **N2 — Sincronización completa** (cola `sync_eventos` de subida, CAE
+  diferido, monitoreo de atraso) y **N3 — Robustez** (gestión local ampliada,
+  CAEA, updates automáticos): prioridad vs. F12-bis Logística queda para la
+  próxima decisión de César.
 
 ## REDISEÑO UX DEL POS — terminal con marco de dispositivo ✅ (2026-07-12)
 

@@ -16,6 +16,21 @@ class Settings(BaseSettings):
     JWT_EXPIRES_HOURS: int = 24
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Perfil de ejecución (F13-LAN, DISENO-NODO-LAN.md §1): "nube" = backend
+    # central (Vercel/dev de siempre); "nodo" = PC de sucursal en la LAN —
+    # mismo código, montaje de routers acotado + réplica de bajada + POS web
+    # servido como estáticos. El perfil cambia config, NUNCA bifurca código.
+    PERFIL: str = "nube"
+    NUBE_URL: str = ""  # URL del backend central (https://... o http://host:puerto)
+    NODO_ID: str = ""  # uuid de sucursal_nodos (lo da el alta en Configuración)
+    NODO_TOKEN: str = ""  # token de aparejamiento (se muestra UNA vez al crear)
+    SYNC_INTERVALO_SEG: int = 60
+    NODO_WEB_DIR: str = ""  # build de React a servir en / (vacío = solo API)
+
+    @property
+    def es_nodo(self) -> bool:
+        return self.PERFIL == "nodo"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

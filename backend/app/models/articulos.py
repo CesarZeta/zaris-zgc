@@ -179,6 +179,7 @@ class ArticuloVariante(Base):
     dif_precio: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ArticuloStock(Base):

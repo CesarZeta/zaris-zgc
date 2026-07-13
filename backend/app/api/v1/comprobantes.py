@@ -13,10 +13,11 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
+from app.core.config import settings
 from app.core.csv_export import csv_response, num
 from app.core.db import get_db
 from app.core.permisos import requiere
@@ -33,8 +34,10 @@ from app.models import (
     CondicionVenta,
     Deposito,
     Imputacion,
+    PosCaja,
     PuntoVenta,
     StockMovimiento,
+    SucursalNodo,
     Tenant,
     TipoComprobante,
     Usuario,
@@ -851,6 +854,54 @@ def _validar_para_emitir(comp: Comprobante, config: ArcaConfig | None) -> None:
         )
 
 
+async def _validar_pv_nodo(db: AsyncSession, comp: Comprobante) -> None:
+    """Exclusividad de PV del nodo LAN (F13-LAN N1 — DISENO-NODO-LAN.md §3):
+    mientras una sucursal tenga un nodo ACTIVO, su PV propio y los de sus
+    cajas POS emiten SOLO en el nodo (si no, la numeración colisiona).
+    En el nodo, la inversa: solo se emite con los PV que le pertenecen."""
+    if settings.es_nodo:
+        from app.services.sync_nodo import pvs_del_nodo
+
+        pvs = await pvs_del_nodo(db)
+        if pvs is None:
+            raise HTTPException(
+                status_code=422,
+                detail="El nodo aún no sincronizó con la nube — sin contexto de aparejamiento",
+            )
+        if comp.punto_venta_id not in pvs:
+            raise HTTPException(
+                status_code=422,
+                detail="Ese punto de venta no pertenece a este nodo — usá el PV "
+                "propio del nodo o el de una caja de la sucursal",
+            )
+        return
+    nodo = await db.scalar(
+        select(SucursalNodo)
+        .where(
+            SucursalNodo.tenant_id == comp.tenant_id,
+            SucursalNodo.estado == "activo",
+            or_(
+                SucursalNodo.punto_venta_id == comp.punto_venta_id,
+                SucursalNodo.sucursal_id.in_(
+                    select(PosCaja.sucursal_id).where(
+                        PosCaja.tenant_id == comp.tenant_id,
+                        PosCaja.punto_venta_id == comp.punto_venta_id,
+                        PosCaja.activa.is_(True),
+                        PosCaja.sucursal_id.is_not(None),
+                    )
+                ),
+            ),
+        )
+        .limit(1)
+    )
+    if nodo is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Punto de venta operado por el nodo de sucursal «{nodo.nombre}» "
+            "— emití desde el nodo, o revocá el nodo en Configuración",
+        )
+
+
 async def emitir_core(
     db: AsyncSession, comp: Comprobante, usuario: Usuario, config: ArcaConfig | None
 ) -> None:
@@ -858,6 +909,7 @@ async def emitir_core(
     Lo comparten el endpoint /emitir y la venta POS (Fase 6), que lo corre
     dentro de su propia transacción junto con los medios de pago."""
     _validar_para_emitir(comp, config)
+    await _validar_pv_nodo(db, comp)
     clase = comp.tipo.clase
 
     asociado = None
