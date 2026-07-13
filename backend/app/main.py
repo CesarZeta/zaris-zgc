@@ -21,6 +21,7 @@ from app.api.v1.empresa import router as empresa_router
 from app.api.v1.entidades import router as entidades_router
 from app.api.v1.geo import router as geo_router
 from app.api.v1.libros import router as libros_router
+from app.api.v1.logistica import router as logistica_router
 from app.api.v1.nodo_local import router as nodo_local_router
 from app.api.v1.nodos import router as nodos_router
 from app.api.v1.pagos import router as pagos_router
@@ -89,6 +90,7 @@ ROUTERS_NUBE = [
     pagos_router,
     caja_router,
     libros_router,
+    logistica_router,
     usuarios_router,
     padron_router,
     dashboard_router,

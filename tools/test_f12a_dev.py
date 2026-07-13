@@ -180,15 +180,16 @@ def main():
     if st == 200:
         tok_d = login_d["access_token"]
         perm_d = login_d["permisos"]
-        check("suite conserva los 13 módulos", len(perm_d) == 13, f"{len(perm_d)} {sorted(perm_d)}")
+        # 14 desde F12-bis (se sumó `logistica` al catálogo)
+        check("suite conserva los 14 módulos", len(perm_d) == 14, f"{len(perm_d)} {sorted(perm_d)}")
         st, _ = _req("GET", base, "/compras/comprobantes", tok_d)
         check("suite: GET /compras/comprobantes -> 200", st == 200, f"{st}")
         st, emp_d = _req("GET", base, "/empresa", tok_d)
         check("suite: GET /empresa plan='suite'", st == 200 and emp_d.get("plan") == "suite",
               f"{st} {emp_d}")
         st, cat_d = _req("GET", base, "/permisos/catalogo", tok_d)
-        check("suite: catálogo completo (13 módulos)",
-              st == 200 and len(cat_d["modulos"]) == 13, f"{st}")
+        check("suite: catálogo completo (14 módulos)",
+              st == 200 and len(cat_d["modulos"]) == 14, f"{st}")
 
     # ===== 10. cleanup: borrar el tenant efímero (cascada) =====
     async def _cleanup():

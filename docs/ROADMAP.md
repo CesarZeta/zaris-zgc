@@ -937,6 +937,58 @@ simplista, una pantalla sin bordes").
   futuro: botones adicionales y/o ventana de avisos (p. ej. validación de
   tarjetas en el modo de cobro). No rellenarlo con otra cosa.
 
+## FASE 12-BIS — Logística de entregas ✅ (2026-07-13)
+
+**Entregable: el comercio que reparte crea entregas desde sus facturas/remitos, arma
+hojas de ruta imprimibles por transportista y rinde el reparto al volver — sin tocar
+el circuito fiscal.** Diseño en `docs/DISENO-LOGISTICA-Y-DOMICILIOS.md` §2 (v1
+deliberadamente liviana). Gate levantado por César 2026-07-13 («ADELANTE», junto con
+el plan del piloto ficticio que la estrena).
+
+- [x] **Migración 025**: `transportistas` (rol BUE, patrón vendedores — sirve el
+  fletero externo y el reparto propio), `hojas_ruta` (numeración HR-nnnnnnnn por
+  tenant, abierta→en_reparto→cerrada, anulable marcada solo abierta) y `entregas`
+  (una ACTIVA por comprobante vía unique parcial; **domicilio snapshot** copiado de
+  entidad_domicilios/entidad al crearla — si el cliente se muda, la entrega
+  histórica no cambia; estados pendiente→asignada→en_reparto→entregada|rechazada,
+  reprogramada = terminal reemplazada por una entrega nueva) + RLS + seed RBAC.
+- [x] **Módulo RBAC `logistica`** (14º del catálogo): admin/gerente anular ·
+  consulta ver · cajero/vendedor sin acceso (espejo permisos.py ↔ seed 025);
+  **fuera del plan `pos`** (es gestión). Los tenants nuevos lo toman solos de
+  las comprehensions de ROLES_BASE.
+- [x] **Backend** (`api/v1/logistica.py`, solo nube — el perfil nodo no lo monta):
+  ABM transportistas (BUE cross-rol), `GET /entregables` (facturas/remitos
+  emitidos sin entrega activa), crear entrega (snapshot con fallback domicilio
+  explícito → domicilio de entrega predeterminado → fiscal de la entidad → 422),
+  rendir (motivo obligatorio en rechazos), reprogramar (la rechazada queda
+  terminal, nace una nueva), anular (libera el comprobante), hojas (armado con
+  orden de recorrido, transportista propagado a las entregas, PUT solo abierta,
+  despachar, cerrar exigiendo rendición completa, anular solo abierta que
+  libera a pendientes). **Regla de encuadre verificada**: el estado de entrega
+  no toca comprobantes ni cta. cte. Gotcha cazado: reemplazar la membresía de
+  `hoja.entregas` y re-leer exige `populate_existing` (identity map stale, §6).
+- [x] **Frontend** módulo `/logistica` (4 tabs): **Entregas** (filtro por estado,
+  crear desde entregables con buscador, rendición rápida de sueltas, chips de
+  estado — colores de estado, nunca naranja), **Hojas de ruta** (armado con orden
+  de selección = recorrido, detalle expandible, **impresión HTML** con columna
+  de firma "recibí conforme" + salida/regreso, despachar/anular), **Rendición**
+  (selector de hoja en reparto, entregada/rechazada por fila, cerrar hoja
+  bloqueado hasta rendir todo) y **Transportistas** (ABM BUE con vehículo/
+  dominio). Ítem del nav gated por permiso.
+- [x] Verificado 2026-07-13: **53/53 pruebas en vivo** (`tools/test_f12bis_dev.py`:
+  snapshot inmutable tras mudanza de la entidad, 409 entrega activa duplicada,
+  422 para presupuestos/borradores/sin domicilio, ciclo completo de hoja con
+  orden, exclusividad de asignación, cierre exigiendo rendición, reprogramación,
+  anulaciones que liberan, encuadre fiscal intacto) + regresiones **F12-a 36/36**
+  (actualizada: el catálogo pasó de 13 a 14 módulos) · **F11 35/35** ·
+  **mini-014 53/53** + build TS + **E2E navegador** (ciclo completo por UI:
+  entregas con historia real, hoja creada con orden de selección, despacho,
+  rendición con receptor y motivo, cierre).
+- Diferido documentado (§2.3 del diseño, sin cambios): vista móvil del
+  repartidor, prueba de entrega (foto/firma), optimización de recorridos, costo
+  de flete por zona, integración con el delivery del perfil resto, mapa Leaflet
+  con pins del día.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -954,7 +1006,7 @@ simplista, una pantalla sin bordes").
 | 10 | **Impuestos** | Percepciones en ventas (`ImpTrib`, diferido de F3), retenciones practicadas **automáticas** en OP + certificados (F5 solo registra a mano), export **SICORE/SIRE**, IIBB local y **Convenio Multilateral** (liquidación informativa, SIFERE), **padrones ARBA/AGIP** (alícuota por sujeto) | **FOSO** — cliente pagando con obligaciones de agente o CM + **mantenimiento mensual de padrones comprometido**. Mantenimiento ALTO, riesgo legal medio. Pareja natural de F9 (no la bloquea: opera sobre comprobantes/OP) |
 | 11 ✅ | Vendedores y comisiones | **HECHA 2026-07-11** (sección propia arriba): rol BUE + sellado en ventas/cobranzas + liquidación por venta / por cobranza como documento contabilizable | — |
 | 12 ✅ | **POS por perfiles + POS standalone** (Súper · Carnicería · Resto) — **COMPLETA 2026-07-11** (a/b/c/d en producción, ver sección FASE 12) | Diseño 2026-07-05 en `DISENO-POS-PERFILES.md`, ampliado 2026-07-11 con §7: **el POS se vende como módulo independiente** (plan por tenant, sin on-premise) para kiosco/carnicería/resto — súper siempre suite. **Súper**: pesables por etiqueta de balanza (EAN 20–29, config por tenant), envases retornables, venta por depto., multi-caja. **Carnicería**: NO es un POS distinto — es el **despiece/transformación de stock en gestión** (media res → kilos por corte, con merma y costeo proporcional al valor) + POS estándar con pesables; la transformación es primitiva general (sirve para fraccionar y combos). **Resto** (sucesor de RestoDelivery del legacy): POS propio con salones/mesas/mozos/comandas/propina que viven en tablas `pos_*` — a la gestión llega SOLO la venta final emitida (mandato César); rubro `restaurante` al enum | **Gate levantado por César 2026-07-11** ("podemos seguir por el POS", con el mandato standalone). Orden: F12-a → F12-d (ver sección FASE 12) |
-| 12-bis | Logística de entregas | Rol transportista (BUE), `entregas` por remito/factura con domicilio snapshot + estados (pendiente→en reparto→entregada/rechazada), **hojas de ruta** imprimibles, rendición del reparto, mapa opcional. Diseño en `DISENO-LOGISTICA-Y-DOMICILIOS.md` §2. Crecimiento hacia adentro (operativiza el remito que ya existe) | Requiere domicilios OSM (F7). Activación: primer cliente que reparte (distribuidora/mayorista/corralón) |
+| 12-bis ✅ | Logística de entregas | **HECHA 2026-07-13** (sección FASE 12-BIS arriba): rol transportista (BUE), entregas con domicilio snapshot + estados, hojas de ruta imprimibles, rendición del reparto. Mapa y vista móvil quedan diferidos §2.3 | Gate levantado por César 2026-07-13 (la estrena el piloto ficticio) |
 | 13 | Integraciones de canal | **Mercado Libre** (variantes F2.5 ↔ variaciones ML 1:1; atributos estructurados/catálogo, no HTML), Tiendanube/WooCommerce, Mercado Pago QR, WhatsApp, nodo LAN de sucursal | **Canal, no foso** (paridad de mercado). Por integración: ≥2-3 clientes que la pidan; mantenimiento perpetuo de cada API asumido explícitamente |
 | 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |
 | 15 | **Sueldos y cargas sociales** | Alcance si se construye: legajos, liquidación por convenio, F.931/SICOSS, Libro de Sueldos Digital, ART. **Build-vs-integrar ABIERTO** (ver Decisiones abiertas) | **FOSO MÁXIMO, el más condicional**: F9+F10 maduros + N clientes pagos estables + **asesoría laboral contratada**. Mantenimiento MUY ALTO (paritarias, escalas), riesgo legal ALTO |

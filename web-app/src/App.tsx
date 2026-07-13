@@ -11,6 +11,7 @@ import ComprasPage from "./modules/compras/ComprasPage";
 import ConfiguracionPage from "./modules/configuracion/ConfiguracionPage";
 import ContabilidadPage from "./modules/contabilidad/ContabilidadPage";
 import LibrosPage from "./modules/libros/LibrosPage";
+import LogisticaPage from "./modules/logistica/LogisticaPage";
 import POSPage from "./modules/pos/POSPage";
 import ProveedoresPage from "./modules/proveedores/ProveedoresPage";
 import StockPage from "./modules/stock/StockPage";
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/proveedores" element={<ProveedoresPage />} />
           <Route path="/compras" element={<ComprasPage />} />
           <Route path="/vendedores" element={<VendedoresPage />} />
+          <Route path="/logistica" element={<LogisticaPage />} />
           <Route path="/articulos" element={<ArticulosPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/caja" element={<CajaPage />} />

@@ -54,6 +54,7 @@ from app.models.contabilidad import (
     ContabPeriodo,
     PlanCuenta,
 )
+from app.models.logistica import Entrega, HojaRuta, Transportista
 from app.models.nucleo import (
     Rol,
     RolPermiso,
@@ -175,4 +176,7 @@ __all__ = [
     "Vendedor",
     "ComisionLiquidacion",
     "ComisionLiquidacionItem",
+    "Transportista",
+    "HojaRuta",
+    "Entrega",
 ]

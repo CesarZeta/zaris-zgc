@@ -108,6 +108,71 @@ export interface ComisionPendiente {
   importe: string;
 }
 
+// ===== Logística de entregas (F12-bis) =====
+
+export interface Transportista {
+  id: string;
+  codigo: string | null;
+  vehiculo: string | null;
+  dominio: string | null;
+  observaciones: string | null;
+  activo: boolean;
+  entidad: Entidad;
+}
+
+export interface Entrega {
+  id: string;
+  comprobante_id: string;
+  comprobante_desc: string;
+  fecha_comprobante: string | null;
+  total_comprobante: string | null;
+  destinatario: string;
+  domicilio: string;
+  localidad: string | null;
+  telefono: string | null;
+  latitud: string | null;
+  longitud: string | null;
+  fecha_programada: string | null;
+  transportista_id: string | null;
+  transportista_nombre: string;
+  hoja_ruta_id: string | null;
+  hoja_numero: number | null;
+  orden: number;
+  estado: string;
+  bultos: string | null;
+  recibido_por: string | null;
+  motivo_rechazo: string | null;
+  observaciones: string | null;
+  rendida_at: string | null;
+  anulada: boolean;
+}
+
+export interface HojaRuta {
+  id: string;
+  numero: number;
+  numero_formateado: string;
+  fecha: string;
+  transportista_id: string;
+  transportista_nombre: string;
+  sucursal_id: string | null;
+  estado: string;
+  observaciones: string | null;
+  cantidad_entregas: number;
+  anulada: boolean;
+  entregas?: Entrega[];
+}
+
+export interface Entregable {
+  comprobante_id: string;
+  fecha: string;
+  descripcion: string;
+  receptor_nombre: string;
+  receptor_domicilio: string | null;
+  cliente_id: string | null;
+  entidad_id: string | null;
+  total: string;
+}
+
 export interface ComisionLiquidacion {
   id: string;
   numero: number;

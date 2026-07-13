@@ -31,6 +31,7 @@ MODULOS: dict[str, str] = {
     "proveedores": "Proveedores",
     "compras": "Compras",
     "vendedores": "Vendedores",
+    "logistica": "Logística",
     "articulos": "Artículos",
     "stock": "Stock",
     "caja": "Caja",
