@@ -820,6 +820,13 @@ simplista, una pantalla sin bordes").
   setup_tenant) y **jamás se le expone al usuario final como elección**. La UI
   del cajero no menciona perfiles: la caja llega configurada y la pantalla se
   decide sola.
+- Diferido documentado (hallazgos del click-through, preexistentes de F6/F12-d,
+  no del rediseño): (1) el **multiplicador `3*texto` se pierde** cuando la
+  búsqueda devuelve varios resultados — `procesarEntrada` resetea `multi` antes
+  de que `elegirResultado` lo use → la línea entra con cantidad 1 (mitigado por
+  los steppers −/+; el camino EAN/código exacto sí lo respeta); (2) en el POS
+  resto **F8 es solo la etiqueta del botón Cierre** (RestoPOS no registra
+  listener global de teclado, a diferencia del mostrador).
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 

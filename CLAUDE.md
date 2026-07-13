@@ -375,6 +375,17 @@ ZGC/
   el navegador, si un click "no hace nada", **recargar la página completa** antes de
   concluir que hay un bug (pasó 2-3 veces en esta sesión: el handler nuevo no estaba
   adjunto por HMR).
+- **Horas con `Intl` es-AR: pasar SIEMPRE `hour12: false`** (rediseño POS, 2026-07-12):
+  `toLocaleTimeString("es-AR", { hour: "2-digit", ... })` sale en 12 h con sufijo
+  "p. m." en Chromium — desborda cualquier layout de reloj/hora compacto. Aplica a
+  todo timestamp de UI (el formato de terminal es 24 h).
+- **El navegador integrado de VS Code abre con viewport ANGOSTO** (~600 px CSS): los
+  media queries móviles se activan y el layout desktop no se ve — toda verificación
+  visual de escritorio exige `browser_emulate` (p. ej. 1440×900) y `reset: true` al
+  terminar (la emulación persiste en el tab). Corolario del gotcha de React ya
+  conocido: los eventos sintéticos (clicks y KeyboardEvents) van **uno por eval** —
+  dos despachados en el mismo tick ven el estado viejo (el segundo F-key se ignoró
+  con el modal "ya cerrado"); no es un bug del componente.
 - **`git push` colgado con el remoto accesible = credential manager pidiendo credenciales
   interactivas** (F11): `ls-remote`/`fetch` andan pero el push cuelga minutos sin error —
   el Windows Credential Manager quedó esperando un prompt tras un 401 en el receive-pack
