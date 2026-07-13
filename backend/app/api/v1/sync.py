@@ -23,6 +23,7 @@ from app.core.auth import verify_password
 from app.core.config import settings
 from app.core.db import get_db
 from app.models import ArticuloStock, PuntoVenta, Sucursal, SucursalNodo
+from app.services.pv_nodo import pvs_del_nodo_en_nube
 from app.services.sync_tablas import (
     POR_NOMBRE,
     SUBIDA_POR_NOMBRE,
@@ -249,6 +250,12 @@ async def subida(
     tabla = t.modelo.__table__
     aplicadas = ignoradas = stock_aplicado = 0
 
+    # validación profunda (edge post-N2): las tablas que numeran por PV solo
+    # aceptan PVs del nodo (su PV propio + los de las cajas de su sucursal)
+    pvs_nodo: set | None = None
+    if body.tabla in ("comprobantes", "recibos", "numeracion"):
+        pvs_nodo = await pvs_del_nodo_en_nube(db, nodo)
+
     for entrada in body.filas:
         cruda = entrada.get("fila")
         if not isinstance(cruda, dict) or "id" not in cruda:
@@ -256,6 +263,17 @@ async def subida(
         fila = fila_a_python(t.modelo, cruda)
         if fila.get("tenant_id") != nodo.tenant_id:
             raise HTTPException(status_code=403, detail="Fila de otro tenant")
+        if pvs_nodo is not None and fila.get("punto_venta_id") not in pvs_nodo:
+            if body.tabla == "numeracion":
+                # el espejo de numeración viaja ENTERO desde el nodo (la semilla
+                # incluye filas de PVs de la nube): la nube es autoridad sobre
+                # sus propios PV — se ignoran en vez de rechazar el lote
+                ignoradas += 1
+                continue
+            raise HTTPException(
+                status_code=403,
+                detail=f"Punto de venta ajeno al nodo en {body.tabla} (fila {fila['id']})",
+            )
         ins = pg_insert(tabla).values(fila)
         if t.mutable:
             stmt = ins.on_conflict_do_update(

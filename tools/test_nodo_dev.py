@@ -506,6 +506,54 @@ def main():
           and n_nube(f"select count(*) from imputaciones where recibo_id='{rec['id']}'")
           == "1")
 
+    # ===== 13-bis. exclusividad de PV también en RECIBOS (edge post-N2) =====
+    st, det = _req("POST", nodo, "/cobranzas/recibos", tok_n, {
+        "punto_venta_id": pv_nube["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": "1"}],
+    })
+    check("nodo: recibo con PV de la NUBE -> 422", st == 422
+          and "no pertenece" in str(det), f"{st} {det}")
+    st, det = _req("POST", nube, "/cobranzas/recibos", tok, {
+        "punto_venta_id": pv_nodo["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": "1"}],
+    })
+    check("nube: recibo con el PV del nodo -> 422", st == 422
+          and "nodo" in str(det).lower(), f"{st} {det}")
+    st, det = _req("POST", nube, "/cobranzas/recibos", tok, {
+        "punto_venta_id": pv_caja["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": "1"}],
+    })
+    check("nube: recibo con el PV de la caja LAN -> 422", st == 422, f"{st} {det}")
+    st, det = _req("POST", nube, "/cobranzas/recibos", tok, {
+        "punto_venta_id": pv_nube["id"], "cliente_id": cli["id"],
+        "medios": [{"medio": "efectivo", "importe": "1"}],
+    })
+    check("nube: recibo con su propio PV -> 201 (control)", st in (200, 201),
+          f"{st} {det}")
+
+    # ===== 13-ter. validación profunda de la subida (edge post-N2) =====
+    # handshake directo (mismo token de aparejamiento que usa el nodo) para
+    # forjar lotes de subida con PV ajeno: la nube debe rechazarlos
+    st, hs = _req("POST", nube, "/sync/handshake",
+                  body={"nodo_id": nodo_creado["id"], "token": nodo_creado["token"]})
+    check("handshake directo para forjar subidas -> 200", st == 200, f"{st} {hs}")
+    tok_sync = hs["access_token"]
+    forjada = {"id": str(uuid.uuid4()), "tenant_id": tenant_id,
+               "punto_venta_id": pv_nube["id"]}
+    st, det = _req("POST", nube, "/sync/subida", tok_sync,
+                   {"tabla": "comprobantes", "filas": [{"fila": forjada}]})
+    check("subida: comprobante con PV ajeno al nodo -> 403", st == 403
+          and "ajeno" in str(det), f"{st} {det}")
+    st, det = _req("POST", nube, "/sync/subida", tok_sync,
+                   {"tabla": "recibos", "filas": [{"fila": forjada}]})
+    check("subida: recibo con PV ajeno al nodo -> 403", st == 403, f"{st} {det}")
+    st, det = _req("POST", nube, "/sync/subida", tok_sync,
+                   {"tabla": "numeracion",
+                    "filas": [{"fila": {**forjada, "id": str(uuid.uuid4())}}]})
+    check("subida: numeración de PV ajeno se IGNORA (semilla, no error)",
+          st == 200 and det["ignoradas"] == 1 and det["aplicadas"] == 0,
+          f"{st} {det}")
+
     # ===== 14. N2 — CAE diferido (corte de ARCA simulado por hook) =====
     st, _ = lanzar_nodo("ARCA_SIMULAR_CAIDA=1\n")
     check("nodo relanzado con ARCA caída (hook de prueba)", st == 200, f"{st}")

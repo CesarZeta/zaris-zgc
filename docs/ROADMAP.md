@@ -845,16 +845,28 @@ Ortogonal al plan `pos` de F12-a (packaging online vs. facturar sin internet).
     la instancia VIEJA del identity map (checkpoints fantasma); el fixture
     `_cuit_valido` de 3 suites generaba DV inválido cuando dv=10 (flaky 1/11,
     corregido).
+- [x] **Endurecimiento post-N2** (2026-07-13, edges 2 y 3 del cierre de N2 —
+  no necesitaban piloto): (a) *exclusividad de PV en recibos* — la guarda de
+  `emitir_core` se extrajo a `services/pv_nodo.py` (`validar_pv_nodo`) y ahora
+  también la corre `crear_recibo` (el recibo numera por PV igual que los
+  comprobantes): en el nodo solo PVs propios (422 «no pertenece»), en la nube
+  422 si el PV lo opera un nodo activo; (b) *validación profunda de la
+  subida* — `/sync/subida` valida que el PV de cada fila de
+  `comprobantes`/`recibos` pertenezca al nodo (su PV propio + los de las
+  cajas de su sucursal, inactivas incluidas porque sus documentos históricos
+  re-suben al mutar) y responde 403 si es ajeno; las filas de `numeracion` de
+  PVs ajenos se IGNORAN en lugar de rechazarse (la semilla viaja entera y la
+  nube es autoridad sobre sus propios PV). Verificado: suite única del nodo
+  **95/95** (87 previas + 8 nuevas: recibos en ambas puntas + lotes forjados
+  por handshake directo) + regresiones F11 35/35 y mini-014 53/53.
 - [ ] **N3 — Robustez y extras** (gestión local ampliada, comandas resto
   centralizadas, CAEA, updates automáticos): espera piloto multi-caja real.
-  **Edges conocidos que N3 debe cerrar** (registrados al cierre de N2):
-  (1) *cobranza cruzada*: si la NUBE imputa un pago contra una factura nacida
-  en el nodo, el próximo re-upload del nodo puede pisar ese saldo por LWW —
+  **Edge conocido que N3 debe cerrar** (registrado al cierre de N2):
+  *cobranza cruzada* — si la NUBE imputa un pago contra una factura nacida
+  en el nodo, el próximo re-upload del nodo puede pisar ese saldo por LWW;
   en N2 la regla operativa es "los documentos del nodo se cobran en el nodo"
-  (MANUAL-NODO §5); (2) *validación profunda de la subida*: hoy la nube
-  valida tenant + tabla whitelisted; falta validar que el PV de cada
-  comprobante subido pertenezca al nodo; (3) recibos del nodo con PV ajeno
-  no tienen guarda de exclusividad (solo comprobantes vía emitir_core).
+  (MANUAL-NODO §5). Los otros dos edges del cierre (validación de PV en la
+  subida y guarda de recibos) se cerraron el 2026-07-13 (ítem anterior).
 - **Verificaciones pendientes de F13-LAN** (para el arranque del piloto):
   `tools/nodo/instalar_nodo.ps1` NUNCA corrió de punta a punta en una PC
   limpia (la suite levanta uvicorn directo: no ejercita schtasks, firewall

@@ -179,8 +179,8 @@ TABLAS_SUBIDA: list[TablaSubida] = [
     TablaSubida("imputaciones", Imputacion, mutable=True),
     TablaSubida("stock_movimientos", StockMovimiento, mutable=False, efecto_stock=True),
     # espejo LWW de la numeración del nodo: la nube retoma la secuencia sola
-    # al revocar (las filas de PVs de la nube que vinieron en la semilla viajan
-    # con updated_at viejo y el LWW impide pisar valores más nuevos)
+    # al revocar. Las filas de PVs ajenos al nodo (la semilla viaja entera) las
+    # IGNORA el endpoint de subida — la nube es autoridad sobre sus propios PV.
     TablaSubida("numeracion", Numeracion, mutable=True),
 ]
 

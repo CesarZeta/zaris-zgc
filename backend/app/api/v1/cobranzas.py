@@ -32,6 +32,7 @@ from app.models import (
 from app.core.cuit import validar_cuit
 from app.services import cheques_core as cc
 from app.services import ventas as sv
+from app.services.pv_nodo import validar_pv_nodo
 
 router = APIRouter(prefix="/cobranzas", tags=["cobranzas"])
 
@@ -179,6 +180,9 @@ async def crear_recibo(
     )
     if pv is None:
         raise HTTPException(status_code=404, detail="Punto de venta no encontrado o inactivo")
+    # el recibo numera por PV como los comprobantes: misma exclusividad de
+    # nodo LAN (edge cerrado post-N2 — antes solo guardaba emitir_core)
+    await validar_pv_nodo(db, usuario.tenant_id, pv.id)
     cliente = await _cliente(db, usuario.tenant_id, body.cliente_id)
 
     total = sum((m.importe for m in body.medios), Decimal("0"))
