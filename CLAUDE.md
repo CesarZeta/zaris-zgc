@@ -356,6 +356,19 @@ ZGC/
   traceback a mitad) con el código sano. Para ver solo el inicio: redirigir a
   archivo (`> out.txt`) y `Get-Content -TotalCount/-Tail`. `Select-Object -Last N`
   sí es seguro (espera a que el proceso termine).
+- **Fixtures intermedios en suites que asertan numeración absoluta** (post-N2,
+  2026-07-13): `test_nodo_dev.py` encadena asserts de contador («FB del PV = 2»,
+  «la revocación emite el nro 3») — insertar una sección nueva EN EL MEDIO con
+  emisiones del mismo PV los corre todos. Regla: los fixtures nuevos intermedios
+  usan un tipo de comprobante que no comparta el contador asertado (presupuesto
+  PRE en vez de factura FB) o reusan documentos ya emitidos — las guardas de PV
+  corren ANTES que los checks de saldo/negocio, así que un documento con saldo 0
+  sirve para probar el 422 de la guarda.
+- **Smoke conductual en PROD sin mutar datos** (patrón validado post-N2): para
+  verificar que una guarda nueva quedó viva en prod, apuntarla con un request
+  que muera DESPUÉS de la guarda en un error de negocio esperado (404 de un id
+  inexistente, 422 de saldo) — si responde ese error la guarda corrió limpia;
+  un 500 delata el problema. No deja documentos basura en el tenant demo.
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
@@ -372,7 +385,11 @@ ZGC/
   público, no necesita token y detecta cambios de schema, no solo rutas nuevas. Matiz que mordió en Fase 6.5: una columna nueva en un modelo YA
   mapeado (ej. `usuarios.rol_id`) rompe TODOS los SELECT de esa tabla contra una DB sin
   migrar — en `usuarios` eso es el LOGIN entero, no solo la feature nueva. Verificarlo
-  con psql antes del push.
+  con psql antes del push. Si el cambio NO agrega rutas ni campos (solo comportamiento),
+  el estado del deployment se consulta por el **MCP de Vercel** (`list_deployments`/
+  `get_deployment` del proyecto `zaris-zgc-api`) — NO con `curl` a `api.vercel.com`:
+  esa API exige token y un loop de polling sin auth nunca ve READY (3 min perdidos
+  post-N2, 2026-07-13).
 - **Popover/dropdown dentro de un contenedor con `overflow:hidden`** (p.ej. el hero del
   inicio, que lo tiene para las órbitas animadas): un hijo con `position:absolute` se
   RECORTA. Usar `position:fixed` anclado a las coords del botón (`getBoundingClientRect`
