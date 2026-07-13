@@ -989,6 +989,34 @@ el plan del piloto ficticio que la estrena).
   de flete por zona, integración con el delivery del perfil resto, mapa Leaflet
   con pins del día.
 
+## PILOTO FICTICIO «Supermercado ZARIS» ✅ (2026-07-13, en dev y PROD)
+
+**Entregable: un mes completo (junio 2026) de operación de supermercado con
+registros reales en un tenant nuevo, tocando todos los módulos — verificable en
+pantalla con `docs/PILOTO-SUPERMERCADO.md` como guion.** Pedido de César
+2026-07-13 (mismo «ADELANTE» de F12-bis, que el piloto estrena).
+
+- [x] Generador `tools/piloto_supermercado.py` (seed determinística, NO
+  re-ejecutable sobre el mismo tenant): tenant plan suite rubro supermercado,
+  2 cajas POS (PV 0002/0003) + gestión (PV 0001), compras PRIMERO, **50
+  tickets POS de 3-10 artículos** en 20 sesiones con arqueos (una jornada con
+  diferencia −$1.500), 8 facturas cta. cte. + presupuesto + remitos + NC,
+  6 recibos (cheque rechazado que reabre deuda, retenciones, a cuenta),
+  3 OP (transferencia / cheque propio diferido / endoso), caja con cierres,
+  transferencia apareada + extracto conciliado, bien de uso amortizando,
+  apertura asistida, hoja de ruta HR-00000001 rendida (F12-bis), comisiones
+  liquidadas, **86 asientos derivados balanceados y junio CERRADO**.
+- [x] Backdating: todo por API con `fecha` (ARCA simulado); el POS no se tocó —
+  retoque SQL final acotado al tenant (sesiones/tickets/kardex/logística).
+  Cheques diferidos gestionados en julio (realista, sin retoque).
+- [x] Corrido en dev (verificado: libros IVA junio, planilla 13/6 al centavo,
+  período cerrado 409, CITI 200) y en **PROD** (números idénticos por la seed;
+  `.env.prod` temporal BORRADO). Click-through en Pages: KPIs, planilla del
+  13/6 y hoja de ruta calzan con la narrativa.
+- [x] Narrativa verificable: `docs/PILOTO-SUPERMERCADO.md` (la historia del mes
+  capítulo por capítulo + dónde ver cada número en pantalla).
+- Excluido por decisión de César: sueldos (F15 no existe — otro momento).
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
