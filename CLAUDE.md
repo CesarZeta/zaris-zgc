@@ -267,6 +267,23 @@ ZGC/
   procesado si existe un ítem VIVO del documento procesador que lo referencia
   (patrón `comision_liquidacion_items`) — anular el procesador (marcar) libera los
   documentos solo. Nada de flags booleanos sobre comprobantes/recibos emitidos.
+- **La evidencia de un error se COMITEA antes de responder el error** (F16): si un
+  endpoint registra el fallo en una tabla (p. ej. `email_envios` estado='error') y
+  después levanta HTTPException, el rollback del request borra el registro — la
+  evidencia se pierde justo cuando más se la necesita. Patrón:
+  `except ErrorEnvioEmail: await db.commit(); raise HTTPException(502, ...)`.
+  Aplica a toda bitácora que deba sobrevivir a la respuesta de error (lo va a
+  necesitar F17 audit log).
+- **PDF con fuentes core (fpdf2) = latin-1 ESTRICTO** (F16, bug real): el em-dash
+  "—" (y comillas tipográficas, …, •) revienta con FPDFUnicodeEncodingException —
+  no es un warning, es 500. TODO texto que entra al PDF pasa por `_t()` de
+  `services/documentos/pdf_comprobante.py` (translitera la tipografía Unicode común
+  y encodea best-effort); nunca pasar literales ni datos crudos a `cell`/`multi_cell`
+  sin él (mordió el "—" de las celdas vacías). Unicode real algún día ⇒ embeber TTF.
+- **Las suites asertan sobre valores del SERVER, no del fixture** (F16): el cuerpo
+  del email lleva el `total` calculado por el servidor — la aserción que buscaba el
+  precio tipeado (1234.56) falló contra el total con IVA (1493.82). Asertar contra
+  la respuesta (`emitido["total"]`), nunca contra el input del test.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 
@@ -367,6 +384,17 @@ ZGC/
   un `cat >> archivo << 'EOF'` con contenido largo cortó con "unexpected EOF while
   looking for matching quote". Misma regla que los pipelines de PowerShell: todo
   contenido de archivo se escribe con Write/Edit, el shell no toca archivos del repo.
+  AMPLIADA en F16: `python -c "..."` MULTILÍNEA en el tool de PowerShell tampoco
+  (lo parsea como ScriptBlock y corta con "solo se debe especificar como valor del
+  parámetro Command") — el script se escribe al scratchpad con Write y se ejecuta
+  por ruta.
+- **Suites con cleanup in-process por SQLAlchemy: el ENV_FILE debe resolver desde
+  el CWD** (F16, mordió con `test_pos_login_dev.py`): corrida desde la RAÍZ con
+  `$env:ENV_FILE=".env.local"`, los tenants se crean igual (el subproceso
+  `setup_tenant.py` corre con cwd=backend) pero el cleanup in-process no encuentra
+  el archivo ("Could not parse SQLAlchemy URL") y deja tenants `PosLogin*`
+  huérfanos — borrarlos por SQL (`delete from tenants where razon_social like
+  'PosLogin%'`, cascadea). Correrla desde `backend/` como dice su docstring.
 - **CUIT sintético en fixtures: si el DV calculado da 10, ese CUIT NO EXISTE** —
   mapearlo a 9 (el atajo que traían 3 suites) produce un DV inválido y el alta
   revienta con 422 una de cada ~11 corridas (mordió en la regresión de N2). El
