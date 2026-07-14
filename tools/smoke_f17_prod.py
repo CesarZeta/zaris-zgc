@@ -61,7 +61,7 @@ def main():
     args = ap.parse_args()
     base = args.base.rstrip("/") + "/api/v1"
 
-    st, spec, _ = _req("GET", args.base.rstrip("/") + "/openapi.json", None)
+    st, spec, _ = _req("GET", args.base.rstrip("/"), "/openapi.json")
     check("openapi expone /auditoria/eventos",
           st == 200 and "/api/v1/auditoria/eventos" in json.dumps(spec), f"{st}")
 
