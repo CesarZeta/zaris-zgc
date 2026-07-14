@@ -63,6 +63,7 @@ Sin `updated_at`: la fila nunca muta. Tabla nueva ⇒ re-aplicar la 005 en prod.
 | articulos | `import_excel` | import de artículos | `{total_filas, creados, actualizados, errores}` |
 | pos | `pos_anulacion_supervisor` | anulación autorizada en el POS | ref = comprobante anulado; `{supervisor_email, motivo}` |
 | contabilidad | `periodo_cerrado` / `periodo_reabierto` | cierre/reapertura mensual | `{periodo}` |
+| configuracion | `backup_descargado` | descarga del ZIP de backup completo (F18) — primera LECTURA auditada: bajar todo el tenant es la lectura más sensible del sistema | `{tablas, filas_total}` |
 
 Criterio de extensión: toda fase nueva que agregue una escritura de
 configuración o un evento de seguridad suma su acción acá y llama al servicio —

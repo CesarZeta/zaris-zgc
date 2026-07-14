@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "ZARIS <no-reply@zaris.com.ar>"
     APP_URL: str = "http://localhost:5173"
 
+    # Observabilidad (F18 — DISENO-BACKUP-OBSERVABILIDAD.md §3.3): DSN de
+    # Sentry, vacía = deshabilitado (mismo patrón que EMAIL_MODO). La provee
+    # César como env var en Vercel cuando cree la cuenta.
+    SENTRY_DSN: str = ""
+
     @property
     def es_nodo(self) -> bool:
         return self.PERFIL == "nodo"

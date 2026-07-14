@@ -8,5 +8,6 @@
       "config": { "includeFiles": ["backend/app/**"] }
     }
   ],
-  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }]
+  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }],
+  "crons": [{ "path": "/health/db", "schedule": "0 9 * * *" }]
 }

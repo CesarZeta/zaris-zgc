@@ -45,6 +45,9 @@ ACCIONES_AUDIT: dict[str, tuple[str, str]] = {
     "pos_anulacion_supervisor": ("pos", "Anulación POS autorizada por supervisor"),
     "periodo_cerrado": ("contabilidad", "Período contable cerrado"),
     "periodo_reabierto": ("contabilidad", "Período contable reabierto"),
+    # F18: primera LECTURA auditada — descargar todo el tenant es la lectura
+    # más sensible del sistema (extensión anotada en el cierre de F17).
+    "backup_descargado": ("configuracion", "Backup del tenant descargado"),
 }
 
 

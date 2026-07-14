@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.articulos import router as articulos_router
 from app.api.v1.auditoria import router as auditoria_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.backup import router as backup_router
 from app.api.v1.bancos import router as bancos_router
 from app.api.v1.caja import router as caja_router
 from app.api.v1.catalogos_articulos import router as catalogos_articulos_router
@@ -42,6 +43,17 @@ from app.api.v1.vendedores import router as vendedores_router
 from app.api.v1.ventas_config import router as ventas_config_router
 from app.core.config import settings
 from app.services.sync_nodo import loop_sync
+
+# Sentry (F18 — DISENO-BACKUP-OBSERVABILIDAD.md §3.3): patrón de modos de la
+# casa — DSN vacía (default) = no-op total. Solo errores, sin tracing/APM.
+if settings.SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENV,
+        send_default_pii=False,
+    )
 
 
 @asynccontextmanager
@@ -104,6 +116,7 @@ ROUTERS_NUBE = [
     contabilidad_router,
     nodos_router,
     sync_router,
+    backup_router,
 ]
 
 for r in ROUTERS_COMUNES:
@@ -161,6 +174,28 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok", "app": "zgc-backend", "env": settings.ENV, "perfil": settings.PERFIL}
+
+
+@app.get("/health/db")
+async def health_db():
+    """Latido que TOCA la base (F18 §3.1): keep-alive de Supabase (el free
+    tier pausa tras ~1 semana inactivo — lo pega el cron de Vercel) y monitor
+    de uptime. En el nodo mide su Postgres local. Público y barato; no expone
+    datos ni versiones."""
+    import time
+
+    from sqlalchemy import text as sql_text
+
+    from app.core.db import SessionLocal
+
+    inicio = time.monotonic()
+    try:
+        async with SessionLocal() as session:
+            await session.execute(sql_text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "error", "db": "caida"})
+    latencia_ms = round((time.monotonic() - inicio) * 1000, 1)
+    return {"status": "ok", "db": "ok", "latencia_ms": latencia_ms}
 
 
 if settings.es_nodo and settings.NODO_WEB_DIR:

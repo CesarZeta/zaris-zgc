@@ -1106,6 +1106,44 @@ por César el 2026-07-13.
   retención/purga configurable, vista de actividad por usuario, alertas de logins
   fallidos repetidos (la infraestructura la dio F16), auditoría de lecturas sensibles.
 
+## FASE 18 — Backup por tenant + observabilidad mínima ✅ (2026-07-14)
+
+**Entregable: «Descargá todo lo tuyo» — ZIP con TODOS los datos del tenant desde
+Configuración — más la observabilidad mínima del SaaS: /health/db, keep-alive de
+Supabase, Sentry opcional y monitoreo externo.** Diseño en
+`docs/DISENO-BACKUP-OBSERVABILIDAD.md`. Tercera de las 5 piezas aceptadas por César
+el 2026-07-13. **Primera fase post-MVP SIN migración** (la traza la da `audit_eventos`).
+
+- [x] **Backup dirigido por metadata** (`services/backup.py`): entra TODA tabla con
+  `tenant_id` (80 hoy — una tabla futura entra sola, sin checklist) + la fila propia
+  de `tenants`; exclusiones explícitas con porqué (`arca_tokens`, `password_resets`,
+  `padron_cache`; columnas `password_hash`, `cert_pem`/`key_pem`, `token_hash`).
+  ZIP en memoria (patrón export-contador) con LEEME + manifest (conteos por tabla,
+  tope 200k filas marcado `truncado` — nunca recorte silencioso).
+- [x] **Endpoint** `GET /backup/export.zip` (router nube-only, fuera de
+  `ROUTERS_COMUNES`), guarda `configuracion.editar` (la lectura más sensible del
+  sistema; `configuracion` está en el plan `pos` ⇒ las licencias POS también tienen
+  backup). Acción de auditoría nueva `backup_descargado` (primera LECTURA auditada,
+  la extensión que F17 dejó anotada) — catálogo 22 → 23.
+- [x] **Observabilidad**: `/health/db` (SELECT 1 + latencia, 503 si la DB no responde;
+  en el nodo mide su Postgres local) · **keep-alive** por Vercel Cron diario a
+  /health/db (el free tier de Supabase pausa tras ~1 semana inactivo) · **Sentry
+  backend** con patrón de modos (`SENTRY_DSN` vacía = deshabilitado; `sentry-sdk` en
+  AMBOS requirements). Front Sentry diferido.
+- [x] **Frontend**: sección «Backup de datos» en Configuración (descarga con un botón;
+  el historial de descargas se ve en Auditoría). Build TS limpio.
+- [x] Verificado 2026-07-14: **32/32 pruebas en vivo** (`tools/test_f18_dev.py`, tenant
+  efímero con cleanup: estructura del ZIP, **guarda de completitud contra el metadata**
+  — toda tabla con tenant_id en el ZIP o excluida explícitamente —, sin secretos en los
+  CSV, aislamiento de tenant, manifest consistente, auditoría de la descarga, RBAC 403
+  nunca 401, /health/db) + regresiones **F17 67/67 · nodo 104/104** (main.py cambió:
+  criterio de cierre F17).
+- **Pendiente César (provisión, sin código)**: cuenta Sentry free (env var `SENTRY_DSN`
+  en Vercel) + cuenta UptimeRobot free (2 monitores: /health/db del backend y el
+  frontend Pages). Todo funciona sin ambas.
+- Diferido documentado (§7 del diseño): restore/import del ZIP, backups programados
+  server-side con retención, Sentry en el front, alertas propias por email.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -1129,7 +1167,7 @@ por César el 2026-07-13.
 | 15 | **Sueldos y cargas sociales** | Alcance si se construye: legajos, liquidación por convenio, F.931/SICOSS, Libro de Sueldos Digital, ART. **Build-vs-integrar ABIERTO** (ver Decisiones abiertas) | **FOSO MÁXIMO, el más condicional**: F9+F10 maduros + N clientes pagos estables + **asesoría laboral contratada**. Mantenimiento MUY ALTO (paritarias, escalas), riesgo legal ALTO |
 | 16 ✅ | **Salida de documentos (PDF + email)** | **HECHA 2026-07-13** (sección FASE 16 arriba): PDF server-side (fpdf2), envío con adjunto (modos patrón ARCA, registro `email_envios`), recuperación de contraseña autoservicio. Base futura: avisos de vencimientos/cheques, verificación de email del signup (F20) | 1ª en orden de valor de las 5 aceptadas por César 2026-07-13. Modo simulado hasta que César provisione Resend (§7 del diseño) |
 | 17 ✅ | **Auditoría de acciones (audit log)** | **HECHA 2026-07-14** (sección FASE 17 arriba): `audit_eventos` inmutable (migración 027), catálogo de 22 acciones con captura explícita en ~20 endpoints sensibles, consulta con filtros + CSV en Configuración. Se optó por llamadas explícitas (no middleware): precisas, con ref al objeto y antes/después | **ACEPTADA por César 2026-07-13** (2ª en orden). Red de seguridad ante "yo no borré eso" |
-| 18 | **Backup por tenant + observabilidad mínima** | "Descargá todo lo tuyo": ZIP de CSVs de todos los módulos (helper `csv_export` + patrón export-contador ya existen). Argumento de venta contra el miedo al SaaS + obligación con el free tier de Supabase (pausa tras ~1 semana inactivo). Observabilidad: uptime + keep-alive + Sentry free tier | **ACEPTADA por César 2026-07-13** (3ª en orden) |
+| 18 ✅ | **Backup por tenant + observabilidad mínima** | **HECHA 2026-07-14** (sección FASE 18 arriba): ZIP completo dirigido por metadata (toda tabla con `tenant_id` entra sola) desde Configuración, auditado; /health/db + keep-alive Vercel Cron + Sentry backend opcional. Sin migración | **ACEPTADA por César 2026-07-13** (3ª en orden). Pendiente provisión: Sentry + UptimeRobot |
 | 19 | **Multi-empresa (usuario ↔ N tenants)** | Switch de empresa (el JWT ya lleva tenant — barato con la arquitectura actual). Reprioritizada desde "IN diferido" del cuadro de gaps: los estudios contables son el canal de distribución natural (un contador trae 20 comercios). ANTES que portal de clientes / IA (F14 del cuadro) | **ACEPTADA por César 2026-07-13** (4ª en orden) |
 | 20 | **Signup/onboarding autoservicio** | Registro con email de verificación (la infraestructura la da F16); reemplaza el alta por `setup_tenant.py` para el modelo SaaS free-tier de DEFINICION-PRODUCTO.md | **ACEPTADA por César 2026-07-13** (5ª en orden; requiere F16) |
 

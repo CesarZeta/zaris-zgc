@@ -7,6 +7,7 @@ import CajasSection from "../pos/CajasSection";
 import SalonesSection from "../pos/SalonesSection";
 import ArcaConfigSection from "../ventas/ArcaConfigSection";
 import AuditoriaSection from "./AuditoriaSection";
+import BackupSection from "./BackupSection";
 import NodosSection from "./NodosSection";
 import SucursalesSection from "./SucursalesSection";
 import UsuariosSection from "./UsuariosSection";
@@ -132,6 +133,8 @@ export default function ConfiguracionPage() {
       <SalonesSection />
 
       <ArcaConfigSection />
+
+      <BackupSection />
 
       <AuditoriaSection />
     </>
