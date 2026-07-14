@@ -284,6 +284,20 @@ ZGC/
   del email lleva el `total` calculado por el servidor — la aserción que buscaba el
   precio tipeado (1234.56) falló contra el total con IVA (1493.82). Asertar contra
   la respuesta (`emitido["total"]`), nunca contra el input del test.
+- **Checklist de AUDITORÍA para fases nuevas** (F17, análogo al de
+  contabilizabilidad): toda escritura de CONFIGURACIÓN o evento de SEGURIDAD nuevo
+  que no deje documento suma su acción a `ACCIONES_AUDIT` (`services/auditoria.py`,
+  espejo del §3 de DISENO-AUDITORIA.md) y llama `auditoria.registrar()` (sin commit,
+  entra a la transacción del endpoint). Los documentos operativos NO se auditan (su
+  inmutabilidad 014 ya es su traza). El detalle JSONB JAMÁS lleva PEM/claves/tokens
+  (solo el hecho: `cargo_certificado: bool`); un evento que debe sobrevivir a una
+  respuesta de error (login fallido) se comitea ANTES del raise; dry-run no audita.
+- **Tocar un router de `ROUTERS_COMUNES` exige la regresión del NODO**
+  (cierre F17): auth, pos, pos_auth, comprobantes, cobranzas, stock, ventas_config,
+  etc. corren TAMBIÉN en el perfil nodo — las regresiones de la nube no los cubren
+  ahí. `test_nodo_dev.py` (levanta un nodo real con TODAS las migraciones) es parte
+  de la batería obligatoria cuando se toca esa lista (casi quedó sin correr en F17:
+  el login del nodo ahora escribe auditoría en su DB local).
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 
@@ -419,6 +433,17 @@ ZGC/
   que muera DESPUÉS de la guarda en un error de negocio esperado (404 de un id
   inexistente, 422 de saldo) — si responde ese error la guarda corrió limpia;
   un 500 delata el problema. No deja documentos basura en el tenant demo.
+- **Todo smoke NUEVO se ejecuta primero contra el backend LOCAL** (F17): el
+  smoke de prod es el único script que nunca corre en dev — un error tonto
+  (TypeError en el probe de openapi, mordió en F17) revienta a mitad del deploy,
+  justo cuando se está validando prod. Antes del push, correrlo contra
+  `http://127.0.0.1:8021` (aunque algunas checks fallen por datos, tiene que
+  llegar al final sin crashear).
+- **Regresiones con el tenant demo en DEV: un 401 en el login NO es un bug**
+  (F17): las suites F9/F11/mini-014/F16 asumen `demo@zaris.com.ar` con la clave
+  del docstring de `demo_setup_tenant.py` — en dev esa clave se pierde/cambia.
+  Re-fijarla con `demo_setup_tenant.py --clave "..."` (idempotente) y re-correr;
+  no diagnosticar el 401 como regresión.
 
 ## 7. Deploy y frontend (lecciones permanentes)
 
