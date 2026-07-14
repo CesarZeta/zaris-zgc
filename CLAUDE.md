@@ -292,6 +292,15 @@ ZGC/
   inmutabilidad 014 ya es su traza). El detalle JSONB JAMÁS lleva PEM/claves/tokens
   (solo el hecho: `cargo_certificado: bool`); un evento que debe sobrevivir a una
   respuesta de error (login fallido) se comitea ANTES del raise; dry-run no audita.
+- **Checklist de BACKUP para columnas/tablas nuevas** (F18, tercero de la familia
+  contabilizabilidad/auditoría): el backup por tenant (`services/backup.py`) exporta
+  AUTOMÁTICAMENTE toda tabla con `tenant_id` — una tabla nueva entra al ZIP
+  descargable sola, sin tocar nada. Corolario de seguridad: toda columna o tabla
+  nueva con material sensible (hashes, tokens, PEMs, claves) DEBE sumarse a
+  `COLUMNAS_EXCLUIDAS`/`TABLAS_EXCLUIDAS` en la MISMA fase que la crea, o **sale en
+  el backup que baja el cliente**. La guarda de completitud de `test_f18_dev.py`
+  detecta tablas olvidadas, pero no puede saber qué es secreto — eso es criterio de
+  quien agrega la columna.
 - **Tocar un router de `ROUTERS_COMUNES` exige la regresión del NODO**
   (cierre F17): auth, pos, pos_auth, comprobantes, cobranzas, stock, ventas_config,
   etc. corren TAMBIÉN en el perfil nodo — las regresiones de la nube no los cubren
@@ -465,6 +474,12 @@ ZGC/
   `get_deployment` del proyecto `zaris-zgc-api`) — NO con `curl` a `api.vercel.com`:
   esa API exige token y un loop de polling sin auth nunca ve READY (3 min perdidos
   post-N2, 2026-07-13).
+- **Vercel Cron convive con la config legacy `builds`/`routes`** (F18): el campo
+  `crons` de vercel.json registró el job sin migrar la config (la duda del diseño
+  quedó saldada). Verificación post-deploy: `npx vercel crons ls` (subcomando beta,
+  anda con la sesión del CLI del repo). El cron pega SIEMPRE al deployment de
+  producción; en Hobby la precisión es diaria — suficiente para el keep-alive de
+  Supabase (`/health/db`).
 - **Popover/dropdown dentro de un contenedor con `overflow:hidden`** (p.ej. el hero del
   inicio, que lo tiene para las órbitas animadas): un hijo con `position:absolute` se
   RECORTA. Usar `position:fixed` anclado a las coords del botón (`getBoundingClientRect`
