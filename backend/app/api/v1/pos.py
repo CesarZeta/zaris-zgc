@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -57,6 +57,7 @@ from app.api.v1.comprobantes import (
     crear_nc_espejo_core,
     emitir_core,
 )
+from app.services import auditoria
 from app.services import ventas as sv
 
 router = APIRouter(prefix="/pos", tags=["pos"])
@@ -1282,6 +1283,7 @@ async def crear_venta(
 async def anular_venta(
     comp_id: uuid.UUID,
     body: AnularIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("pos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1368,5 +1370,19 @@ async def anular_venta(
                 importe=factura.total,
             )
         )
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="pos_anulacion_supervisor",
+        usuario=usuario,
+        ref_id=factura.id,
+        ref_texto=f"{factura.tipo_codigo} {factura.punto_venta.numero:04d}-{factura.numero:08d}",
+        detalle={
+            "supervisor_email": supervisor.email,
+            "motivo": (body.motivo or "").strip() or None,
+            "total": factura.total,
+        },
+        request=request,
+    )
     await db.commit()
     return _out(await _cargar(db, usuario.tenant_id, nc.id))

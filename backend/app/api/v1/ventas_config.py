@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +15,7 @@ from app.core.cuit import validar_cuit
 from app.core.db import get_db
 from app.core.permisos import requiere, requiere_alguno
 from app.models import ArcaConfig, Comprobante, CondicionVenta, PuntoVenta, Usuario
+from app.services import auditoria
 
 router = APIRouter(prefix="/ventas", tags=["ventas-config"])
 
@@ -107,12 +108,24 @@ async def listar_puntos_venta(
 @router.post("/puntos-venta", response_model=PuntoVentaOut, status_code=status.HTTP_201_CREATED)
 async def crear_punto_venta(
     body: PuntoVentaIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     pv = PuntoVenta(tenant_id=usuario.tenant_id, **body.model_dump())
     db.add(pv)
     try:
+        await db.flush()
+        auditoria.registrar(
+            db,
+            tenant_id=usuario.tenant_id,
+            accion="punto_venta_alta",
+            usuario=usuario,
+            ref_id=pv.id,
+            ref_texto=f"PV {body.numero:04d}",
+            detalle=body.model_dump(),
+            request=request,
+        )
         await db.commit()
     except IntegrityError:
         await db.rollback()
@@ -127,6 +140,7 @@ async def crear_punto_venta(
 async def actualizar_punto_venta(
     pv_id: uuid.UUID,
     body: PuntoVentaUpdate,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -135,8 +149,22 @@ async def actualizar_punto_venta(
     )
     if pv is None:
         raise HTTPException(status_code=404, detail="Punto de venta no encontrado")
+    cambios: dict = {}
     for campo, valor in body.model_dump(exclude_unset=True).items():
+        if getattr(pv, campo) != valor:
+            cambios[campo] = {"antes": getattr(pv, campo), "despues": valor}
         setattr(pv, campo, valor)
+    if cambios:
+        auditoria.registrar(
+            db,
+            tenant_id=usuario.tenant_id,
+            accion="punto_venta_edicion",
+            usuario=usuario,
+            ref_id=pv.id,
+            ref_texto=f"PV {pv.numero:04d}",
+            detalle=cambios,
+            request=request,
+        )
     await db.commit()
     return pv
 
@@ -226,6 +254,7 @@ async def ver_arca_config(
 @router.put("/arca-config", response_model=ArcaConfigOut)
 async def guardar_arca_config(
     body: ArcaConfigIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -246,11 +275,27 @@ async def guardar_arca_config(
     for sensible in ("cert_pem", "key_pem"):
         if datos.get(sensible) is None:
             datos.pop(sensible, None)
+    modo_antes = config.modo if config else "deshabilitado"
     if config is None:
         config = ArcaConfig(tenant_id=usuario.tenant_id, **datos)
         db.add(config)
     else:
         for campo, valor in datos.items():
             setattr(config, campo, valor)
+    # jamás el PEM en el detalle: solo el HECHO de que se cargó (diseño F17 §3)
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="arca_config",
+        usuario=usuario,
+        ref_texto=f"modo {modo_antes} → {body.modo}",
+        detalle={
+            "modo_antes": modo_antes,
+            "modo_despues": body.modo,
+            "cargo_certificado": "cert_pem" in datos,
+            "cargo_clave": "key_pem" in datos,
+        },
+        request=request,
+    )
     await db.commit()
     return _config_out(config, await _emitidos_fiscales(db, usuario.tenant_id))

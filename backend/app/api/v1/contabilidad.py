@@ -16,7 +16,7 @@ import zipfile
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,7 @@ from app.models import (
     TipoComprobanteCompra,
     Usuario,
 )
+from app.services import auditoria
 from app.services import contabilidad as sc
 
 router = APIRouter(prefix="/contabilidad", tags=["contabilidad"])
@@ -1291,6 +1292,7 @@ async def listar_periodos(
 @router.post("/periodos/cerrar", status_code=status.HTTP_201_CREATED)
 async def cerrar_periodo(
     body: CerrarPeriodoIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("contabilidad", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1299,6 +1301,17 @@ async def cerrar_periodo(
         raise HTTPException(status_code=409, detail="Ese período ya está cerrado")
     p = ContabPeriodo(tenant_id=usuario.tenant_id, periodo=periodo, cerrado_por=usuario.id)
     db.add(p)
+    await db.flush()
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="periodo_cerrado",
+        usuario=usuario,
+        ref_id=p.id,
+        ref_texto=f"período {periodo.strftime('%Y-%m')}",
+        detalle={"periodo": periodo},
+        request=request,
+    )
     await db.commit()
     return {"id": str(p.id), "periodo": periodo.isoformat()}
 
@@ -1306,6 +1319,7 @@ async def cerrar_periodo(
 @router.post("/periodos/{periodo_id}/reabrir", status_code=status.HTTP_200_OK)
 async def reabrir_periodo(
     periodo_id: uuid.UUID,
+    request: Request,
     usuario: Usuario = Depends(requiere("contabilidad", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1321,5 +1335,15 @@ async def reabrir_periodo(
     # reabrir = marcar (contrato 014); la historia del cierre queda
     p.anulado_at = datetime.now(timezone.utc)
     p.anulado_por = usuario.id
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="periodo_reabierto",
+        usuario=usuario,
+        ref_id=p.id,
+        ref_texto=f"período {p.periodo.strftime('%Y-%m')}",
+        detalle={"periodo": p.periodo},
+        request=request,
+    )
     await db.commit()
     return {"ok": True}

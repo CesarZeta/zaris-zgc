@@ -1067,6 +1067,45 @@ César el 2026-07-13 (sesión de mejoras de suite; filas 16–20 del cuadro POST
   PDF de recibos/OP/presupuestos de compra, avisos programados (vencimientos,
   cheques por vencer), UI de bandeja de salida, plantillas por tenant.
 
+## FASE 17 — Auditoría de acciones (audit log) ✅ (2026-07-14)
+
+**Entregable: registro inmutable de quién hizo qué — logins (ok y fallidos), cambios de
+usuarios/roles/matriz de permisos, config ARCA, cambios masivos de precios, anulaciones
+POS autorizadas, nodos LAN y cierres de período — consultable y exportable desde
+Configuración.** Diseño en `docs/DISENO-AUDITORIA.md`. Segunda de las 5 piezas aceptadas
+por César el 2026-07-13.
+
+- [x] **Encuadre**: los documentos operativos NO se auditan (su inmutabilidad del
+  contrato 014 ya es su auditoría) — el audit log cubre las escrituras de
+  **configuración** y los eventos de **seguridad** que no dejan documento.
+- [x] **Migración 027**: tabla única `audit_eventos` (usuario snapshot por email,
+  acción de catálogo, módulo, ref, `detalle` JSONB, IP, sin `updated_at`) + RLS.
+  **Inmutable por construcción**: la API no expone UPDATE/DELETE.
+- [x] **Catálogo de 22 acciones** (`services/auditoria.py`, espejo del diseño §3):
+  auth (login ok/fallido/recuperación/restablecimiento), configuración (usuarios,
+  roles, matriz con antes/después, reset admin, ARCA sin PEM, PV, nodos LAN),
+  artículos (precios masivo con parámetros — dry-run NO audita —, import Excel),
+  POS (anulación con supervisor) y contabilidad (cierre/reapertura de período).
+- [x] **Captura explícita sin commit** (patrón core): el evento entra a la transacción
+  del endpoint (rollback = la acción no ocurrió = sin evento). El **login fallido se
+  comitea ANTES del 401** (lección F16 §6); un email inexistente NO deja evento (no
+  pertenece a ningún tenant que pueda verlo). ~20 puntos instrumentados en 8 routers.
+- [x] **Consulta** (`/auditoria/eventos|catalogo|export.csv`, solo nube, guarda
+  `configuracion.ver` — precedente bandeja F16, sin módulo RBAC nuevo): filtros
+  acción/módulo/usuario/fechas/q, X-Total-Count, CSV con BOM tope 5000.
+- [x] **Frontend**: sección «Auditoría de acciones» en Configuración (tabla con chips
+  por acción — rojo login fallido, amarillo reversiones —, detalle JSON expandible,
+  filtros + export). Build TS limpio.
+- [x] Verificado 2026-07-14: **67/67 pruebas en vivo** (`tools/test_f17_dev.py`, tenant
+  efímero con cleanup: los 22 tipos de evento, antes/después en matriz y usuarios,
+  dry-run no audita, PEM y claves jamás en el detalle, RBAC 403 nunca 401,
+  inmutabilidad 405, aislamiento de tenant) + regresiones **login POS 23/23 ·
+  mini-014 53/53 · F12-a 36/36 · F12-b 39/39 · F16 32/32 · F9 39/39** + E2E navegador
+  (sección renderizando el evento real con IP y detalle).
+- Diferido documentado (§8 del diseño): subida de auditoría del nodo (N3),
+  retención/purga configurable, vista de actividad por usuario, alertas de logins
+  fallidos repetidos (la infraestructura la dio F16), auditoría de lecturas sensibles.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,
@@ -1089,7 +1128,7 @@ César el 2026-07-13 (sesión de mejoras de suite; filas 16–20 del cuadro POST
 | 14 | Portal de clientes + IA | Autogestión cta. cte./pedidos; reposición sugerida, anomalías, NL queries | Tracción |
 | 15 | **Sueldos y cargas sociales** | Alcance si se construye: legajos, liquidación por convenio, F.931/SICOSS, Libro de Sueldos Digital, ART. **Build-vs-integrar ABIERTO** (ver Decisiones abiertas) | **FOSO MÁXIMO, el más condicional**: F9+F10 maduros + N clientes pagos estables + **asesoría laboral contratada**. Mantenimiento MUY ALTO (paritarias, escalas), riesgo legal ALTO |
 | 16 ✅ | **Salida de documentos (PDF + email)** | **HECHA 2026-07-13** (sección FASE 16 arriba): PDF server-side (fpdf2), envío con adjunto (modos patrón ARCA, registro `email_envios`), recuperación de contraseña autoservicio. Base futura: avisos de vencimientos/cheques, verificación de email del signup (F20) | 1ª en orden de valor de las 5 aceptadas por César 2026-07-13. Modo simulado hasta que César provisione Resend (§7 del diseño) |
-| 17 | **Auditoría de acciones (audit log)** | La mitad operativa de la inmutabilidad contable ya lograda: quién cambió precios masivamente, quién editó matriz de permisos, quién tocó config ARCA, logins fallidos. Decorator/middleware sobre escrituras sensibles (RBAC ya centraliza en `permisos.py`) | **ACEPTADA por César 2026-07-13** (2ª en orden). Barata con la disciplina actual; red de seguridad ante "yo no borré eso" |
+| 17 ✅ | **Auditoría de acciones (audit log)** | **HECHA 2026-07-14** (sección FASE 17 arriba): `audit_eventos` inmutable (migración 027), catálogo de 22 acciones con captura explícita en ~20 endpoints sensibles, consulta con filtros + CSV en Configuración. Se optó por llamadas explícitas (no middleware): precisas, con ref al objeto y antes/después | **ACEPTADA por César 2026-07-13** (2ª en orden). Red de seguridad ante "yo no borré eso" |
 | 18 | **Backup por tenant + observabilidad mínima** | "Descargá todo lo tuyo": ZIP de CSVs de todos los módulos (helper `csv_export` + patrón export-contador ya existen). Argumento de venta contra el miedo al SaaS + obligación con el free tier de Supabase (pausa tras ~1 semana inactivo). Observabilidad: uptime + keep-alive + Sentry free tier | **ACEPTADA por César 2026-07-13** (3ª en orden) |
 | 19 | **Multi-empresa (usuario ↔ N tenants)** | Switch de empresa (el JWT ya lleva tenant — barato con la arquitectura actual). Reprioritizada desde "IN diferido" del cuadro de gaps: los estudios contables son el canal de distribución natural (un contador trae 20 comercios). ANTES que portal de clientes / IA (F14 del cuadro) | **ACEPTADA por César 2026-07-13** (4ª en orden) |
 | 20 | **Signup/onboarding autoservicio** | Registro con email de verificación (la infraestructura la da F16); reemplaza el alta por `setup_tenant.py` para el modelo SaaS free-tier de DEFINICION-PRODUCTO.md | **ACEPTADA por César 2026-07-13** (5ª en orden; requiere F16) |

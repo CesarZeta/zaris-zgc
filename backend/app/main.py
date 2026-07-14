@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.articulos import router as articulos_router
+from app.api.v1.auditoria import router as auditoria_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bancos import router as bancos_router
 from app.api.v1.caja import router as caja_router
@@ -95,6 +96,7 @@ ROUTERS_NUBE = [
     usuarios_router,
     padron_router,
     emails_router,
+    auditoria_router,
     dashboard_router,
     cheques_router,
     bancos_router,

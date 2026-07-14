@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.csv_export import csv_response, num
 from app.core.db import get_db
 from app.core.permisos import requiere
+from app.services import auditoria
 from app.models import (
     Articulo,
     ArticuloStock,
@@ -474,6 +475,7 @@ class CambioPreciosOut(BaseModel):
 @router.post("/cambio-precios", response_model=CambioPreciosOut)
 async def cambio_masivo_precios(
     body: CambioPreciosIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -538,8 +540,30 @@ async def cambio_masivo_precios(
             )
 
     if body.dry_run:
+        # la vista previa no cambia nada: no se audita (diseño F17 §3)
         await db.rollback()
     else:
+        auditoria.registrar(
+            db,
+            tenant_id=usuario.tenant_id,
+            accion="precios_masivo",
+            usuario=usuario,
+            ref_texto=f"{len(articulos)} artículos · {body.tipo} {body.porcentaje}%",
+            detalle={
+                "tipo": body.tipo,
+                "porcentaje": body.porcentaje,
+                "listas": listas,
+                "filtros": {
+                    k: v
+                    for k, v in body.model_dump(
+                        include={"familia_id", "subfamilia_id", "marca_id", "en_dolares", "q"}
+                    ).items()
+                    if v not in (None, "")
+                },
+                "afectados": len(articulos),
+            },
+            request=request,
+        )
         await db.commit()
     return CambioPreciosOut(afectados=len(articulos), dry_run=body.dry_run, muestra=muestra)
 
@@ -581,6 +605,7 @@ def _celda_bool(valor) -> bool | None:
 @router.post("/importar-excel", response_model=ImportExcelOut)
 async def importar_excel(
     archivo: UploadFile,
+    request: Request,
     usuario: Usuario = Depends(requiere("articulos", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -733,6 +758,21 @@ async def importar_excel(
             # el savepoint ya deshizo la fila; el resto del import sigue vivo
             errores.append({"fila": nro, "error": str(e)})
 
+    auditoria.registrar(
+        db,
+        tenant_id=tenant,
+        accion="import_excel",
+        usuario=usuario,
+        ref_texto=f"{archivo.filename}: {creados} creados, {actualizados} actualizados",
+        detalle={
+            "archivo": archivo.filename,
+            "total_filas": total,
+            "creados": creados,
+            "actualizados": actualizados,
+            "errores": len(errores),
+        },
+        request=request,
+    )
     await db.commit()
     return ImportExcelOut(
         total_filas=total, creados=creados, actualizados=actualizados, errores=errores

@@ -12,7 +12,7 @@ import secrets
 import string
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,7 @@ from app.core.permisos import (
     sembrar_roles_base,
 )
 from app.models import Rol, RolPermiso, Usuario
+from app.services import auditoria
 
 router = APIRouter(tags=["usuarios y permisos"])
 
@@ -215,6 +216,7 @@ async def listar_roles(
 @router.post("/roles", response_model=list[RolOut], status_code=status.HTTP_201_CREATED)
 async def crear_rol(
     body: RolCrearIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -251,6 +253,16 @@ async def crear_rol(
     await db.flush()
     for modulo, accion in permisos.items():
         db.add(RolPermiso(rol_id=rol.id, tenant_id=usuario.tenant_id, modulo=modulo, accion=accion))
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="rol_alta",
+        usuario=usuario,
+        ref_id=rol.id,
+        ref_texto=f"rol {rol.nombre}",
+        detalle={"permisos": permisos, "clonado_de": body.clonar_de},
+        request=request,
+    )
     await db.commit()
     return await _roles_out(db, usuario.tenant_id)
 
@@ -259,16 +271,31 @@ async def crear_rol(
 async def editar_rol(
     rol_id: uuid.UUID,
     body: RolEditarIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
     rol = await _rol_del_tenant(db, usuario.tenant_id, rol_id)
     if rol.es_sistema:
         raise HTTPException(422, detail="Los roles de sistema no se editan; cloná uno propio.")
-    if body.nombre is not None:
+    cambios: dict = {}
+    if body.nombre is not None and body.nombre != rol.nombre:
+        cambios["nombre"] = {"antes": rol.nombre, "despues": body.nombre}
         rol.nombre = body.nombre
-    if body.activo is not None:
+    if body.activo is not None and body.activo != rol.activo:
+        cambios["activo"] = {"antes": rol.activo, "despues": body.activo}
         rol.activo = body.activo
+    if cambios:
+        auditoria.registrar(
+            db,
+            tenant_id=usuario.tenant_id,
+            accion="rol_edicion",
+            usuario=usuario,
+            ref_id=rol.id,
+            ref_texto=f"rol {rol.nombre}",
+            detalle=cambios,
+            request=request,
+        )
     await db.commit()
     return await _roles_out(db, usuario.tenant_id)
 
@@ -277,6 +304,7 @@ async def editar_rol(
 async def guardar_permisos(
     rol_id: uuid.UUID,
     body: PermisosIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -287,6 +315,7 @@ async def guardar_permisos(
 
     actuales = (await db.scalars(select(RolPermiso).where(RolPermiso.rol_id == rol.id))).all()
     por_modulo = {p.modulo: p for p in actuales}
+    antes = {p.modulo: p.accion for p in actuales}
     for modulo, fila in por_modulo.items():
         if modulo not in nuevos:
             await db.delete(fila)
@@ -298,6 +327,16 @@ async def guardar_permisos(
 
     await db.flush()
     await _verificar_no_lockout(db, usuario.tenant_id)
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="rol_permisos",
+        usuario=usuario,
+        ref_id=rol.id,
+        ref_texto=f"rol {rol.nombre}",
+        detalle={"antes": antes, "despues": nuevos},
+        request=request,
+    )
     await db.commit()
     invalidar_cache_permisos(rol.id)
     return await _roles_out(db, usuario.tenant_id)
@@ -306,6 +345,7 @@ async def guardar_permisos(
 @router.delete("/roles/{rol_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def borrar_rol(
     rol_id: uuid.UUID,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -317,6 +357,15 @@ async def borrar_rol(
     )
     if asignados:
         raise HTTPException(422, detail=f"El rol tiene {asignados} usuario(s) asignado(s).")
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="rol_borrado",
+        usuario=usuario,
+        ref_id=rol.id,
+        ref_texto=f"rol {rol.nombre}",
+        request=request,
+    )
     await db.delete(rol)
     await db.commit()
     invalidar_cache_permisos(rol.id)
@@ -341,6 +390,7 @@ async def listar_usuarios(
 @router.post("/usuarios", response_model=UsuarioAdminOut, status_code=status.HTTP_201_CREATED)
 async def crear_usuario(
     body: UsuarioCrearIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -360,6 +410,17 @@ async def crear_usuario(
         sucursal_id=body.sucursal_id,
     )
     db.add(nuevo)
+    await db.flush()
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="usuario_alta",
+        usuario=usuario,
+        ref_id=nuevo.id,
+        ref_texto=f"usuario {email}",
+        detalle={"rol": rol.nombre, "nivel_acceso": body.nivel_acceso},
+        request=request,
+    )
     await db.commit()
     return UsuarioAdminOut.model_validate(nuevo)
 
@@ -368,6 +429,7 @@ async def crear_usuario(
 async def editar_usuario(
     usuario_id: uuid.UUID,
     body: UsuarioEditarIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -376,22 +438,45 @@ async def editar_usuario(
     )
     if objetivo is None:
         raise HTTPException(404, detail="Usuario inexistente")
+    cambios: dict = {}
+
+    def _cambio(campo: str, nuevo) -> None:
+        viejo = getattr(objetivo, campo)
+        if nuevo != viejo:
+            cambios[campo] = {"antes": viejo, "despues": nuevo}
+
     if body.nombre is not None:
+        _cambio("nombre", body.nombre)
         objetivo.nombre = body.nombre
     if body.rol_id is not None:
         rol = await _rol_del_tenant(db, usuario.tenant_id, body.rol_id)
         if not rol.activo:
             raise HTTPException(422, detail="El rol está inactivo.")
+        _cambio("rol_id", rol.id)
         objetivo.rol_id = rol.id
     if body.nivel_acceso is not None:
+        _cambio("nivel_acceso", body.nivel_acceso)
         objetivo.nivel_acceso = body.nivel_acceso
     if body.sucursal_id is not None:
+        _cambio("sucursal_id", body.sucursal_id)
         objetivo.sucursal_id = body.sucursal_id
     if body.activo is not None:
+        _cambio("activo", body.activo)
         objetivo.activo = body.activo
 
     await db.flush()
     await _verificar_no_lockout(db, usuario.tenant_id)
+    if cambios:
+        auditoria.registrar(
+            db,
+            tenant_id=usuario.tenant_id,
+            accion="usuario_edicion",
+            usuario=usuario,
+            ref_id=objetivo.id,
+            ref_texto=f"usuario {objetivo.email}",
+            detalle=cambios,
+            request=request,
+        )
     await db.commit()
     return UsuarioAdminOut.model_validate(objetivo)
 
@@ -399,6 +484,7 @@ async def editar_usuario(
 @router.post("/usuarios/{usuario_id}/reset-password")
 async def resetear_password(
     usuario_id: uuid.UUID,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -413,5 +499,14 @@ async def resetear_password(
     alfabeto = "".join(c for c in string.ascii_letters + string.digits if c not in "0O1lI")
     password = "".join(secrets.choice(alfabeto) for _ in range(10))
     objetivo.password_hash = hash_password(password)
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="password_reset_admin",
+        usuario=usuario,
+        ref_id=objetivo.id,
+        ref_texto=f"usuario {objetivo.email}",
+        request=request,
+    )
     await db.commit()
     return {"password": password}

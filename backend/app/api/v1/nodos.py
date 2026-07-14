@@ -10,7 +10,7 @@ import secrets
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.core.auth import hash_password
 from app.core.db import get_db
 from app.core.permisos import requiere
 from app.models import PosCaja, PuntoVenta, Sucursal, SucursalNodo, Usuario
+from app.services import auditoria
 
 router = APIRouter(prefix="/nodos", tags=["nodos"])
 
@@ -89,6 +90,7 @@ async def listar_nodos(
 @router.post("", response_model=NodoCreadoOut, status_code=status.HTTP_201_CREATED)
 async def crear_nodo(
     body: NodoIn,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -141,6 +143,17 @@ async def crear_nodo(
         punto_venta_id=body.punto_venta_id,
     )
     db.add(nodo)
+    await db.flush()
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="nodo_alta",
+        usuario=usuario,
+        ref_id=nodo.id,
+        ref_texto=f"nodo {nodo.nombre} · sucursal {sucursal.nombre}",
+        detalle={"sucursal_id": body.sucursal_id, "punto_venta_id": body.punto_venta_id},
+        request=request,
+    )
     await db.commit()
     out = NodoCreadoOut(**(await _out(db, nodo)).model_dump(), token=token)
     return out
@@ -149,6 +162,7 @@ async def crear_nodo(
 @router.post("/{nodo_id}/revocar", response_model=NodoOut)
 async def revocar_nodo(
     nodo_id: uuid.UUID,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -160,6 +174,15 @@ async def revocar_nodo(
     if nodo is None:
         raise HTTPException(status_code=404, detail="Nodo no encontrado")
     nodo.estado = "revocado"
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="nodo_revocado",
+        usuario=usuario,
+        ref_id=nodo.id,
+        ref_texto=f"nodo {nodo.nombre}",
+        request=request,
+    )
     await db.commit()
     return await _out(db, nodo)
 
@@ -167,6 +190,7 @@ async def revocar_nodo(
 @router.post("/{nodo_id}/regenerar-token", response_model=NodoCreadoOut)
 async def regenerar_token(
     nodo_id: uuid.UUID,
+    request: Request,
     usuario: Usuario = Depends(requiere("configuracion", "editar")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -182,5 +206,14 @@ async def regenerar_token(
         raise HTTPException(status_code=422, detail="El nodo está revocado")
     token = _nuevo_token()
     nodo.token_hash = hash_password(token)
+    auditoria.registrar(
+        db,
+        tenant_id=usuario.tenant_id,
+        accion="nodo_token_regenerado",
+        usuario=usuario,
+        ref_id=nodo.id,
+        ref_texto=f"nodo {nodo.nombre}",
+        request=request,
+    )
     await db.commit()
     return NodoCreadoOut(**(await _out(db, nodo)).model_dump(), token=token)
