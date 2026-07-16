@@ -4,9 +4,42 @@
 
 ## URLs de producción
 
-- **App**: https://cesarzeta.github.io/zaris-zgc/
+- **App**: https://cesarzeta.github.io/zaris-zgc/ (pendiente: dominio propio `erp.zaris.com.ar`, ver §Dominio propio)
 - **API**: https://zaris-zgc-api.vercel.app (health: `/health`)
 - **DB**: Supabase proyecto `zaris-zgc` (cuenta nueva de César, org "ZARIS GESTION COMERCIAL", región sa-east-1)
+
+## Dominio propio `erp.zaris.com.ar` (plan 2026-07-16, pedido de César)
+
+Réplica del patrón ZGE (`zge.zaris.com.ar` = CNAME **DNS-only** → `cesarzeta.github.io`,
+verificado por nslookup; el DNS de `zaris.com.ar` está en **Cloudflare**). Subdominio
+elegido: `erp` (alineado al rebrand ZARIS ERP; alternativa descartable: `zgc`).
+
+**Paso 0 — César (único paso manual, en Cloudflare):** crear registro
+`CNAME  erp  →  cesarzeta.github.io`, **con el proxy APAGADO (nube gris / DNS only)**,
+igual que `zge`. Con proxy naranja GitHub Pages no puede emitir el certificado.
+
+**Pasos 1-5 — Claude, en una sola sesión de deploy (avisar cuando el DNS esté):**
+
+1. Custom domain en Pages: `gh api repos/CesarZeta/zaris-zgc/pages -X PUT -f cname=erp.zaris.com.ar`
+   (con `build_type=workflow` el dominio vive en la config de Pages, NO hace falta
+   archivo `CNAME` en el repo — eso es solo para Pages servido desde branch, como ZGE).
+2. `deploy-pages.yml`: `VITE_BASE: /zaris-zgc/` → `/` — **en el mismo deploy** que
+   activa el dominio (la app pasa a servirse en la raíz; si se hace desfasado, los
+   assets dan 404). La URL vieja `cesarzeta.github.io/zaris-zgc/` redirige sola.
+3. Vercel env vars (y redeploy del backend para que tomen):
+   - `CORS_ORIGINS` = `https://cesarzeta.github.io,https://erp.zaris.com.ar` (el origen
+     viejo se mantiene durante la transición).
+   - `APP_URL` = `https://erp.zaris.com.ar` (arma los links de los emails de reset).
+4. Esperar el certificado de Pages y activar `https_enforced=true`
+   (`gh api repos/CesarZeta/zaris-zgc/pages -X PUT -F https_enforced=true`).
+5. Smoke: login + una pantalla con `X-Total-Count` (CORS expuesto) contra el dominio
+   nuevo, y un reset de contraseña simulado verificando que el link del email apunte
+   a `erp.zaris.com.ar`.
+
+Opcional futuro (no bloquea): `api.zaris.com.ar` como dominio del backend — CNAME
+`api → cname.vercel-dns.com` + agregar el dominio al proyecto `zaris-zgc-api` en
+Vercel + actualizar la variable de repo `API_URL`. Hoy `zaris-zgc-api.vercel.app`
+funciona bien y no aparece en la UI.
 
 ## Deploy del backend (Vercel)
 

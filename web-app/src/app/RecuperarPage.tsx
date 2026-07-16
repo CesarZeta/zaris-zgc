@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, apiPost } from "../lib/api";
+import AuthFooter from "./AuthFooter";
 import ZarisLogo from "./ZarisLogo";
 
 export default function RecuperarPage() {
@@ -64,6 +65,7 @@ export default function RecuperarPage() {
           <Link to="/login">← Volver al ingreso</Link>
         </p>
       </form>
+      <AuthFooter />
     </div>
   );
 }

@@ -161,7 +161,7 @@ async def recuperar_password(body: RecuperarIn, request: Request, db: AsyncSessi
         f"<p>Pediste restablecer tu contraseña de ZARIS. El enlace vale por 1 hora:</p>"
         f'<p><a href="{link}">{link}</a></p>'
         f"<p>Si no fuiste vos, ignorá este mensaje — tu contraseña sigue igual.</p>"
-        f"<p style='color:#777;font-size:12px'>ZARIS Gestión Comercial.</p>"
+        f"<p style='color:#777;font-size:12px'>ZARIS ERP.</p>"
     )
     try:
         await enviar_email(

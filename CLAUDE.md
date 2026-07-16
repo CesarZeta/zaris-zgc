@@ -1,10 +1,12 @@
-# ZGC — ZARIS Gestión Comercial
+# ZGC — ZARIS ERP
 
 > **⚠️ REGLA RECTORA #0 — NUNCA ASUMIR, VERIFICAR SIEMPRE:** antes de afirmar, opinar o recomendar cualquier cosa sobre el código, la DB, la infra o el estado del proyecto, **verificarlo contra la realidad** (DB con `execute_sql`, código con `Read`/`Grep`, runtime con `curl`/browser, historia con `git log`). No deducir de esta doc ni de la memoria. Misma regla rectora que ZGE, declarada permanente por Cesar el 2026-05-23.
 
 ## 1. Qué es ZGC
 
-Web app de **gestión comercial, contable y de stock** que administra puntos de venta de manera centralizada: ventas, compras, IVA, bancos, cheques, depósitos, cajas chicas, cuentas corrientes, comisiones, facturación electrónica ARCA/AFIP.
+Web app **ERP** (ciclo comercial, contable y de stock) que administra puntos de venta de manera centralizada: ventas, compras, IVA, bancos, cheques, depósitos, cajas chicas, cuentas corrientes, comisiones, facturación electrónica ARCA/AFIP.
+
+> **Rebrand 2026-07-16 (César)**: el producto se clasifica y se vende como **ERP** — nombre comercial **ZARIS ERP**. «ZGC» queda como código interno (repo, infra, docs técnicos). En toda descripción visible del software (UI, emails, PDFs, backups, OpenAPI, repo) el nombre es «ZARIS ERP»; el nombre del legacy «RevoSolution Gestión Comercial» NO se toca.
 
 Es la reescritura moderna del software legacy **RevoSolution Gestión Comercial** (escritorio, FoxPro/xBase, Argentina). Todo el material del legacy está en `Revosolution Software/`:
 

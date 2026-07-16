@@ -1360,7 +1360,7 @@ async def enviar_por_email(
         f"{c['numero_formateado']}</b> de <b>{emisor['razon_social']}</b> "
         f"por un total de <b>$ {c['total']}</b> (fecha {c['fecha']}).</p>"
         f"{aviso_simulado}"
-        f"<p style='color:#777;font-size:12px'>Enviado con ZARIS Gestión Comercial.</p>"
+        f"<p style='color:#777;font-size:12px'>Enviado con ZARIS ERP.</p>"
     )
     tenant = await db.scalar(select(Tenant).where(Tenant.id == usuario.tenant_id))
     try:

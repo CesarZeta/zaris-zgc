@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiError, apiPost } from "../lib/api";
+import AuthFooter from "./AuthFooter";
 import ZarisLogo from "./ZarisLogo";
 
 export default function RestablecerPage() {
@@ -91,6 +92,7 @@ export default function RestablecerPage() {
           <Link to="/login">← Ir al ingreso</Link>
         </p>
       </form>
+      <AuthFooter />
     </div>
   );
 }

@@ -67,7 +67,7 @@ export default function AppShell() {
       </aside>
       <div className="main">
         <div className="topbar">
-          <span className="empresa">ZARIS Gestión Comercial</span>
+          <span className="empresa">ZARIS ERP</span>
           <span className="usuario">
             Hola, <b>{sesion.user.nombre}</b>
           </span>

@@ -42,8 +42,8 @@ COLUMNAS_EXCLUIDAS: set[tuple[str, str]] = {
 # lo marca `truncado=Sí` — nunca se recorta en silencio.
 TOPE_FILAS = 200_000
 
-LEEME = """BACKUP COMPLETO — ZARIS Gestión Comercial (ZGC)
-================================================
+LEEME = """BACKUP COMPLETO — ZARIS ERP (ZGC)
+=================================
 
 Este ZIP contiene TODOS los datos de su empresa: un archivo CSV por tabla del
 sistema (el nombre del archivo es el nombre de la tabla) más este LEEME y un

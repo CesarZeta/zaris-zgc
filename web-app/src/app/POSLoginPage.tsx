@@ -9,6 +9,7 @@ import { ApiError, apiPost } from "../lib/api";
 import { setSesion } from "../lib/auth";
 import type { Sesion } from "../lib/types";
 import { PosDevice } from "../modules/pos/POSHeader";
+import AuthFooter from "./AuthFooter";
 import ZarisLogo from "./ZarisLogo";
 
 export default function POSLoginPage() {
@@ -40,7 +41,7 @@ export default function POSLoginPage() {
           <ZarisLogo size={40} />
           <h1 className="login-logo">ZARIS</h1>
         </div>
-        <p className="login-sub">Punto de Venta</p>
+        <p className="login-sub">ZARIS ERP · Punto de Venta</p>
 
         {error && <div className="login-error">{error}</div>}
 
@@ -74,6 +75,7 @@ export default function POSLoginPage() {
         <p className="login-sub" style={{ marginTop: "var(--space-4)" }}>
           <Link to="/login">← Ingresar a la gestión</Link>
         </p>
+        <AuthFooter />
       </form>
     </PosDevice>
   );

@@ -5,7 +5,7 @@
 
 ## 1. Visión
 
-ZGC es un **SaaS multi-tenant** de gestión comercial, contable y de stock para comercios argentinos, sucesor web del legacy RevoSolution. Una sola instancia en la nube sirve a todos los clientes (cada tenant = una empresa con N sucursales y N puntos de venta), con costo marginal por cliente cercano a cero — condición necesaria del modelo: **infraestructura 100% free-tier hasta que haya clientes pagando**.
+ZGC (nombre comercial **ZARIS ERP**, rebrand 2026-07-16) es un **ERP SaaS multi-tenant** — ciclo comercial, contable y de stock — para comercios argentinos, sucesor web del legacy RevoSolution. Una sola instancia en la nube sirve a todos los clientes (cada tenant = una empresa con N sucursales y N puntos de venta), con costo marginal por cliente cercano a cero — condición necesaria del modelo: **infraestructura 100% free-tier hasta que haya clientes pagando**.
 
 Es un **producto independiente** del ecosistema ZARIS (repo, DB y auth propios). Comparte patrones y experiencia de ZGE, no infraestructura lógica.
 

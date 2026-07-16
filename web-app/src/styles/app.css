@@ -3,8 +3,11 @@
 /* ---------- Login ---------- */
 .login-page {
   min-height: 100%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
   background: var(--zaris-cream);
   padding: var(--space-8);
 }
@@ -15,6 +18,89 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: var(--space-12) var(--space-12) var(--space-10);
+}
+
+/* Split de marca (rebrand ZARIS ERP): panel tinta con la propuesta del
+   producto + tarjeta de ingreso. En angosto colapsa a franja de marca. */
+.login-split {
+  display: grid;
+  grid-template-columns: 340px 380px;
+  width: 100%;
+  max-width: 720px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.login-split .login-card {
+  max-width: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.login-brand {
+  background: var(--zaris-dark);
+  color: #f2f1ed;
+  padding: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.login-brand .login-marca { margin: 0; }
+.login-brand .zaris-mark { color: var(--zaris-orange); }
+.login-brand .login-logo { color: #f2f1ed; }
+.login-brand-erp {
+  font-family: var(--font-mono);
+  font-size: var(--size-caption);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #26251e;
+  background: var(--zaris-orange);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+.login-brand-pitch {
+  margin: 0;
+  font-size: var(--size-btn);
+  line-height: var(--lh-normal);
+  color: rgba(242, 241, 237, 0.75);
+}
+.login-brand-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  font-size: var(--size-btn);
+  color: rgba(242, 241, 237, 0.85);
+}
+.login-brand-lista li::before {
+  content: "— ";
+  color: var(--zaris-orange);
+}
+.login-brand-link {
+  margin-top: auto;
+  font-size: var(--size-btn);
+  color: var(--zaris-gold);
+  text-decoration: none;
+}
+.login-brand-link:hover { text-decoration: underline; }
+.auth-footer {
+  margin: 0;
+  font-size: var(--size-caption);
+  color: var(--fg-3);
+  text-align: center;
+}
+.auth-footer-version { font-family: var(--font-mono); }
+.auth-footer a { color: inherit; }
+@media (max-width: 780px) {
+  .login-split { grid-template-columns: 1fr; max-width: 420px; }
+  .login-brand {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-6) var(--space-10);
+  }
+  .login-brand-pitch,
+  .login-brand-lista,
+  .login-brand-link { display: none; }
 }
 .login-marca {
   display: flex;

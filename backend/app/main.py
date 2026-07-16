@@ -68,8 +68,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ZGC — ZARIS Gestión Comercial",
-    version="0.1.0",
+    title="ZGC — ZARIS ERP",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
