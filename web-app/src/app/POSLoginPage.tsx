@@ -4,7 +4,7 @@
 // El mismo formulario servirá en el nodo de sucursal (cambia solo la API base).
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ApiError, apiPost } from "../lib/api";
 import { setSesion } from "../lib/auth";
 import type { Sesion } from "../lib/types";
@@ -72,8 +72,9 @@ export default function POSLoginPage() {
           {cargando ? "Ingresando…" : "Abrir el POS"}
         </button>
 
-        <p className="login-sub" style={{ marginTop: "var(--space-4)" }}>
-          <Link to="/login">← Ingresar a la gestión</Link>
+        <p className="login-ayuda">
+          Acceso exclusivo de la caja: solo usuarios habilitados para el Punto de Venta. Los
+          usuarios de la gestión con permiso de POS abren la caja con su misma cuenta.
         </p>
         <AuthFooter />
       </form>

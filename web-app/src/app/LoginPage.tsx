@@ -91,8 +91,6 @@ export default function LoginPage() {
 
           <p className="login-sub" style={{ marginTop: "var(--space-4)", marginBottom: 0 }}>
             <Link to="/recuperar">Olvidé mi contraseña</Link>
-            {" · "}
-            <Link to="/pos/login">Ingreso de caja (POS) →</Link>
           </p>
         </form>
       </div>

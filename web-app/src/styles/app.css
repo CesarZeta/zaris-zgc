@@ -83,6 +83,12 @@
   text-decoration: none;
 }
 .login-brand-link:hover { text-decoration: underline; }
+.login-ayuda {
+  margin: var(--space-6) 0 var(--space-4);
+  font-size: var(--size-caption);
+  line-height: var(--lh-ui);
+  color: var(--fg-3);
+}
 .auth-footer {
   margin: 0;
   font-size: var(--size-caption);
