@@ -55,6 +55,24 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Email o contraseña incorrectos"
         )
+    permisos = await permisos_efectivos(db, usuario)
+    if "pos" in permisos and not set(permisos) - {"pos"}:
+        # Usuario solo-POS: su superficie es la caja, nunca el ERP (mandato
+        # César 2026-07-16). 403, nunca 401 (regla §6); el evento se comitea
+        # antes del raise (la evidencia sobrevive al error, F16/F17).
+        auditoria.registrar(
+            db,
+            tenant_id=usuario.tenant_id,
+            accion="login_fallido",
+            usuario=usuario,
+            detalle={"origen": "suite", "motivo": "solo_pos"},
+            request=request,
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu usuario es de Punto de Venta — ingresá por el login de la caja",
+        )
     auditoria.registrar(
         db,
         tenant_id=usuario.tenant_id,
@@ -67,7 +85,7 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     return LoginResponse(
         access_token=create_access_token(usuario),
         user=UsuarioOut.model_validate(usuario),
-        permisos=await permisos_efectivos(db, usuario),
+        permisos=permisos,
     )
 
 

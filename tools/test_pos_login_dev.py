@@ -166,6 +166,25 @@ def main():
                  body={"email": f"vend.{SUF}@zgc.dev", "password": f"clave-{SUF}"})
     check("el mismo usuario entra a la suite -> 200", st == 200, f"{st}")
 
+    # ===== 4-bis. usuario SOLO-POS: la caja sí, el ERP no (mandato 2026-07-16) =====
+    st, roles = _req("POST", base, "/roles", tok_suite,
+                     {"nombre": f"Solo POS {SUF}", "permisos": {"pos": "editar"}})
+    check("alta rol solo-POS -> 201", st == 201, f"{st} {roles}")
+    rol_solo_pos = next(r["id"] for r in roles if r["nombre"] == f"Solo POS {SUF}")
+    st, usr = _req("POST", base, "/usuarios", tok_suite, {
+        "email": f"caja.{SUF}@zgc.dev", "nombre": "Cajero Solo POS",
+        "password": f"clave-{SUF}", "rol_id": rol_solo_pos,
+    })
+    check("alta usuario solo-POS -> 201", st in (200, 201), f"{st} {usr}")
+    st, det = _req("POST", base, "/auth/login",
+                   body={"email": f"caja.{SUF}@zgc.dev", "password": f"clave-{SUF}"})
+    check("solo-POS en el login de la suite -> 403 'Punto de Venta' (nunca 401)",
+          st == 403 and "punto de venta" in str(det).lower(), f"{st} {det}")
+    st, pl3 = _req("POST", base, "/pos/auth/login",
+                   body={"email": f"caja.{SUF}@zgc.dev", "password": f"clave-{SUF}"})
+    check("el mismo usuario abre la caja -> 200 scope pos",
+          st == 200 and pl3.get("scope") == "pos", f"{st} {pl3}")
+
     # ===== 5. tenant plan pos (kiosco standalone) =====
     st, pl2 = _req("POST", base, "/pos/auth/login",
                    body={"email": email_pos, "password": clave})

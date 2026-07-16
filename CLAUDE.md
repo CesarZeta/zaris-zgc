@@ -151,6 +151,18 @@ ZGC/
   RESUELTO 2026-07-06 (LOTE TÉCNICO): `expose_headers=["X-Total-Count"]` en el
   CORSMiddleware es el fix canónico — NO volver a setear el header a mano por endpoint.
   Regla vigente: toda verificación de headers/CORS se hace contra prod o sin proxy, no en dev.
+- **Los logins ERP y POS están SEPARADOS** (mandato César 2026-07-16, rebrand):
+  `/auth/login` rechaza con **403 «Punto de Venta»** (nunca 401) a los usuarios cuyo
+  único módulo efectivo es `pos` (audita `login_fallido` motivo `solo_pos`, comiteado
+  ANTES del raise); el rol Cajero sembrado NO es solo-POS (tiene caja/bancos/ventas) —
+  el rechazo aplica a roles a medida con solo `pos`. Las pantallas de login NO se
+  cross-linkean (el ERP no ofrece «ingreso de caja» y el POS no linkea a la gestión);
+  el login POS lleva la aclaración de que los usuarios de gestión con permiso `pos`
+  abren la caja con su misma cuenta. Cobertura en `test_pos_login_dev.py` §4-bis.
+- **La versión visible del producto vive en 3 lugares y se bumpean JUNTOS**
+  (rebrand 2026-07-16): `web-app/src/lib/version.ts` (la muestran las pantallas de
+  acceso), `web-app/package.json` y `version=` del FastAPI en `backend/app/main.py`
+  (openapi.json — sirve de probe de deploy). Hoy: 1.0.0.
 - **Todo endpoint nuevo nace con guarda RBAC** (Fase 6.5, 2026-07-05): usar
   `Depends(requiere("modulo", accion))` en lugar de `Depends(get_current_user)` —
   GET=`ver`, escritura=`editar`, anulación/borrado=`anular`; catálogos compartidos entre
