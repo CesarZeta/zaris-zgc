@@ -1,9 +1,12 @@
 // Cuentas corrientes de proveedores: cuánto le debemos a cada uno, con
 // drill-down al detalle de movimientos (espejo de CtaCteTab de Ventas).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "../../lib/api";
+import { tienePermiso } from "../../lib/auth";
 import type { MovimientoCtaCte, SaldoProveedor } from "../../lib/types";
+import { AlertOk } from "../../components/Alertas";
+import SaldoInicialModal from "../../components/SaldoInicialModal";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
 
@@ -88,13 +91,20 @@ export default function CtaCteProvTab() {
   const [soloConDeuda, setSoloConDeuda] = useState(true);
   const [cargando, setCargando] = useState(true);
   const [detalle, setDetalle] = useState<SaldoProveedor | null>(null);
+  const [saldoInicialAbierto, setSaldoInicialAbierto] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const puedeEditar = tienePermiso("compras", "editar");
 
-  useEffect(() => {
+  const cargar = useCallback(() => {
     setCargando(true);
     void apiGet<SaldoProveedor[]>(`/compras/pagos/saldos?solo_con_deuda=${soloConDeuda}`)
       .then(({ data }) => setSaldos(data))
       .finally(() => setCargando(false));
   }, [soloConDeuda]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   const totalDeuda = saldos.reduce((a, s) => a + Number(s.saldo), 0);
 
@@ -114,7 +124,16 @@ export default function CtaCteProvTab() {
           />
           Solo con deuda
         </label>
+        {puedeEditar && (
+          <>
+            <div style={{ flex: 1 }} />
+            <button className="btn btn-primary" onClick={() => setSaldoInicialAbierto(true)}>
+              Cargar saldo inicial
+            </button>
+          </>
+        )}
       </div>
+      <AlertOk onCerrar={() => setMensaje(null)}>{mensaje}</AlertOk>
       <div className="tabla-card">
         <table className="tabla">
           <thead>
@@ -143,6 +162,19 @@ export default function CtaCteProvTab() {
         )}
       </div>
       {detalle && <DetalleModal fila={detalle} onCerrar={() => setDetalle(null)} />}
+      {saldoInicialAbierto && (
+        <SaldoInicialModal
+          circuito="compras"
+          onCerrar={() => setSaldoInicialAbierto(false)}
+          onCreado={(doc) => {
+            setSaldoInicialAbierto(false);
+            setMensaje(
+              `Saldo inicial cargado: ${doc.tipo_descripcion} ${doc.numero_formateado ?? ""} · $ ${fmt.format(Number(doc.total))}`,
+            );
+            cargar();
+          }}
+        />
+      )}
     </>
   );
 }

@@ -4,6 +4,10 @@ Circuito: borrador (editable) → emitir (fiscales: CAE vía ARCA; internos:
 numeración local) → inmutable. Un fiscal emitido NO se anula: se revierte con
 nota de crédito (docs/FACTURACION-ARCA.md §6). La letra y los totales los
 calcula SIEMPRE el servidor (services/ventas.py).
+
+Saldo inicial de cta. cte. (SAL/SAF, DISENO-CONTABILIDAD §7): nace emitido por
+su router propio (nube-only); acá solo vive su anulación (con guarda de
+imputaciones vivas) y el 409 de impresión/PDF/email — no es imprimible.
 """
 
 import re
@@ -252,9 +256,14 @@ async def _cargar(db: AsyncSession, tenant_id: uuid.UUID, comp_id: uuid.UUID) ->
 
 
 async def _snapshot_receptor(
-    db: AsyncSession, tenant_id: uuid.UUID, cliente_id: uuid.UUID | None
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    cliente_id: uuid.UUID | None,
+    permitir_bloqueado: bool = False,
 ) -> dict:
-    """Congela los datos del receptor desde la BUE (o consumidor final anónimo)."""
+    """Congela los datos del receptor desde la BUE (o consumidor final anónimo).
+    `permitir_bloqueado`: solo para el saldo inicial migrado del legacy (029) —
+    el deudor suele estar bloqueado justamente por esa deuda."""
     if cliente_id is None:
         return {
             "cliente_id": None,
@@ -269,7 +278,7 @@ async def _snapshot_receptor(
     )
     if cliente is None:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    if cliente.bloqueado:
+    if cliente.bloqueado and not permitir_bloqueado:
         raise HTTPException(status_code=409, detail="El cliente está bloqueado")
     e = cliente.entidad
     return {
@@ -1033,8 +1042,14 @@ async def anular_interno(
     usuario: Usuario = Depends(requiere("ventas", "anular")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Anula un documento INTERNO emitido (presupuesto/remito). Los fiscales
-    se revierten con nota de crédito — nunca se anulan (FACTURACION-ARCA §6)."""
+    """Anula un documento INTERNO emitido (presupuesto/remito/saldo inicial).
+    Los fiscales se revierten con nota de crédito — nunca se anulan
+    (FACTURACION-ARCA §6). Un saldo inicial (SAL/SAF, DISENO-CONTABILIDAD §7):
+    - SAL (deuda): 409 si un recibo/NC lo imputa — anular ese recibo libera.
+    - SAF (crédito fuente): sus imputaciones vivas se REVIERTEN acá mismo
+      (marcadas, nunca borradas — 014; la deuda recupera el saldo), igual que
+      la NC de compra: no existe endpoint de desimputación y la factura
+      destino es fiscal (no se anula), así que sin esto quedaría inanulable."""
     comp = await _cargar(db, usuario.tenant_id, comp_id)
     if comp.tipo.fiscal:
         raise HTTPException(
@@ -1044,7 +1059,46 @@ async def anular_interno(
     if comp.estado != "emitido":
         raise HTTPException(status_code=409, detail="Solo se anulan documentos emitidos")
     await validar_pv_nodo(db, usuario.tenant_id, comp.punto_venta_id, accion="anulá")
-    if comp.tipo.clase == "remito" and comp.actualiza_stock:
+    if comp.tipo.clase == "saldo_inicial":
+        # solo cuentan las imputaciones VIVAS (las anuladas quedan como historia, 014)
+        como_deuda = await db.scalar(
+            select(func.count())
+            .select_from(Imputacion)
+            .where(
+                Imputacion.tenant_id == usuario.tenant_id,
+                Imputacion.comprobante_id == comp.id,
+                Imputacion.anulado_at.is_(None),
+            )
+        )
+        if como_deuda:
+            raise HTTPException(
+                status_code=409,
+                detail="El saldo inicial tiene cobros imputados: anulá primero el recibo que lo imputa",
+            )
+        como_credito = (
+            await db.scalars(
+                select(Imputacion).where(
+                    Imputacion.tenant_id == usuario.tenant_id,
+                    Imputacion.credito_id == comp.id,
+                    Imputacion.anulado_at.is_(None),
+                )
+            )
+        ).all()
+        ahora_utc = datetime.now(timezone.utc)
+        for imp in como_credito:
+            deuda = await db.scalar(
+                select(Comprobante)
+                .where(Comprobante.id == imp.comprobante_id)
+                .with_for_update(of=Comprobante)
+            )
+            deuda.saldo = deuda.saldo + imp.importe
+            imp.anulado_at = ahora_utc
+            imp.anulado_por = usuario.id
+        # sin ítems: no hay stock que revertir; el saldo deja de contar (los
+        # lectores de cta. cte. filtran estado='emitido', y se lleva a 0 como
+        # hace la anulación de compras para que `con_saldo` tampoco lo liste)
+        comp.saldo = Decimal("0")
+    elif comp.tipo.clase == "remito" and comp.actualiza_stock:
         await _mover_stock(db, comp, usuario.id, +1, "anulacion")
     comp.estado = "anulado"
     comp.updated_at = func.now()
@@ -1275,6 +1329,20 @@ async def _payload_impresion(db: AsyncSession, tenant_id: uuid.UUID, comp) -> tu
     return payload, qr_url
 
 
+def _exigir_imprimible(comp: Comprobante, accion: str = "imprime") -> None:
+    """Guarda común de impresión/PDF/email: un borrador no tiene número y un
+    saldo inicial (DISENO-CONTABILIDAD §7) no es un documento imprimible —
+    no tiene ítems ni valor como comprobante; lo que se entrega al cliente es
+    el estado de cuenta."""
+    if comp.estado == "borrador":
+        raise HTTPException(status_code=409, detail=f"Un borrador no se {accion}")
+    if comp.tipo.clase == "saldo_inicial":
+        raise HTTPException(
+            status_code=409,
+            detail="Un saldo inicial no es imprimible: entregá el estado de cuenta corriente",
+        )
+
+
 @router.get("/{comp_id}/impresion")
 async def datos_impresion(
     comp_id: uuid.UUID,
@@ -1282,8 +1350,7 @@ async def datos_impresion(
     db: AsyncSession = Depends(get_db),
 ):
     comp = await _cargar(db, usuario.tenant_id, comp_id)
-    if comp.estado == "borrador":
-        raise HTTPException(status_code=409, detail="Un borrador no se imprime")
+    _exigir_imprimible(comp)
     payload, _ = await _payload_impresion(db, usuario.tenant_id, comp)
     return payload
 
@@ -1302,8 +1369,7 @@ async def descargar_pdf(
 ):
     """PDF A4 server-side (F16): mismo contenido que la impresión HTML."""
     comp = await _cargar(db, usuario.tenant_id, comp_id)
-    if comp.estado == "borrador":
-        raise HTTPException(status_code=409, detail="Un borrador no se imprime")
+    _exigir_imprimible(comp)
     payload, qr_url = await _payload_impresion(db, usuario.tenant_id, comp)
     contenido = pdf_comprobante(payload, qr_url)
     return Response(
@@ -1329,8 +1395,7 @@ async def enviar_por_email(
     simulado no sale nada a la red: queda registrado en `email_envios`
     (la respuesta incluye `estado` para que la UI lo avise)."""
     comp = await _cargar(db, usuario.tenant_id, comp_id)
-    if comp.estado == "borrador":
-        raise HTTPException(status_code=409, detail="Un borrador no se envía")
+    _exigir_imprimible(comp, accion="envía")
 
     destinatario = body.email
     if destinatario is None and comp.cliente_id:

@@ -280,8 +280,12 @@ async def _cargar(db: AsyncSession, tenant_id: uuid.UUID, compra_id: uuid.UUID) 
 
 
 async def _snapshot_proveedor(
-    db: AsyncSession, tenant_id: uuid.UUID, proveedor_id: uuid.UUID
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
+    permitir_inactivo: bool = False,
 ) -> dict:
+    """`permitir_inactivo`: solo para el saldo inicial migrado del legacy (029)."""
     proveedor = await db.scalar(
         select(Proveedor).where(
             Proveedor.id == proveedor_id, Proveedor.tenant_id == tenant_id
@@ -289,7 +293,7 @@ async def _snapshot_proveedor(
     )
     if proveedor is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    if not proveedor.activo:
+    if not proveedor.activo and not permitir_inactivo:
         raise HTTPException(status_code=409, detail="El proveedor está inactivo")
     e = proveedor.entidad
     return {
@@ -915,7 +919,9 @@ async def anular_compra(
 ):
     """Anula una compra registrada revirtiendo stock y cta. cte. El costo del
     artículo NO se revierte (puede haber compras posteriores); se corrige
-    desde Artículos si hace falta."""
+    desde Artículos si hace falta. Un saldo inicial (SALP/SAFP,
+    DISENO-CONTABILIDAD §7) pasa por acá sin stock ni numeración: solo exige
+    no tener imputaciones vivas en ningún rol."""
     compra = await _cargar(db, usuario.tenant_id, compra_id)
     if compra.estado != "registrado":
         raise HTTPException(status_code=409, detail="Solo se anula una compra registrada")
@@ -934,13 +940,14 @@ async def anular_compra(
     if pagos:
         raise HTTPException(
             status_code=409,
-            detail="La compra tiene pagos/créditos imputados: anulá primero la orden de pago o desimputá",
+            detail="La compra tiene pagos/créditos imputados: anulá primero la orden de pago (o la NC) que la imputa",
         )
-
     ahora = datetime.now(timezone.utc)
-    if clase == "nota_credito":
-        # revertir las imputaciones donde esta NC fue el crédito — marcándolas
-        # con fecha cierta, nunca borrándolas (014)
+    if clase in ("nota_credito", "saldo_inicial"):
+        # revertir las imputaciones donde esta NC (o el SAFP, saldo inicial a
+        # favor — 029) fue el crédito — marcándolas con fecha cierta, nunca
+        # borrándolas (014). Un SALP (deuda) nunca es crédito: el loop no
+        # encuentra nada; su bloqueo es la guarda de pagos de arriba.
         imputaciones = (
             await db.scalars(
                 select(ImputacionCompra).where(

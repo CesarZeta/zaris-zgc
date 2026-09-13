@@ -162,7 +162,7 @@ ZGC/
 - **La versión visible del producto vive en 3 lugares y se bumpean JUNTOS**
   (rebrand 2026-07-16): `web-app/src/lib/version.ts` (la muestran las pantallas de
   acceso), `web-app/package.json` y `version=` del FastAPI en `backend/app/main.py`
-  (openapi.json — sirve de probe de deploy). Hoy: 1.0.1 (fix fechas UTC).
+  (openapi.json — sirve de probe de deploy). Hoy: 1.1.0 (saldo inicial de cta. cte.).
 - **Todo endpoint nuevo nace con guarda RBAC** (Fase 6.5, 2026-07-05): usar
   `Depends(requiere("modulo", accion))` en lugar de `Depends(get_current_user)` —
   GET=`ver`, escritura=`editar`, anulación/borrado=`anular`; catálogos compartidos entre
@@ -337,6 +337,24 @@ ZGC/
   auditoría (`created_at`, `anulado_at`) siguen en UTC aware: son instantes.
   `tools/test_fechas_dev.py` guarda la regla con un grep del repo (corre en la
   batería). Windows (nodo, dev) no trae base IANA: `tzdata` va en AMBOS requirements.
+- **`fiscal` NO es proxy de «participa en cta. cte.»** (029, saldo inicial): los
+  catálogos `tipos_comprobante`/`tipos_comprobante_compra` tienen `cta_cte`
+  (invariante `fiscal ⇒ cta_cte` en la DB). Todo lector de saldos, morosidad,
+  movimientos de cta. cte. y deudas imputables filtra `cta_cte`; `fiscal` queda
+  SOLO para ARCA, libros IVA/CITI, derivación contable y el KPI de ventas. Un
+  tipo nuevo decide las dos banderas por separado. Y en el FRONT: los
+  formularios que listan deudas imputables (recibo, OP) filtran por clase —
+  todo documento nuevo que participe de la cta. cte. hay que sumarlo ahí
+  también, o queda incobrable desde la app (mordió en la revisión de la 029).
+- **Todo documento que actúe como CRÉDITO fuente revierte sus imputaciones
+  vivas al anularse** (NC de compra, SAF/SAFP): no existe endpoint de
+  desimputación y la deuda destino suele ser fiscal (no se anula) — sin la
+  reversión el crédito queda inanulable para siempre. Reversión = marcar
+  `anulado_at`/`anulado_por` en la imputación + devolver el saldo a la deuda
+  (014: nunca borrar). El documento DEUDOR, en cambio, exige anular antes el
+  recibo/OP que lo imputa (409). Y cada tipo numera aparte (SAL y SAF de un PV
+  pueden ser ambos `0001-00000001`): en suites y UI, identificar por
+  (tipo, número), nunca por número solo.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 

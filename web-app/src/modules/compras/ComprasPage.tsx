@@ -24,6 +24,7 @@ const CLASES: Record<string, string> = {
   nota_credito: "Notas de crédito",
   nota_debito: "Notas de débito",
   remito: "Remitos",
+  saldo_inicial: "Saldos iniciales",
 };
 
 export default function ComprasPage() {

@@ -33,6 +33,7 @@ from app.api.v1.pos import router as pos_router
 from app.api.v1.pos_auth import router as pos_auth_router
 from app.api.v1.pos_resto import router as pos_resto_router
 from app.api.v1.proveedores import router as proveedores_router
+from app.api.v1.saldos_iniciales import router as saldos_iniciales_router
 from app.api.v1.stock import router as stock_router
 from app.api.v1.sucursales import router as sucursales_router
 from app.api.v1.sync import router as sync_router
@@ -69,7 +70,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ZGC — ZARIS ERP",
-    version="1.0.1",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
@@ -102,6 +103,7 @@ ROUTERS_NUBE = [
     proveedores_router,
     compras_router,
     pagos_router,
+    saldos_iniciales_router,  # 029: saldo inicial de cta. cte. (clientes y proveedores)
     caja_router,
     libros_router,
     logistica_router,

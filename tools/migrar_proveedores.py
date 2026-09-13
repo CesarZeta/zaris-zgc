@@ -12,7 +12,7 @@ Uso:
     $env:ENV_FILE=".env.local"
     .venv\Scripts\python.exe ..\tools\migrar_proveedores.py `
         --carpeta "..\Revosolution Software\BAck UP CLiente\eVARISTORE\SuperGestion" `
-        --tenant-id <uuid> [--aplicar] [--encoding cp1252] [--limite 50]
+        --tenant-id <uuid> [--aplicar] [--encoding cp1252] [--limite 50] [--saldos]
 
 Sin --aplicar hace un dry-run: transforma y reporta, no escribe nada.
 
@@ -35,11 +35,40 @@ docs/legacy/recon-proveedores.md):
   artículo): gana la fila con ULT_FECHA más nueva.
 - ARTICULO.DBF (si está en la carpeta): CPROV -> articulos.proveedor_habitual_id,
   solo si el artículo no tiene ya uno.
-- NO se migra (decisión 2026-07-05): saldos legacy FSALPROV/SALPROV_*/TSALDO
-  (la cta. cte. arranca en cero; un saldo vivo se carga como comprobante de
-  apertura), CAI/VTOCAI (régimen de imprenta viejo), PAGOPROV/RET_PROV
+- NO se migra: CAI/VTOCAI (régimen de imprenta viejo), PAGOPROV/RET_PROV
   (historia transaccional), FORMA_PAGO/ULT_LISTA de ART_PROV (texto libre sin
-  destino en el modelo).
+  destino en el modelo), TSALDO (flag del maestro sin valor informativo: vale
+  1 en todos los registros de una base, tengan o no saldo).
+- Saldos legacy: hasta 2026-09-13 NO se migraban («la cta. cte. arranca en
+  cero»). Ahora sí, con `--saldos` (DISENO-CONTABILIDAD.md §7): crea el
+  SALDO INICIAL de cuenta corriente de cada proveedor como documento SALP
+  (le debemos) / SAFP (nos debe) vía
+  `app.services.saldos_iniciales.crear_saldo_inicial_compra`, en la misma
+  transacción que los maestros (el dry-run también lo simula y revierte).
+  · PROVEEDO no guarda «saldo actual» (el legacy lo calcula al vuelo: saldo
+    inicial consolidado + movimientos posteriores; CLIENTES sí tiene
+    SALDOACT). Lo que hay es el SALDO INICIAL en pesos a la fecha del corte:
+    `SALPROV_P1` al `FSALPROV_1` (`_D*` = dólares, no se migra: aviso; el
+    slot `_2` es el corte del «compactado» del estado de cuenta, manual V16
+    §7.5.1 — si viene cargado es el más reciente y gana, con aviso). Por eso
+    la observación del SALP/SAFP lleva la fecha del corte legacy: los
+    movimientos posteriores a esa fecha en el legacy NO están incluidos y
+    conviene cotejar con su estado de cuenta antes de operar.
+  · SIGNO (verificado 2026-09-13 contra datos reales y el manual): desde
+    NUESTROS libros, al revés que en clientes — < 0 = LE DEBEMOS al
+    proveedor → SALP 'debemos'; > 0 = el proveedor nos debe → SAFP
+    'nos_deben'. Evidencia: Oricam, única base con saldos de proveedores,
+    42/42 negativos (todos fechados en el alta del sistema, nov-2009);
+    manual §7.1/§7.4: «saldo de $1000 deudor» = «tenemos una deuda de $1000
+    con el proveedor»; el maestro de clientes de la misma base guarda las
+    deudas de clientes en positivo.
+  · Se aplica también a los proveedores YA migrados (salteados por código):
+    sirve para cargar los saldos en una segunda pasada.
+  · Idempotente: si el proveedor ya tiene un SALP/SAFP vivo (no anulado) con
+    observaciones «Migrado del legacy…», se saltea (contador aparte).
+  · Un proveedor inactivo no acepta documentos (409 del core): su saldo queda
+    sin migrar, con aviso y contador `saldos_no_migrados`. Numera con
+    `numeracion_compras` (sin punto de venta): no exige PV en el tenant.
 """
 
 import argparse
@@ -47,7 +76,9 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime
+import uuid
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent.parent / "backend"
@@ -55,6 +86,7 @@ sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 os.environ.setdefault("ENV_FILE", str(BACKEND / ".env.local"))
 
+from fastapi import HTTPException  # noqa: E402
 from sqlalchemy import select, update  # noqa: E402
 from sqlalchemy.exc import IntegrityError  # noqa: E402
 
@@ -62,6 +94,8 @@ from migrar_articulos import buscar_archivo, encoding_de, leer_dbf, num, txt  # 
 from migrar_clientes import (  # noqa: E402
     MAPEO_PROVINCIAS,
     MAPEO_REGCLI,
+    OBS_SALDO_PREFIJO,
+    a_importe,
     clave_provincia,
     email_valido,
     inferir_tipo_persona,
@@ -73,13 +107,40 @@ from app.core.db import SessionLocal  # noqa: E402
 from app.models import (  # noqa: E402
     Articulo,
     ArticuloProveedor,
+    Compra,
     CondicionVenta,
     Entidad,
     EntidadContacto,
     Proveedor,
     Provincia,
     Tenant,
+    TipoComprobanteCompra,
 )
+from app.services.saldos_iniciales import crear_saldo_inicial_compra  # noqa: E402
+
+# --saldos: observación clave de idempotencia (prefijo compartido con
+# clientes); se le agrega la fecha del corte legacy (ver docstring).
+OBS_SALDO_PROVEEDOR = f"{OBS_SALDO_PREFIJO} (saldo proveedores)"
+
+
+def saldo_legacy_proveedor(rec: dict) -> tuple[Decimal, date | None, list[str]]:
+    """(saldo inicial en pesos CON el signo del legacy — < 0 le debemos —,
+    fecha del corte, avisos). Gana el slot 2 (compactado) si viene cargado;
+    el saldo en dólares no se migra (aviso). Ver docstring del módulo."""
+    avisos: list[str] = []
+    for campo in ("SALPROV_D1", "SALPROV_D2"):
+        v = a_importe(rec.get(campo))
+        if v:
+            avisos.append(f"saldo legacy en dólares {campo}={v} no migrado (ZGC opera en pesos)")
+    p1, p2 = a_importe(rec.get("SALPROV_P1")), a_importe(rec.get("SALPROV_P2"))
+    if p2:
+        if p1:
+            avisos.append(
+                f"saldo inicial legacy con dos cortes (P1={p1} al {rec.get('FSALPROV_1')}, "
+                f"P2={p2} al {rec.get('FSALPROV_2')}): se migra el compactado P2"
+            )
+        return p2, rec.get("FSALPROV_2"), avisos
+    return p1, rec.get("FSALPROV_1"), avisos
 
 
 class Transformado:
@@ -234,6 +295,10 @@ async def migrar(args) -> dict:
         "art_prov_sin_articulo": 0,
         "art_prov_sin_proveedor": 0,
         "habituales_asignados": 0,
+        "saldos": bool(args.saldos),
+        "saldos_creados": 0,
+        "saldos_salteados_existentes": 0,
+        "saldos_no_migrados": 0,
         "avisos": [],
     }
 
@@ -250,6 +315,70 @@ async def migrar(args) -> dict:
         sufijo = "" if args.aplicar else " (dry-run: no persistido)"
         reporte["tenant_id"] = str(tenant.id) + (sufijo if args.crear_tenant else "")
         reporte["tenant"] = tenant.razon_social
+
+        # --- saldos iniciales: idempotencia (SALP/SAFP vivos con la
+        # observación clave) ---
+        proveedores_con_saldo: set[uuid.UUID] = set()
+        if args.saldos:
+            proveedores_con_saldo = set(
+                (
+                    await db.scalars(
+                        select(Compra.proveedor_id)
+                        .join(
+                            TipoComprobanteCompra,
+                            TipoComprobanteCompra.codigo == Compra.tipo_codigo,
+                        )
+                        .where(
+                            Compra.tenant_id == tenant.id,
+                            TipoComprobanteCompra.clase == "saldo_inicial",
+                            Compra.estado != "anulado",
+                            Compra.anulado_at.is_(None),
+                            Compra.observaciones.like(f"{OBS_SALDO_PREFIJO}%"),
+                        )
+                    )
+                ).all()
+            )
+
+        async def paso_saldo(proveedor_id: uuid.UUID, etiqueta: str, rec: dict) -> bool:
+            """Crea el SALP/SAFP del proveedor si el legacy trae saldo ≠ 0 y
+            no fue migrado antes. Devuelve True SOLO ante un error fatal (ya
+            rollbackeado y anotado en el reporte): el llamador corta la
+            corrida. Los rechazos por proveedor (inactivo) no son fatales."""
+            saldo, fecha_corte, avisos_saldo = saldo_legacy_proveedor(rec)
+            for a in avisos_saldo:
+                reporte["avisos"].append(f"[{etiqueta}] {a}")
+            if not saldo:
+                return False
+            if proveedor_id in proveedores_con_saldo:
+                reporte["saldos_salteados_existentes"] += 1
+                return False
+            # signo legacy: negativo = le debemos (ver docstring del módulo)
+            sentido = "debemos" if saldo < 0 else "nos_deben"
+            observaciones = OBS_SALDO_PROVEEDOR
+            if isinstance(fecha_corte, date):
+                observaciones += f": saldo inicial legacy al {fecha_corte:%d/%m/%Y}"
+            try:
+                await crear_saldo_inicial_compra(
+                    db, tenant.id, None, proveedor_id, abs(saldo), sentido,
+                    observaciones=observaciones,
+                    permitir_inactivo=True,  # un proveedor dado de baja puede tener saldo vivo
+                )
+            except HTTPException as exc:
+                # 409 proveedor inactivo / 404: el core no escribió nada
+                reporte["saldos_no_migrados"] += 1
+                reporte["avisos"].append(f"[{etiqueta}] saldo {saldo} NO migrado: {exc.detail}")
+                return False
+            except ValueError as exc:
+                # importe/fecha inválidos: no es del registro -> abortar atómico
+                await db.rollback()
+                reporte["error"] = (
+                    f"Saldo inicial de '{etiqueta}': {exc}. "
+                    "Corrida abortada de forma atómica: no se escribió nada."
+                )
+                return True
+            proveedores_con_saldo.add(proveedor_id)
+            reporte["saldos_creados"] += 1
+            return False
 
         provincias_por_nombre = {
             p.nombre: p.codigo_arca for p in (await db.scalars(select(Provincia))).all()
@@ -277,10 +406,18 @@ async def migrar(args) -> dict:
             cond_por_codigo[c["codigo"]] = existente
 
         # --- idempotencia y BUE cross-rol ---
-        # 1) proveedores ya migrados, por código
-        codigos_existentes = set(
-            (await db.scalars(select(Proveedor.codigo).where(Proveedor.tenant_id == tenant.id))).all()
-        )
+        # 1) proveedores ya migrados, por código (-> id: --saldos también
+        #    carga el saldo de los que se saltean por ya existir)
+        codigos_existentes: dict[str, uuid.UUID] = {
+            cod: pid
+            for cod, pid in (
+                await db.execute(
+                    select(Proveedor.codigo, Proveedor.id).where(
+                        Proveedor.tenant_id == tenant.id, Proveedor.codigo.is_not(None)
+                    )
+                )
+            ).all()
+        }
         # 2) entidades del tenant por documento (cualquier rol): si el CUIT ya
         #    existe, el rol proveedor se cuelga de esa entidad (BUE §1-bis)
         entidad_por_doc: dict[tuple[str, str], object] = {}
@@ -295,11 +432,13 @@ async def migrar(args) -> dict:
             (await db.scalars(select(Proveedor.entidad_id).where(Proveedor.tenant_id == tenant.id))).all()
         )
         # 4) sin código: clave best-effort (espejo clientes)
-        sin_codigo_existentes: set[tuple] = {
-            (rs.lower(), nro, (dom or "").lower())
-            for rs, nro, dom in (
+        sin_codigo_existentes: dict[tuple, uuid.UUID] = {
+            (rs.lower(), nro, (dom or "").lower()): pid
+            for rs, nro, dom, pid in (
                 await db.execute(
-                    select(Entidad.razon_social, Entidad.nro_documento, Entidad.domicilio)
+                    select(
+                        Entidad.razon_social, Entidad.nro_documento, Entidad.domicilio, Proveedor.id
+                    )
                     .join(Proveedor, Proveedor.entidad_id == Entidad.id)
                     .where(Proveedor.tenant_id == tenant.id, Proveedor.codigo.is_(None))
                 )
@@ -323,14 +462,19 @@ async def migrar(args) -> dict:
             registro_actual = f"{t.codigo or '?'} {t.entidad['razon_social']}"
             if t.codigo and t.codigo in codigos_existentes:
                 reporte["salteados_existentes"] += 1
+                if args.saldos and await paso_saldo(codigos_existentes[t.codigo], registro_actual, rec):
+                    return reporte
                 continue
             if not t.codigo:
                 rs = t.entidad["razon_social"].lower()
                 dom = (t.entidad["domicilio"] or "").lower()
-                if (rs, t.entidad["nro_documento"], dom) in sin_codigo_existentes or (
-                    (rs, None, dom) in sin_codigo_existentes
-                ):
+                existente_id = sin_codigo_existentes.get(
+                    (rs, t.entidad["nro_documento"], dom)
+                ) or sin_codigo_existentes.get((rs, None, dom))
+                if existente_id is not None:
                     reporte["salteados_existentes"] += 1
+                    if args.saldos and await paso_saldo(existente_id, registro_actual, rec):
+                        return reporte
                     continue
                 reporte["avisos"].append(
                     f"[? {t.entidad['razon_social']}] sin CPROV: idempotencia best-effort "
@@ -390,6 +534,10 @@ async def migrar(args) -> dict:
             proveedor = Proveedor(
                 tenant_id=tenant.id,
                 entidad_id=entidad.id,
+                # relación cargada en memoria: el core de saldos lee
+                # proveedor.entidad en esta misma sesión (lazy="joined" no
+                # aplica a un objeto recién flusheado)
+                entidad=entidad,
                 condicion_compra_id=cond.id if cond else None,
                 **datos_prov,
             )
@@ -411,17 +559,20 @@ async def migrar(args) -> dict:
                 )
                 reporte["contactos_creados"] += 1
 
+            if args.saldos and await paso_saldo(proveedor.id, registro_actual, rec):
+                return reporte
+
             if t.codigo:
-                codigos_existentes.add(t.codigo)
+                codigos_existentes[t.codigo] = proveedor.id
                 proveedor_por_cprov[t.codigo] = proveedor
             else:
-                sin_codigo_existentes.add(
+                sin_codigo_existentes[
                     (
                         t.entidad["razon_social"].lower(),
                         t.entidad["nro_documento"],
                         (t.entidad["domicilio"] or "").lower(),
                     )
-                )
+                ] = proveedor.id
             reporte["migrados"] += 1
 
         # --- artículos del tenant por código (para ART_PROV y habituales) ---
@@ -534,6 +685,12 @@ def main():
     )
     parser.add_argument("--encoding-fallback", default="cp1252", help="Codec si el LDID es desconocido")
     parser.add_argument("--limite", type=int, default=None, help="Procesar solo N registros (pruebas)")
+    parser.add_argument(
+        "--saldos",
+        action="store_true",
+        help="Además crea el saldo inicial de cta. cte. (SALP/SAFP) desde el saldo inicial "
+        "legacy SALPROV_P* (también para proveedores ya migrados; idempotente)",
+    )
     args = parser.parse_args()
 
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -561,6 +718,7 @@ def main():
         "documentos_duplicados_legacy", "condiciones_venta_creadas", "contactos_creados",
         "art_prov_leidas", "art_prov_migradas", "art_prov_salteadas_existentes",
         "art_prov_sin_articulo", "art_prov_sin_proveedor", "habituales_asignados",
+        "saldos", "saldos_creados", "saldos_salteados_existentes", "saldos_no_migrados",
     ):
         print(f"  {k}: {reporte.get(k)}")
     print(f"  avisos: {len(reporte['avisos'])}")

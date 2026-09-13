@@ -98,16 +98,20 @@ def calcular_compra(
     }
 
 
-async def proximo_numero_op(db: AsyncSession, tenant_id: uuid.UUID) -> int:
-    """Reserva el próximo número de orden de pago (documento interno del
-    tenant, sin punto de venta). Fila lockeada, patrón proximo_numero de ventas."""
+async def proximo_numero_op(db: AsyncSession, tenant_id: uuid.UUID, tipo: str = "OP") -> int:
+    """Reserva el próximo número de un documento INTERNO del circuito de
+    compras (sin punto de venta): órdenes de pago (`OP`, default) y, desde la
+    029, los saldos iniciales de proveedor (`SALP`/`SAFP`, con punto_venta=0
+    en `compras` para que el UNIQUE por proveedor/tipo/pv/numero no choque).
+    Una fila de `numeracion_compras` por (tenant, tipo), lockeada — patrón
+    proximo_numero de ventas."""
     fila = await db.scalar(
         select(NumeracionCompras)
-        .where(NumeracionCompras.tenant_id == tenant_id, NumeracionCompras.tipo == "OP")
+        .where(NumeracionCompras.tenant_id == tenant_id, NumeracionCompras.tipo == tipo)
         .with_for_update()
     )
     if fila is None:
-        fila = NumeracionCompras(tenant_id=tenant_id, tipo="OP", ultimo=0)
+        fila = NumeracionCompras(tenant_id=tenant_id, tipo=tipo, ultimo=0)
         db.add(fila)
         await db.flush()
         fila = await db.scalar(

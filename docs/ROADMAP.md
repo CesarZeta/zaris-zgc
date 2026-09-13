@@ -1183,10 +1183,35 @@ prioridad consolidado — vive en la memoria del proyecto
   patrón distinto — lección: un grep literal no alcanza; la guarda cubre ahora las
   4 variantes.
 
-**Pendiente inmediato (orden de la auditoría)**: bloqueante 2 = saldo inicial de
-cta. cte. (documento `saldo_inicial` no fiscal, ver diseño en
-DISENO-CONTABILIDAD.md cuando se implemente) → sesión de deploy con las
-provisiones de César → higiene técnica → barrido de docs.
+**Saldo inicial de cta. cte.** (bloqueante 2 — migración 029; diseño en
+DISENO-CONTABILIDAD.md §7):
+- Documento interno `saldo_inicial`: ventas `SAL` (deudor) / `SAF` (a favor),
+  compras `SALP` / `SAFP`; sin ítems, nace emitido/registrado, un vencimiento a
+  la fecha (deuda ya exigible). Columna `cta_cte` en los catálogos («participa
+  en cta. cte.», con invariante `fiscal ⇒ cta_cte`): los lectores de saldos,
+  morosidad, movimientos y deudas imputables dejan de usar `fiscal` como proxy.
+  NO entra a ARCA, stock, libros IVA/CITI ni contabilidad derivada — su
+  contrapartida es el asiento de apertura asistido (F9-bis), que ya lo suma.
+- `POST /ventas/saldos-iniciales` y `POST /compras/saldos-iniciales` (nube-only,
+  `services/saldos_iniciales.py` reusable in-process); anulación por los
+  endpoints existentes — el deudor exige anular antes el recibo/OP que lo
+  imputa, el saldo a favor usado como crédito REVIERTE sus imputaciones al
+  anularse (no existe desimputación); PDF/email 409.
+- UI: «Cargar saldo inicial» en Cuentas corrientes (Ventas y Compras,
+  `SaldoInicialModal`), filtro «Saldos iniciales» en los listados, anular
+  desde la grilla; los formularios de recibo y OP ofrecen el SAL/SALP como
+  deuda imputable (la revisión adversarial cazó que no lo hacían — sin eso el
+  saldo migrado quedaba incobrable desde la app).
+- Migradores del legacy: `migrar_clientes.py --saldos` (CLIENTES.SALDOACT) y
+  `migrar_proveedores.py --saldos`, idempotentes, aceptan cliente bloqueado /
+  proveedor inactivo (`permitir_bloqueado` / `permitir_inactivo` del core).
+- Suite `tools/test_saldos_iniciales_dev.py` **117/117** (ventas, SAF como
+  crédito fuente con reversión, compras, libros/contabilidad excluidos por
+  delta, apertura por delta, RBAC 403) + `test_fechas_dev` 25/25 + batería.
+
+**Pendiente inmediato (orden de la auditoría)**: sesión de deploy con las
+provisiones de César (APP_URL, Resend, Sentry, UptimeRobot, CNAME) → higiene
+técnica → barrido de docs.
 
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 

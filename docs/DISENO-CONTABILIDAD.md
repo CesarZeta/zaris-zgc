@@ -269,3 +269,75 @@ lo pida, se agrega como writer nuevo sobre las mismas consultas.
   la regeneración NUNCA lo borra (el delete del motor excluye `manual` y
   `apertura`), se anula marcando como los manuales, y solo puede haber UNO
   vivo por tenant (409).
+
+## 7. Saldo inicial de cuenta corriente (2026-09-13 — bloqueante de la auditoría)
+
+**Problema.** La decisión de 2026-07-05 («la cta. cte. arranca en cero; un saldo
+vivo se carga como comprobante de apertura») nunca tuvo vehículo: las únicas
+clases de venta eran F/ND/NC (fiscales: van a ARCA y al libro IVA) + PRE/REM/REC,
+y las de compra F/ND/NC/REM. Un comercio que migra con 100 clientes con deuda no
+podía arrancar. Este documento lo resuelve sin tocar el circuito fiscal.
+
+**Modelo (migración 029).**
+- Nueva clase **`saldo_inicial`** en ambos catálogos, con dos tipos cada uno:
+  ventas `SAL` (Saldo inicial deudor, `signo_cta_cte=+1`) y `SAF` (Saldo inicial
+  a favor, `−1`); compras `SALP` (+1: le debemos al proveedor) y `SAFP` (−1: el
+  proveedor nos debe). Letra `X`, `codigo_arca NULL`, `fiscal=false`.
+- Columna nueva **`cta_cte boolean`** en `tipos_comprobante` y
+  `tipos_comprobante_compra`: «participa en la cuenta corriente». `true` para
+  todos los fiscales y para los `saldo_inicial`; `false` para PRE/REM/REC/REMP.
+  Los lectores de cta. cte. que filtraban `fiscal = true` (saldos, deudas,
+  morosidad, movimientos, apertura) pasan a filtrar **`cta_cte = true`** —
+  `fiscal` queda solo para lo que ES fiscal: ARCA, libros IVA, CITI, la
+  derivación contable de ventas/compras y el KPI de ventas del dashboard.
+- El documento es un `comprobantes` / `compras` **sin ítems ni alícuotas**:
+  `total = saldo = importe`, `neto_* = iva = 0`, `estado = emitido/registrado`
+  al crearse (no hay borrador: no hay nada que editar), numerado por la
+  numeración interna (ventas: por PV con el tipo `SAL`/`SAF` — contadores
+  separados, como FA vs NCA, así que un SAL y un SAF del mismo PV pueden ser
+  ambos `0001-00000001`; compras: `punto_venta = 0` y `numero` de
+  `numeracion_compras` con tipo `SALP`/`SAFP`, así el UNIQUE (tenant,
+  proveedor, tipo, pv, numero) no choca). Invariante en el catálogo:
+  `check (not fiscal or cta_cte)` — un fiscal siempre participa de la cta. cte.
+- **Contrato 014**: nace completo, es inmutable (se anula por `estado`, como
+  los internos) y es mapeable (la clase decide todo). Anulación: el saldo
+  DEUDOR (SAL/SALP) exige que no tenga cobros/pagos imputados vivos (409 —
+  anular el recibo/OP libera); el saldo A FAVOR (SAF/SAFP) usado como crédito
+  fuente **revierte sus imputaciones al anularse** (marcadas con `anulado_at`,
+  la deuda recupera el saldo), igual que la NC de compra — no existe
+  desimputación y la factura destino es fiscal, así que sin esto quedaría
+  inanulable. Los migradores del legacy crean el saldo aunque el cliente esté
+  bloqueado o el proveedor inactivo (`permitir_bloqueado` / `permitir_inactivo`
+  del core); la API nunca lo permite (409).
+
+**Qué hace y qué no.**
+- SÍ entra a: saldos y morosidad, detalle de cta. cte. (debe/haber), deudas
+  imputables por recibos (SAL) y OP (SALP), créditos usables como fuente (SAF /
+  SAFP, mismo camino que una NC a cuenta), listados de ventas/compras (es un
+  documento más, con su tipo visible), backup, sugerencia de apertura
+  (`_cobros_pendientes` y el saldo de proveedores ya suman `saldo × signo`).
+- NO entra a: ARCA (nunca se emite fiscalmente), libros IVA y CITI (filtran
+  `fiscal`), stock (no tiene ítems), **contabilidad derivada** (la derivación
+  de ventas/compras filtra `fiscal`): la contrapartida contable de un saldo
+  inicial es el **asiento de apertura asistido** (§6.5), que ya lee los saldos
+  vivos — con los SAL cargados, la sugerencia sale sola. PDF/email: 409 (no
+  hay documento imprimible; el estado de cuenta es el que se entrega).
+- Nube-only: se carga en la gestión central (router propio en
+  `ROUTERS_NUBE`); el nodo LAN no lo emite ni lo replica (los documentos no
+  bajan) y la cobranza cruzada sigue bloqueada como siempre.
+
+**API.** `POST /ventas/saldos-iniciales` `{cliente_id, importe > 0, sentido:
+deudor|a_favor, fecha?, observaciones?}` → 201 con el `ComprobanteOut`
+emitido; `POST /compras/saldos-iniciales` `{proveedor_id, importe, sentido:
+debemos|nos_deben, fecha?, observaciones?}` → 201 `CompraOut`. Guardas
+`ventas.editar` / `compras.editar`; anulación por los endpoints de anulación
+existentes (`/ventas/comprobantes/{id}/anular`, `/compras/comprobantes/{id}/anular`)
+con la guarda de imputaciones vivas. El UPDATE de un saldo inicial no existe:
+se anula y se carga otro.
+
+**UI.** Botón «Cargar saldo inicial» en la toolbar de Cuentas corrientes
+(Ventas y Compras): modal con buscador de cliente/proveedor (patrón
+ComprobanteForm), sentido, importe, fecha (default hoy), observaciones.
+**Migradores** (`migrar_clientes.py --saldos` / `migrar_proveedores.py --saldos`):
+crean el SAL/SAF desde `CLIENTES.SALDOACT` y el saldo de proveedores del legacy
+(fecha = la de la migración), idempotentes por observación «Migrado del legacy».

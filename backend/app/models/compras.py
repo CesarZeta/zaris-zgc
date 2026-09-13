@@ -85,6 +85,9 @@ class TipoComprobanteCompra(Base):
     signo_cta_cte: Mapped[int] = mapped_column(SmallInteger, default=0)
     fiscal: Mapped[bool] = mapped_column(Boolean, default=False)
     codigo_arca: Mapped[int | None] = mapped_column(SmallInteger)  # 008: libro/CITI compras
+    # 029: «participa en la cta. cte. del proveedor» — true para fiscales y
+    # saldo_inicial (SALP/SAFP); false para REMP (espejo de ventas.py)
+    cta_cte: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Compra(Base):

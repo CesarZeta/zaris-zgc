@@ -55,7 +55,13 @@ function OrdenPagoModal({ onCerrar }: { onCerrar: (refrescar: boolean) => void }
     void apiGet<Compra[]>(
       `/compras/comprobantes?proveedor_id=${proveedor.id}&estado=registrado&con_saldo=true&limit=100`,
     ).then(({ data }) =>
-      setPendientes(data.filter((c) => ["factura", "nota_debito"].includes(c.clase))),
+      // deudas imputables: facturas, ND y el saldo inicial A PAGAR (029; el
+      // SAFP a favor es crédito, el backend lo rechaza como deuda con 422)
+      setPendientes(
+        data.filter(
+          (c) => ["factura", "nota_debito"].includes(c.clase) || c.tipo_codigo === "SALP",
+        ),
+      ),
     );
   }, [proveedor]);
 

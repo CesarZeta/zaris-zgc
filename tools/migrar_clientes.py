@@ -13,12 +13,40 @@ Uso:
         --carpeta "..\Revosolution Software\BAck UP CLiente\Omni\Gestion Comercial" `
         --crear-tenant "Omni (migrado)" [--aplicar] [--encoding cp850] [--limite 50]
 
+    # segunda pasada (o la misma) con saldos de cuenta corriente:
+    .venv\Scripts\python.exe ..\tools\migrar_clientes.py `
+        --carpeta "..." --tenant-id <uuid> --saldos [--aplicar]
+
 Sin --aplicar hace un dry-run: transforma y reporta, no escribe nada.
 
 IMPORTANTE (ver docs/legacy/recon-clientes.md):
 - Elegir UN solo archivo fuente por empresa (el snapshot más nuevo); el árbol
   legacy tiene espejos y snapshots repetidos del mismo comercio.
 - Los registros con flag de borrado del DBF NO se migran.
+
+--saldos (2026-09-13, DISENO-CONTABILIDAD.md §7): además de los maestros, crea
+el SALDO INICIAL de cuenta corriente de cada cliente con `CLIENTES.SALDOACT`
+distinto de 0, como documento SAL (deudor) / SAF (a favor) vía
+`app.services.saldos_iniciales.crear_saldo_inicial_venta` (misma transacción
+que los maestros: el dry-run también lo simula y lo revierte). Detalles:
+- SALDOACT es el «Saldo Actual» en pesos que el legacy mantiene en el Maestro
+  de Clientes (saldo inicial consolidado + movimientos posteriores). Solo la
+  variante «Canónica GC» del DBF lo trae (recon-clientes.md); en las POS /
+  Restaurantes / GC nuevas no existe y no se migra ningún saldo (aviso).
+- SIGNO (verificado 2026-09-13 contra datos reales y el manual V16 §8.1):
+  desde NUESTROS libros, > 0 = el cliente nos debe → SAL 'deudor';
+  < 0 = tiene crédito a favor → SAF 'a_favor'. Evidencia: Oricam 76 positivos
+  / 2 negativos chicos, CSJORGE 25/7, Cab S Jorge 50/0; manual: «saldo de
+  $1000 deudor» = «nuestro cliente tiene una deuda de $1000».
+- Se aplica también a los clientes YA migrados (salteados por código): sirve
+  para cargar los saldos en una segunda pasada.
+- Idempotente: si el cliente ya tiene un SAL/SAF vivo (estado ≠ anulado) con
+  observaciones «Migrado del legacy…», se saltea (contador aparte).
+- El saldo en dólares (SALCLI_D*) NO se migra (ZGC opera en pesos): aviso.
+- Exige --tenant-id (no --crear-tenant): el SAL/SAF numera por punto de
+  venta y el tenant necesita uno activo (setup_tenant.py / Configuración).
+- Un cliente bloqueado no acepta documentos (409 del core): su saldo queda
+  sin migrar, con aviso y contador `saldos_no_migrados`.
 """
 
 import argparse
@@ -28,7 +56,9 @@ import os
 import re
 import sys
 import unicodedata
+import uuid
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent.parent / "backend"
@@ -36,6 +66,7 @@ sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("ENV_FILE", str(BACKEND / ".env.local"))
 
 from dbfread import DBF  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.exc import IntegrityError  # noqa: E402
 
@@ -43,13 +74,17 @@ from app.core.cuit import solo_digitos, validar_cuit  # noqa: E402
 from app.core.db import SessionLocal  # noqa: E402
 from app.models import (  # noqa: E402
     Cliente,
+    Comprobante,
     CondicionVenta,
     Entidad,
     EntidadContacto,
     Provincia,
+    PuntoVenta,
     Tenant,
+    TipoComprobante,
     Zona,
 )
+from app.services.saldos_iniciales import crear_saldo_inicial_venta  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constantes calibradas con el reconocimiento de datos reales (ver
@@ -75,6 +110,13 @@ MAPEO_REGCLI = {
     6: "MT",
 }
 REGCLI_FALLBACK = "CF"  # vacío/None = cliente mostrador (100% ventas B)
+
+# --saldos: clave de idempotencia en `observaciones` del SAL/SAF (y del
+# SALP/SAFP de migrar_proveedores). Se busca por PREFIJO: lo que sigue
+# describe la fuente (SALDOACT / saldo proveedores + fecha del corte).
+OBS_SALDO_PREFIJO = "Migrado del legacy"
+OBS_SALDO_CLIENTE = f"{OBS_SALDO_PREFIJO} (SALDOACT)"
+DOS_DECIMALES = Decimal("0.01")
 
 # PROVCLI es texto libre C(15); mapeo de valores observados -> nombre ARCA.
 MAPEO_PROVINCIAS = {
@@ -154,6 +196,40 @@ def inferir_tipo_persona(cuit: str | None, razon_social: str) -> str:
     if cuit and cuit[:2] in ("20", "23", "24", "27"):
         return "F"
     return "J" if SOCIEDAD_RE.search(razon_social) else "F"
+
+
+def a_importe(valor) -> Decimal:
+    """N(10,2) del DBF (dbfread lo entrega como float, o None si está en
+    blanco) -> Decimal con 2 decimales. Basura -> 0."""
+    if valor is None:
+        return Decimal("0")
+    try:
+        return Decimal(str(valor)).quantize(DOS_DECIMALES)
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0")
+
+
+def saldo_legacy_cliente(rec: dict) -> tuple[Decimal | None, list[str]]:
+    """Saldo de cta. cte. del cliente en el legacy, CON el signo del legacy
+    (> 0 nos debe, < 0 a favor — ver docstring del módulo). None si la
+    variante del DBF no trae SALDOACT. Avisa lo que NO se migra: el saldo en
+    dólares (SALCLI_D*) y, en variantes sin SALDOACT, un saldo inicial en
+    pesos (SALCLI_P*) que de otro modo pasaría desapercibido."""
+    avisos: list[str] = []
+    for campo in ("SALCLI_D1", "SALCLI_D2"):
+        v = a_importe(rec.get(campo))
+        if v:
+            avisos.append(f"saldo legacy en dólares {campo}={v} no migrado (ZGC opera en pesos)")
+    if "SALDOACT" not in rec:
+        for campo in ("SALCLI_P1", "SALCLI_P2"):
+            v = a_importe(rec.get(campo))
+            if v:
+                avisos.append(
+                    f"variante sin SALDOACT: saldo inicial legacy {campo}={v} NO migrado "
+                    "(cargarlo a mano desde Cuentas corrientes)"
+                )
+        return None, avisos
+    return a_importe(rec.get("SALDOACT")), avisos
 
 
 class Transformado:
@@ -362,6 +438,10 @@ async def migrar(args) -> dict:
         "condiciones_venta_creadas": 0,
         "zonas_creadas": 0,
         "contactos_creados": 0,
+        "saldos": bool(args.saldos),
+        "saldos_creados": 0,
+        "saldos_salteados_existentes": 0,
+        "saldos_no_migrados": 0,
         "avisos": [],
     }
 
@@ -378,6 +458,86 @@ async def migrar(args) -> dict:
         sufijo = "" if args.aplicar else " (dry-run: no persistido)"
         reporte["tenant_id"] = str(tenant.id) + (sufijo if args.crear_tenant else "")
         reporte["tenant"] = tenant.razon_social
+
+        # --- saldos iniciales: precondiciones e idempotencia ---
+        clientes_con_saldo: set[uuid.UUID] = set()
+        if args.saldos:
+            # el SAL/SAF numera por punto de venta: sin uno activo el core
+            # revienta a mitad de corrida — mejor abortar ANTES de escribir
+            pv_activo = await db.scalar(
+                select(PuntoVenta.id).where(
+                    PuntoVenta.tenant_id == tenant.id, PuntoVenta.activo.is_(True)
+                )
+            )
+            if pv_activo is None:
+                sys.exit(
+                    "--saldos: el tenant no tiene un punto de venta activo para numerar los "
+                    "SAL/SAF (setup_tenant.py o Configuración > Puntos de venta). "
+                    "Corrida abortada: no se escribió nada."
+                )
+            if registros and "SALDOACT" not in registros[0]:
+                reporte["avisos"].append(
+                    "[--saldos] este CLIENTES.DBF no trae SALDOACT (variante POS / Restaurantes / "
+                    "GC nueva): no se migra ningún saldo de clientes"
+                )
+            # ya migrados: SAL/SAF vivos del tenant con la observación clave
+            clientes_con_saldo = set(
+                (
+                    await db.scalars(
+                        select(Comprobante.cliente_id)
+                        .join(TipoComprobante, TipoComprobante.codigo == Comprobante.tipo_codigo)
+                        .where(
+                            Comprobante.tenant_id == tenant.id,
+                            TipoComprobante.clase == "saldo_inicial",
+                            Comprobante.estado != "anulado",
+                            Comprobante.observaciones.like(f"{OBS_SALDO_PREFIJO}%"),
+                        )
+                    )
+                ).all()
+            )
+
+        async def paso_saldo(cliente_id: uuid.UUID, etiqueta: str, rec: dict) -> bool:
+            """Crea el SAL/SAF del cliente si el legacy trae saldo ≠ 0 y no
+            fue migrado antes. Devuelve True SOLO ante un error fatal (ya
+            rollbackeado y anotado en el reporte): el llamador corta la
+            corrida. Los rechazos por cliente (bloqueado) no son fatales."""
+            saldo, avisos_saldo = saldo_legacy_cliente(rec)
+            for a in avisos_saldo:
+                reporte["avisos"].append(f"[{etiqueta}] {a}")
+            if not saldo:  # None (variante sin campo) o 0
+                return False
+            if cliente_id in clientes_con_saldo:
+                reporte["saldos_salteados_existentes"] += 1
+                return False
+            sentido = "deudor" if saldo > 0 else "a_favor"
+            try:
+                await crear_saldo_inicial_venta(
+                    db, tenant.id, None, cliente_id, abs(saldo), sentido,
+                    observaciones=OBS_SALDO_CLIENTE,
+                    permitir_bloqueado=True,  # el deudor legacy suele estar bloqueado por esa deuda
+                )
+            except HTTPException as exc:
+                # 409 cliente bloqueado / 404: el core no escribió nada
+                reporte["saldos_no_migrados"] += 1
+                reporte["avisos"].append(f"[{etiqueta}] saldo {saldo} NO migrado: {exc.detail}")
+                return False
+            except ValueError as exc:
+                # sin PV operable desde la nube, importe/fecha inválidos:
+                # error de configuración, no del registro -> abortar atómico
+                await db.rollback()
+                reporte["error"] = (
+                    f"Saldo inicial de '{etiqueta}': {exc}. "
+                    "Corrida abortada de forma atómica: no se escribió nada."
+                )
+                return True
+            clientes_con_saldo.add(cliente_id)
+            reporte["saldos_creados"] += 1
+            if rec.get("CODCLI") and str(rec["CODCLI"]).strip() == "0000":
+                reporte["avisos"].append(
+                    f"[{etiqueta}] saldo {saldo} migrado sobre el cliente mostrador legacy "
+                    "(CODCLI 0000): revisar si corresponde"
+                )
+            return False
 
         provincias_por_nombre = {
             p.nombre: p.codigo_arca for p in (await db.scalars(select(Provincia))).all()
@@ -411,10 +571,18 @@ async def migrar(args) -> dict:
         }
 
         # --- idempotencia (3 claves; ver verificación adversarial 2026-07-03) ---
-        # 1) por código de cliente ya migrado
-        codigos_existentes = set(
-            (await db.scalars(select(Cliente.codigo).where(Cliente.tenant_id == tenant.id))).all()
-        )
+        # 1) por código de cliente ya migrado (-> id: --saldos también carga
+        #    el saldo de los clientes que se saltean por ya existir)
+        codigos_existentes: dict[str, uuid.UUID] = {
+            cod: cid
+            for cod, cid in (
+                await db.execute(
+                    select(Cliente.codigo, Cliente.id).where(
+                        Cliente.tenant_id == tenant.id, Cliente.codigo.is_not(None)
+                    )
+                )
+            ).all()
+        }
         # 2) por documento: precargar los ya persistidos del tenant. Sin esto,
         #    un CUIT duplicado del legacy que cruza tandas (re-run parcial u
         #    otro snapshot) revienta uq_entidades_doc y ataca el tenant
@@ -429,11 +597,13 @@ async def migrar(args) -> dict:
             docs_vistos[(tipo_doc_db, nro_doc_db)] = cod_db or "?"
         # 3) registros sin CODCLI: clave alternativa best-effort
         #    (razón social + documento + domicilio) para no reduplicarlos
-        sin_codigo_existentes: set[tuple] = {
-            (rs.lower(), nro, (dom or "").lower())
-            for rs, nro, dom in (
+        sin_codigo_existentes: dict[tuple, uuid.UUID] = {
+            (rs.lower(), nro, (dom or "").lower()): cid
+            for rs, nro, dom, cid in (
                 await db.execute(
-                    select(Entidad.razon_social, Entidad.nro_documento, Entidad.domicilio)
+                    select(
+                        Entidad.razon_social, Entidad.nro_documento, Entidad.domicilio, Cliente.id
+                    )
                     .join(Cliente, Cliente.entidad_id == Entidad.id)
                     .where(Cliente.tenant_id == tenant.id, Cliente.codigo.is_(None))
                 )
@@ -449,16 +619,21 @@ async def migrar(args) -> dict:
             registro_actual = f"{t.codigo or '?'} {t.entidad['razon_social']}"
             if t.codigo and t.codigo in codigos_existentes:
                 reporte["salteados_existentes"] += 1
+                if args.saldos and await paso_saldo(codigos_existentes[t.codigo], registro_actual, rec):
+                    return reporte
                 continue
             if not t.codigo:
                 rs = t.entidad["razon_social"].lower()
                 dom = (t.entidad["domicilio"] or "").lower()
                 # dos formas: con el doc original y sin doc (por si en la
                 # corrida anterior el dedupe de documento lo degradó a SD)
-                if (rs, t.entidad["nro_documento"], dom) in sin_codigo_existentes or (
-                    (rs, None, dom) in sin_codigo_existentes
-                ):
+                existente_id = sin_codigo_existentes.get(
+                    (rs, t.entidad["nro_documento"], dom)
+                ) or sin_codigo_existentes.get((rs, None, dom))
+                if existente_id is not None:
                     reporte["salteados_existentes"] += 1
+                    if args.saldos and await paso_saldo(existente_id, registro_actual, rec):
+                        return reporte
                     continue
                 reporte["avisos"].append(
                     f"[? {t.entidad['razon_social']}] sin CODCLI: idempotencia best-effort "
@@ -516,6 +691,10 @@ async def migrar(args) -> dict:
             cliente = Cliente(
                 tenant_id=tenant.id,
                 entidad_id=entidad.id,
+                # relación cargada en memoria: el core de saldos lee
+                # cliente.entidad en esta misma sesión (lazy="joined" no
+                # aplica a un objeto recién flusheado)
+                entidad=entidad,
                 zona_id=zona_id,
                 condicion_venta_id=cond.id if cond else None,
                 **datos_cliente,
@@ -528,16 +707,21 @@ async def migrar(args) -> dict:
                 )
                 reporte["contactos_creados"] += 1
 
+            if args.saldos:
+                await db.flush()  # el SAL/SAF referencia cliente.id
+                if await paso_saldo(cliente.id, registro_actual, rec):
+                    return reporte
+
             if t.codigo:
-                codigos_existentes.add(t.codigo)
+                codigos_existentes[t.codigo] = cliente.id
             else:
-                sin_codigo_existentes.add(
+                sin_codigo_existentes[
                     (
                         t.entidad["razon_social"].lower(),
                         t.entidad["nro_documento"],  # ya post-dedupe de documento
                         (t.entidad["domicilio"] or "").lower(),
                     )
-                )
+                ] = cliente.id
             reporte["migrados"] += 1
 
         try:
@@ -563,7 +747,18 @@ def main():
     parser.add_argument("--aplicar", action="store_true", help="Escribe en la DB (sin esto: dry-run)")
     parser.add_argument("--encoding", default=ENCODING_DEFAULT)
     parser.add_argument("--limite", type=int, default=None, help="Procesar solo N registros (pruebas)")
+    parser.add_argument(
+        "--saldos",
+        action="store_true",
+        help="Además crea el saldo inicial de cta. cte. (SAL/SAF) desde CLIENTES.SALDOACT "
+        "(también para clientes ya migrados; idempotente). Requiere --tenant-id",
+    )
     args = parser.parse_args()
+    if args.saldos and args.crear_tenant:
+        parser.error(
+            "--saldos requiere --tenant-id: el SAL/SAF numera por punto de venta y un tenant "
+            "recién creado no tiene ninguno (crearlo con setup_tenant.py y volver a correr)"
+        )
 
     # la consola de Windows es cp1252: los datos legacy pueden traer chars
     # que no existen ahí y tumbarían el print DESPUÉS del commit
@@ -592,6 +787,7 @@ def main():
         "carpeta", "tenant", "tenant_id", "encoding", "leidos", "migrados",
         "salteados_existentes", "sin_nombre", "documentos_duplicados_legacy",
         "condiciones_venta_creadas", "zonas_creadas", "contactos_creados",
+        "saldos", "saldos_creados", "saldos_salteados_existentes", "saldos_no_migrados",
     ):
         print(f"  {k}: {reporte.get(k)}")
     print(f"  avisos: {len(reporte['avisos'])}")

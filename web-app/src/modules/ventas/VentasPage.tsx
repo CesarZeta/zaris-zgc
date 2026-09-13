@@ -25,6 +25,7 @@ const CLASES: Record<string, string> = {
   nota_debito: "Notas de débito",
   presupuesto: "Presupuestos",
   remito: "Remitos",
+  saldo_inicial: "Saldos iniciales",
 };
 
 export default function VentasPage() {
@@ -342,7 +343,7 @@ export default function VentasPage() {
                           </button>
                         </>
                       )}
-                      {c.estado === "emitido" && (
+                      {c.estado === "emitido" && c.clase !== "saldo_inicial" && (
                         <button className="mini-btn" disabled={ocupado} onClick={() => imprimir(c)}>
                           imprimir
                         </button>
@@ -366,7 +367,9 @@ export default function VentasPage() {
                         </button>
                       )}
                       {c.estado === "emitido" &&
-                        (c.clase === "presupuesto" || c.clase === "remito") && (
+                        (c.clase === "presupuesto" ||
+                          c.clase === "remito" ||
+                          c.clase === "saldo_inicial") && (
                           <button
                             className="mini-btn"
                             disabled={ocupado}

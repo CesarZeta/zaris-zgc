@@ -55,6 +55,10 @@ class TipoComprobante(Base):
     clase: Mapped[str] = mapped_column(String(13))
     signo_cta_cte: Mapped[int] = mapped_column(SmallInteger, default=0)
     fiscal: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 029: «participa en la cuenta corriente» — true para fiscales y para la
+    # clase saldo_inicial (SAL/SAF); false para PRE/REM/REC. Los lectores de
+    # cta. cte. filtran por esto; `fiscal` queda solo para ARCA/libros/contab.
+    cta_cte: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Numeracion(Base):

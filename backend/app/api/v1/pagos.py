@@ -149,9 +149,11 @@ async def _deuda_bloqueada(
     tipo = await db.scalar(
         select(TipoComprobanteCompra).where(TipoComprobanteCompra.codigo == compra.tipo_codigo)
     )
+    # signo +1 registrado: facturas/ND y el saldo inicial a pagar (SALP, 029)
     if compra.estado != "registrado" or tipo.signo_cta_cte != 1:
         raise HTTPException(
-            status_code=422, detail="Solo se imputan facturas/ND de compra registradas"
+            status_code=422,
+            detail="Solo se imputan facturas/ND de compra o saldos iniciales registrados",
         )
     return compra
 
@@ -436,9 +438,11 @@ async def imputar(
                 TipoComprobanteCompra.codigo == credito.tipo_codigo
             )
         )
+        # signo −1 registrado: NC y el saldo inicial a favor (SAFP, 029) — mismo camino
         if tipo.signo_cta_cte != -1:
             raise HTTPException(
-                status_code=422, detail="El crédito debe ser una NC de compra registrada"
+                status_code=422,
+                detail="El crédito debe ser una NC de compra o saldo a favor registrado",
             )
         if credito.proveedor_id != deuda.proveedor_id:
             raise HTTPException(status_code=422, detail="NC y deuda de proveedores distintos")
@@ -499,7 +503,9 @@ async def cuenta_corriente(
             Compra.tenant_id == usuario.tenant_id,
             Compra.proveedor_id == proveedor_id,
             Compra.estado == "registrado",
-            TipoComprobanteCompra.fiscal.is_(True),
+            # «participa en cta. cte.» (029): fiscales + saldo_inicial (SALP/SAFP);
+            # `fiscal` era un proxy y dejaba afuera al saldo inicial
+            TipoComprobanteCompra.cta_cte.is_(True),
         )
     )
     stmt_o = select(
@@ -614,7 +620,7 @@ async def saldos_por_proveedor(
             .where(
                 Compra.tenant_id == usuario.tenant_id,
                 Compra.estado == "registrado",
-                TipoComprobanteCompra.fiscal.is_(True),
+                TipoComprobanteCompra.cta_cte.is_(True),  # fiscales + saldo_inicial (029)
                 Compra.saldo != 0,
             )
             .group_by(Compra.proveedor_id)

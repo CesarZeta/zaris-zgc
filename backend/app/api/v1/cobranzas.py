@@ -157,9 +157,10 @@ async def _deuda_bloqueada(
     tipo = await db.scalar(
         select(TipoComprobante).where(TipoComprobante.codigo == comp.tipo_codigo)
     )
+    # signo +1 emitido: facturas/ND y el saldo inicial deudor (SAL, 029)
     if comp.estado != "emitido" or tipo.signo_cta_cte != 1:
         raise HTTPException(
-            status_code=422, detail="Solo se imputan facturas/ND emitidas"
+            status_code=422, detail="Solo se imputan facturas/ND o saldos iniciales emitidos"
         )
     # cobranza cruzada (MANUAL-NODO §5): una deuda nacida en el nodo se cobra
     # EN el nodo — si no, el próximo re-upload pisa el saldo por LWW
@@ -445,8 +446,11 @@ async def imputar(
         tipo = await db.scalar(
             select(TipoComprobante).where(TipoComprobante.codigo == credito.tipo_codigo)
         )
+        # signo −1 emitido: NC y el saldo inicial a favor (SAF, 029) — mismo camino
         if tipo.signo_cta_cte != -1:
-            raise HTTPException(status_code=422, detail="El crédito debe ser una NC emitida")
+            raise HTTPException(
+                status_code=422, detail="El crédito debe ser una NC o saldo a favor emitido"
+            )
         await validar_pv_nodo(db, usuario.tenant_id, credito.punto_venta_id, accion="imputá")
         if credito.cliente_id != deuda.cliente_id:
             raise HTTPException(status_code=422, detail="NC y deuda de clientes distintos")
@@ -507,7 +511,9 @@ async def cuenta_corriente(
             Comprobante.tenant_id == usuario.tenant_id,
             Comprobante.cliente_id == cliente_id,
             Comprobante.estado == "emitido",
-            TipoComprobante.fiscal.is_(True),
+            # «participa en cta. cte.» (029): fiscales + saldo_inicial (SAL/SAF);
+            # `fiscal` era un proxy y dejaba afuera al saldo inicial
+            TipoComprobante.cta_cte.is_(True),
         )
     )
     stmt_r = (
@@ -636,7 +642,7 @@ async def saldos_por_cliente(
                 Comprobante.tenant_id == usuario.tenant_id,
                 Comprobante.cliente_id.is_not(None),
                 Comprobante.estado == "emitido",
-                TipoComprobante.fiscal.is_(True),
+                TipoComprobante.cta_cte.is_(True),  # fiscales + saldo_inicial (029)
                 Comprobante.saldo != 0,
             )
             .group_by(Comprobante.cliente_id)
