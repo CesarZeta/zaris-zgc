@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 import type { Planilla } from "../../lib/types";
 import { MEDIOS_PAGO } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
@@ -12,7 +13,7 @@ import ConceptosTab from "./ConceptosTab";
 import MovimientosTab from "./MovimientosTab";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = hoyISO;
 
 export default function CajaPage() {
   const [tab, setTab] = useState<"planilla" | "movimientos" | "conceptos">("planilla");

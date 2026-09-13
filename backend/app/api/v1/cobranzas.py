@@ -17,6 +17,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.fechas import hoy as hoy_negocio
 from app.core.permisos import requiere
 from app.models import (
     Cliente,
@@ -231,7 +232,7 @@ async def crear_recibo(
         tenant_id=usuario.tenant_id,
         punto_venta_id=pv.id,
         numero=numero,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy_negocio(),
         cliente_id=cliente.id,
         receptor_nombre=cliente.entidad.razon_social,
         total=total,
@@ -623,7 +624,7 @@ async def saldos_por_cliente(
     """Listado de saldos (morosidad-lite): saldo total y vencido por cliente."""
     from app.models import ComprobanteVencimiento
 
-    hoy = date.today()
+    hoy = hoy_negocio()
     filas = (
         await db.execute(
             select(

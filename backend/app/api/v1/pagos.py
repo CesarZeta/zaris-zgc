@@ -17,6 +17,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.fechas import hoy as hoy_negocio
 from app.core.permisos import requiere
 from app.models import (
     Cheque,
@@ -203,7 +204,7 @@ async def crear_orden_pago(
     op = OrdenPago(
         tenant_id=usuario.tenant_id,
         numero=numero,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy_negocio(),
         sucursal_id=body.sucursal_id,
         proveedor_id=proveedor.id,
         proveedor_nombre=proveedor.entidad.razon_social,
@@ -669,7 +670,7 @@ async def vencimientos_a_pagar(
 ):
     """Cuentas a pagar: cuotas de compras con saldo, vencidas o por vencer
     en los próximos `dias` días, ordenadas por fecha."""
-    hasta = date.today() + timedelta(days=max(0, min(dias, 365)))
+    hasta = hoy_negocio() + timedelta(days=max(0, min(dias, 365)))
     filas = (
         await db.execute(
             select(CompraVencimiento, Compra, Entidad)
@@ -685,7 +686,7 @@ async def vencimientos_a_pagar(
             .order_by(CompraVencimiento.fecha_vto)
         )
     ).all()
-    hoy = date.today()
+    hoy = hoy_negocio()
     return [
         {
             "compra_id": str(compra.id),

@@ -24,6 +24,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.fechas import a_fecha_local
 from app.models import (
     ActivoCategoria,
     ActivoFijo,
@@ -410,7 +411,7 @@ async def derivar(
     mapa = await _mapa(db, tenant_id)
     b = _Batch(mapa)
     en_rango = lambda f: desde <= f <= hasta  # noqa: E731
-    anulado_en_rango = lambda a: a is not None and en_rango(a.date())  # noqa: E731
+    anulado_en_rango = lambda a: a is not None and en_rango(a_fecha_local(a))  # noqa: E731
 
     # ===== 1. Ventas fiscales emitidas (facturas/ND/NC) =====
     comps = (
@@ -511,7 +512,7 @@ async def derivar(
         if en_rango(r.fecha) and (r.estado == "emitido" or r.anulado_at is not None):
             b.agregar(r.fecha, etiqueta, "recibo", r.id, lineas)
         if anulado_en_rango(r.anulado_at):
-            b.reversion(r.anulado_at.date(), f"Anulación {etiqueta}", "recibo_anulacion", r.id, lineas)
+            b.reversion(a_fecha_local(r.anulado_at), f"Anulación {etiqueta}", "recibo_anulacion", r.id, lineas)
 
     # ===== 3. Compras registradas (+ reversión de anuladas) =====
     compras = (
@@ -565,7 +566,7 @@ async def derivar(
         if en_rango(c.fecha) and (c.estado == "registrado" or c.anulado_at is not None):
             b.agregar(c.fecha, etiqueta, "compra", c.id, lineas)
         if anulado_en_rango(c.anulado_at):
-            b.reversion(c.anulado_at.date(), f"Anulación {etiqueta}", "compra_anulacion", c.id, lineas)
+            b.reversion(a_fecha_local(c.anulado_at), f"Anulación {etiqueta}", "compra_anulacion", c.id, lineas)
 
     # ===== 4. Órdenes de pago (+ reversión de anuladas) =====
     ops = (
@@ -615,7 +616,7 @@ async def derivar(
         if en_rango(o.fecha) and (o.estado == "emitida" or o.anulado_at is not None):
             b.agregar(o.fecha, etiqueta, "orden_pago", o.id, lineas)
         if anulado_en_rango(o.anulado_at):
-            b.reversion(o.anulado_at.date(), f"Anulación {etiqueta}", "op_anulacion", o.id, lineas)
+            b.reversion(a_fecha_local(o.anulado_at), f"Anulación {etiqueta}", "op_anulacion", o.id, lineas)
 
     # ===== 5. Caja: movimientos manuales (+ reversión de anulados) =====
     movs = (
@@ -642,7 +643,7 @@ async def derivar(
         if en_rango(m.fecha):
             b.agregar(m.fecha, etiqueta, "caja_mov", m.id, lineas)
         if anulado_en_rango(m.anulado_at):
-            b.reversion(m.anulado_at.date(), f"Anulación {etiqueta}", "caja_anulacion", m.id, lineas)
+            b.reversion(a_fecha_local(m.anulado_at), f"Anulación {etiqueta}", "caja_anulacion", m.id, lineas)
 
     # ===== 6. Bancos: movimientos manuales/import (los de cheques van por eventos) =====
     SIGNO_MOV = {
@@ -697,7 +698,7 @@ async def derivar(
         if en_rango(m.fecha):
             b.agregar(m.fecha, etiqueta, "banco_mov", m.id, lineas)
         if anulado_en_rango(m.anulado_at):
-            b.reversion(m.anulado_at.date(), f"Anulación {etiqueta}", "banco_anulacion", m.id, lineas)
+            b.reversion(a_fecha_local(m.anulado_at), f"Anulación {etiqueta}", "banco_anulacion", m.id, lineas)
 
     # ===== 7. Cheques: eventos con efecto contable propio =====
     eventos = (
@@ -765,7 +766,7 @@ async def derivar(
         if en_rango(r.fecha):
             b.agregar(r.fecha, etiqueta, "retencion", r.id, lineas)
         if anulado_en_rango(r.anulado_at):
-            b.reversion(r.anulado_at.date(), f"Anulación {etiqueta}", "retencion_anulacion", r.id, lineas)
+            b.reversion(a_fecha_local(r.anulado_at), f"Anulación {etiqueta}", "retencion_anulacion", r.id, lineas)
 
     # ===== 9. Ajustes de inventario (kardex suelto con costo sellado) =====
     ajustes = (
@@ -786,7 +787,7 @@ async def derivar(
     for mov_id, fecha_mov, monto in ajustes:
         monto = Decimal(monto)
         b.agregar(
-            fecha_mov.date(), "Ajuste de inventario", "stock_ajuste", mov_id,
+            a_fecha_local(fecha_mov), "Ajuste de inventario", "stock_ajuste", mov_id,
             [(mapa.get("inventario"), monto, None),
              (mapa.get("ajuste_inventario"), -monto, None)],
         )
@@ -812,7 +813,7 @@ async def derivar(
         if en_rango(c.fecha):
             b.agregar(c.fecha, etiqueta, "arqueo", c.id, lineas)
         if anulado_en_rango(c.anulado_at):
-            b.reversion(c.anulado_at.date(), f"Reapertura {etiqueta}", "arqueo_anulacion", c.id, lineas)
+            b.reversion(a_fecha_local(c.anulado_at), f"Reapertura {etiqueta}", "arqueo_anulacion", c.id, lineas)
 
     # ===== 11. Amortizaciones de bienes de uso (F9-bis, diseño §6.1): UN
     # asiento por mes calendario cuyo fin de mes cae en el rango, con un par de
@@ -872,7 +873,7 @@ async def derivar(
         )
     ).all()
     for lq in liqs:
-        fecha_liq = lq.created_at.date()
+        fecha_liq = a_fecha_local(lq.created_at)
         lineas = [
             (mapa.get("comisiones"), Decimal(lq.total), None),
             (mapa.get("comisiones_a_pagar"), -Decimal(lq.total), None),
@@ -881,7 +882,7 @@ async def derivar(
         if en_rango(fecha_liq):
             b.agregar(fecha_liq, etiqueta, "comision", lq.id, lineas)
         if anulado_en_rango(lq.anulado_at):
-            b.reversion(lq.anulado_at.date(), f"Anulación {etiqueta}", "comision_anulacion", lq.id, lineas)
+            b.reversion(a_fecha_local(lq.anulado_at), f"Anulación {etiqueta}", "comision_anulacion", lq.id, lineas)
 
     # ===== Persistir: borrar derivados del rango y re-insertar (los manuales
     # y el asiento de apertura NUNCA se tocan) =====

@@ -3,10 +3,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDescargar, apiGet } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 import type { LibroIva } from "../../lib/types";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
-const periodoActual = () => new Date().toISOString().slice(0, 7);
+const periodoActual = () => hoyISO().slice(0, 7);
 
 export default function LibroIvaTab({ libro }: { libro: "ventas" | "compras" }) {
   const [periodo, setPeriodo] = useState(periodoActual());

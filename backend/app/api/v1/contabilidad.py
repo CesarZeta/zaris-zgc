@@ -25,6 +25,7 @@ from app.api.v1.bancos import SIGNO_MOV as SIGNO_BANCO
 from app.api.v1.dashboard import _cobros_pendientes, _stock_valorizado
 from app.core.csv_export import csv_response, csv_texto, num
 from app.core.db import get_db
+from app.core.fechas import hoy
 from app.core.permisos import requiere
 from app.models import (
     ActivoCategoria,
@@ -744,7 +745,7 @@ async def cuadro_activos_csv(
     usuario: Usuario = Depends(requiere("contabilidad", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    filas = await _activos_cuadro(db, usuario.tenant_id, corte or date.today(), False)
+    filas = await _activos_cuadro(db, usuario.tenant_id, corte or hoy(), False)
     encabezado = ["Bien", "Categoría", "Alta", "Vida útil (meses)", "Valor origen",
                   "Valor residual", "Amort. acumulada", "Valor contable", "Baja"]
     datos = [
@@ -763,7 +764,7 @@ async def listar_activos(
     usuario: Usuario = Depends(requiere("contabilidad", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    return await _activos_cuadro(db, usuario.tenant_id, corte or date.today(), incluir_anulados)
+    return await _activos_cuadro(db, usuario.tenant_id, corte or hoy(), incluir_anulados)
 
 
 @router.post("/activos", response_model=ActivoOut, status_code=status.HTTP_201_CREATED)
@@ -801,7 +802,7 @@ async def crear_activo(
     db.add(activo)
     await db.commit()
     await db.refresh(activo)
-    return _activo_out(activo, {cat.id: cat}, date.today())
+    return _activo_out(activo, {cat.id: cat}, hoy())
 
 
 @router.put("/activos/{activo_id}", response_model=ActivoOut)
@@ -842,7 +843,7 @@ async def editar_activo(
     activo.observaciones = (body.observaciones or "").strip() or None
     await db.commit()
     await db.refresh(activo)
-    return _activo_out(activo, {cat.id: cat}, date.today())
+    return _activo_out(activo, {cat.id: cat}, hoy())
 
 
 @router.post("/activos/{activo_id}/baja", response_model=ActivoOut)
@@ -877,7 +878,7 @@ async def baja_activo(
             )
         ).all()
     }
-    return _activo_out(activo, categorias, date.today())
+    return _activo_out(activo, categorias, hoy())
 
 
 @router.post("/activos/{activo_id}/anular", response_model=ActivoOut)
@@ -909,7 +910,7 @@ async def anular_activo(
             )
         ).all()
     }
-    return _activo_out(activo, categorias, date.today())
+    return _activo_out(activo, categorias, hoy())
 
 
 # ===== Balance general (F9-bis, diseño §6.3) =====
@@ -995,7 +996,7 @@ async def balance(
     usuario: Usuario = Depends(requiere("contabilidad", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    return await _balance_data(db, usuario.tenant_id, hasta or date.today())
+    return await _balance_data(db, usuario.tenant_id, hasta or hoy())
 
 
 @router.get("/balance.csv")
@@ -1004,7 +1005,7 @@ async def balance_csv(
     usuario: Usuario = Depends(requiere("contabilidad", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    data = await _balance_data(db, usuario.tenant_id, hasta or date.today())
+    data = await _balance_data(db, usuario.tenant_id, hasta or hoy())
     encabezado = ["Sección", "Código", "Cuenta", "Saldo"]
     datos = []
     etiquetas = {"activo": "ACTIVO", "pasivo": "PASIVO", "pn": "PATRIMONIO NETO"}

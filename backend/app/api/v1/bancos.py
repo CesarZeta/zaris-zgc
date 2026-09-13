@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.csv_export import csv_response, num
 from app.core.db import get_db
+from app.core.fechas import hoy
 from app.core.permisos import requiere
 from app.models import BancoMovimiento, CuentaBancaria, ExtractoImport, Usuario
 
@@ -287,7 +288,7 @@ async def crear_movimiento(
     mov = BancoMovimiento(
         tenant_id=usuario.tenant_id,
         cuenta_id=cuenta_id,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy(),
         tipo=body.tipo,
         importe=body.importe,
         descripcion=(body.descripcion or "").strip() or None,
@@ -319,7 +320,7 @@ async def conciliar_movimiento(
     if mov is None:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
     mov.conciliado = not mov.conciliado
-    mov.fecha_conciliacion = date.today() if mov.conciliado else None
+    mov.fecha_conciliacion = hoy() if mov.conciliado else None
     await db.commit()
     mov = await db.scalar(select(BancoMovimiento).where(BancoMovimiento.id == mov_id))
     return _mov_out(mov)

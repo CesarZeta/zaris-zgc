@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.fechas import hoy
 from app.core.permisos import requiere
 from app.models import (
     Cliente,
@@ -618,7 +619,7 @@ async def crear_retencion(
         tenant_id=usuario.tenant_id,
         tipo=body.tipo,
         regimen=body.regimen,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy(),
         importe=body.importe,
         nro_certificado=body.nro_certificado,
         cliente_id=body.cliente_id,

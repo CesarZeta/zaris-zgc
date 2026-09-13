@@ -4,12 +4,13 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { apiGet } from "../../lib/api";
+import { fechaISO } from "../../lib/fechas";
 import { fmt, hoy, type Cashflow } from "./tipos";
 
 function enDias(n: number) {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return fechaISO(d);
 }
 
 export default function TesoreriaTab() {

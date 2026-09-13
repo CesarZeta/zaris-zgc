@@ -6,12 +6,11 @@ es la lectura más sensible del sistema (mismo criterio que la config ARCA) —
 y cada descarga queda auditada (`backup_descargado`).
 """
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.fechas import hoy
 from app.core.permisos import requiere
 from app.models import Usuario
 from app.services import auditoria
@@ -37,7 +36,7 @@ async def exportar_backup(
         request=request,
     )
     await db.commit()
-    fecha = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fecha = hoy().isoformat()  # nombre del ZIP con la fecha de negocio (AR)
     return Response(
         content=contenido,
         media_type="application/zip",

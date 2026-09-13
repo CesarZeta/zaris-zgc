@@ -14,7 +14,7 @@ GET=ver, escritura/rendición=editar, anulaciones=anular.
 """
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.clientes import EntidadIn, _validar_entidad
 from app.api.v1.entidades import EntidadOut, aplicar_busqueda
 from app.core.db import get_db
+from app.core.fechas import hoy
 from app.core.permisos import requiere
 from app.models import (
     Cliente,
@@ -453,7 +454,7 @@ async def listar_entregables(
             Comprobante.tenant_id == usuario.tenant_id,
             Comprobante.estado == "emitido",
             TipoComprobante.clase.in_(CLASES_ENTREGABLES),
-            Comprobante.fecha >= func.current_date() - dias,
+            Comprobante.fecha >= hoy() - timedelta(days=dias),
             Comprobante.id.notin_(ocupados),
         )
         .order_by(Comprobante.fecha.desc(), Comprobante.numero.desc())
@@ -783,7 +784,7 @@ async def crear_hoja(
     h = HojaRuta(
         tenant_id=usuario.tenant_id,
         numero=int(ultimo or 0) + 1,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy(),
         transportista_id=body.transportista_id,
         sucursal_id=body.sucursal_id,
         observaciones=(body.observaciones or "").strip() or None,

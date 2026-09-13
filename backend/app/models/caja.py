@@ -13,6 +13,7 @@ from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Tex
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.fechas import hoy
 from app.models.base import Base
 
 
@@ -37,7 +38,7 @@ class CajaMovimiento(Base):
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     sucursal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sucursales.id"))
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     concepto_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conceptos_caja.id"))
     tipo: Mapped[str] = mapped_column(String(7))  # sellado del concepto al crear
     medio: Mapped[str] = mapped_column(String(15), default="efectivo")
@@ -87,7 +88,7 @@ class Retencion(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     tipo: Mapped[str] = mapped_column(String(10))  # sufrida | practicada
     regimen: Mapped[str] = mapped_column(String(10))  # IVA | IIBB | Ganancias | SUSS | otro
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     nro_certificado: Mapped[str | None] = mapped_column(String(30))
     cliente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("clientes.id"))

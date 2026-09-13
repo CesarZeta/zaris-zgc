@@ -1144,6 +1144,50 @@ el 2026-07-13. **Primera fase post-MVP SIN migración** (la traza la da `audit_e
 - Diferido documentado (§7 del diseño): restore/import del ZIP, backups programados
   server-side con retención, Sentry en el front, alertas propias por email.
 
+## SESIÓN 2026-07-16 — Rebrand ZARIS ERP + logins separados ✅ (registrada retroactivamente)
+
+Commits a901746 / defc504 / c8de47e (sin migración; regresión nodo 104/104 + login
+POS 27/27). El producto se vende como **ERP** («ZARIS ERP» en toda descripción
+visible; ZGC = código interno); versión visible 1.0.0 en 3 lugares (`version.ts`,
+`package.json`, `main.py`); rediseño de pantallas de acceso con panel de marca y
+`AuthFooter`; **logins ERP y POS sin cross-link** (mandato César) y `/auth/login`
+rechaza con 403 «Punto de Venta» a los usuarios solo-POS (audita `solo_pos`); plan
+del dominio `erp.zaris.com.ar` en DEPLOY.md (falta el CNAME de César). Detalle en
+CLAUDE.md §1 y §6.
+
+## SESIÓN 2026-09-13 — Auditoría de pendientes + fix fechas UTC ✅
+
+**Auditoría** (46 agentes, 174 enunciados verificados contra prod/DB/código tras
+2 meses sin sesiones): prod VIVA (keep-alive OK, 27/27 migraciones), cero
+actividad desde el 16/7, provisiones de César intactas (CNAME, Resend, Sentry,
+UptimeRobot), 2 **bloqueantes nuevos** que ningún doc registraba y un orden de
+prioridad consolidado — vive en la memoria del proyecto
+(`zgc-auditoria-pendientes-2026-09`), no se re-releva.
+
+**Línea base**: 16/16 suites, 727/727 checks sobre HEAD c8de47e.
+
+**Fix fechas UTC** (bloqueante 1 — migración 028, sin tablas):
+- `core/fechas.py` (`hoy()` / `ahora()` / `a_fecha_local()`, zona única `TZ_APP`) +
+  `lib/fechas.ts` (`hoyISO()` / `fechaISO()` / `hoyMasDiasISO()`).
+- 32 `date.today()` → `hoy()` en 12 archivos; 11 `.date()` de timestamps en la
+  contabilidad (reversiones, ajustes, liquidaciones) → `a_fecha_local`; 11 columnas
+  `Date` con `default=hoy`; sello del kardex backdateado y rango del audit log a
+  medianoche AR (antes UTC = 21:00 AR del día anterior); nombre del ZIP de backup;
+  12 sitios del front (`slice(0, 10)` y `slice(0, 7)` del período de IVA/CITI).
+- 028 `ALTER DATABASE/ROLE … SET timezone` alinea `default current_date` y
+  `func.date()` con el backend. `tzdata` en ambos requirements (Windows).
+- Suite nueva `tools/test_fechas_dev.py` (25 checks: guarda estática por grep +
+  unidad en los bordes 21:00/24:00 + zona de la DB + documentos en vivo) — entra a
+  la batería obligatoria. Regla permanente en CLAUDE.md §6.
+- Revisión adversarial del diff (2 revisores) cazó 5 sitios más del mismo bug con
+  patrón distinto — lección: un grep literal no alcanza; la guarda cubre ahora las
+  4 variantes.
+
+**Pendiente inmediato (orden de la auditoría)**: bloqueante 2 = saldo inicial de
+cta. cte. (documento `saldo_inicial` no fiscal, ver diseño en
+DISENO-CONTABILIDAD.md cuando se implemente) → sesión de deploy con las
+provisiones de César → higiene técnica → barrido de docs.
+
 ## POST-MVP — ERP-liviano argentino (reordenado 2026-07-05)
 
 > Marco: `DEFINICION-PRODUCTO.md` §1-bis. ZGC crece **HACIA ADENTRO** (finanzas,

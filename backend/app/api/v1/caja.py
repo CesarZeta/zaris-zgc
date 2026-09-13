@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.fechas import hoy
 from app.core.permisos import requiere
 from app.models import (
     CajaCierre,
@@ -497,7 +498,7 @@ async def crear_movimiento(
     )
     if concepto is None or not concepto.activo:
         raise HTTPException(status_code=422, detail="Concepto inexistente o inactivo")
-    fecha = body.fecha or date.today()
+    fecha = body.fecha or hoy()
     if await _fecha_cerrada(db, usuario.tenant_id, fecha, body.sucursal_id):
         raise HTTPException(status_code=409, detail="La caja de esa fecha está cerrada")
     if body.cuenta_bancaria_id is not None:
@@ -562,7 +563,7 @@ async def planilla_diaria(
     usuario: Usuario = Depends(requiere("caja", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    return await _calcular_planilla(db, usuario.tenant_id, fecha or date.today(), sucursal_id)
+    return await _calcular_planilla(db, usuario.tenant_id, fecha or hoy(), sucursal_id)
 
 
 @router.get("/cierres", response_model=list[CierreOut])

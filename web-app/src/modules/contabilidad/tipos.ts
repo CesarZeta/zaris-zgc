@@ -166,7 +166,7 @@ export const ORIGEN_LABEL: Record<string, string> = {
 };
 
 export const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
-export const hoy = () => new Date().toISOString().slice(0, 10);
+export { hoyISO as hoy } from "../../lib/fechas";
 export const primeroDelMes = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;

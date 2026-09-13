@@ -4,11 +4,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiDescargar, apiGet, apiPost } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 import type { ResumenRetencion, Retencion } from "../../lib/types";
 import { useDialogos } from "../../components/dialogos";
 
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = hoyISO;
 const REGIMENES = ["IVA", "IIBB", "Ganancias", "SUSS", "otro"];
 
 export default function RetencionesTab() {

@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 import type { Entrega, Transportista } from "../../lib/types";
 import { AlertError } from "../../components/Alertas";
 import { useDialogos } from "../../components/dialogos";
@@ -17,7 +18,7 @@ export default function HojaForm({ transportistas, onCerrar }: Props) {
   const [seleccion, setSeleccion] = useState<string[]>([]); // orden = recorrido
   const [form, setForm] = useState({
     transportista_id: transportistas[0]?.id ?? "",
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: hoyISO(),
     observaciones: "",
   });
   const [modificado, setModificado] = useState(false);

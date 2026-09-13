@@ -21,6 +21,7 @@ from sqlalchemy.orm import noload
 
 from app.core.csv_export import csv_response, num
 from app.core.db import get_db
+from app.core.fechas import ZONA, hoy
 from app.core.permisos import requiere
 from app.models import (
     Articulo,
@@ -486,7 +487,7 @@ async def crear_compra(
         letra=letra,
         punto_venta=body.punto_venta,
         numero=body.numero,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy(),
         periodo_iva=body.periodo_iva,
         contado=body.contado,
         condicion_compra_id=body.condicion_compra_id,
@@ -724,8 +725,8 @@ async def _mover_stock(
     # en B/C el final entero ES el costo) + fecha del papel si difiere de hoy.
     # El contra-movimiento de ANULACIÓN se fecha HOY (el hecho ocurre hoy).
     fecha_mov = (
-        datetime.combine(compra.fecha, time.min, tzinfo=timezone.utc)
-        if compra.fecha != date.today() and tipo_mov != "anulacion"
+        datetime.combine(compra.fecha, time.min, tzinfo=ZONA)  # medianoche AR del papel
+        if compra.fecha != hoy() and tipo_mov != "anulacion"
         else None
     )
     for item in compra.items:

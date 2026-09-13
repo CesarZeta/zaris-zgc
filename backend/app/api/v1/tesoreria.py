@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.fechas import hoy as hoy_negocio
 from app.core.permisos import requiere
 from app.models import (
     BancoMovimiento,
@@ -109,7 +110,7 @@ async def cashflow(
     usuario: Usuario = Depends(requiere("bancos", "ver")),
     db: AsyncSession = Depends(get_db),
 ):
-    hoy = date.today()
+    hoy = hoy_negocio()
     desde = desde or hoy
     hasta = hasta or (hoy + timedelta(days=90))
     tid = usuario.tenant_id

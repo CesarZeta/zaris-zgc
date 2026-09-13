@@ -5,8 +5,9 @@
 
 import { useState } from "react";
 import { ApiError, apiDescargar } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 
-const periodoActual = () => new Date().toISOString().slice(0, 7);
+const periodoActual = () => hoyISO().slice(0, 7);
 
 export default function ExportarTab() {
   const [periodo, setPeriodo] = useState(periodoActual());

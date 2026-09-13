@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDescargar, apiGet, apiPost } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 import { AlertError, AlertOk } from "../../components/Alertas";
 import Paginado from "../../components/Paginado";
 import { useDialogos } from "../../components/dialogos";
@@ -11,7 +12,7 @@ import type { ComisionLiquidacion, ComisionPendiente, Vendedor } from "../../lib
 
 const POR_PAGINA = 50;
 const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = hoyISO;
 const primeroDelMes = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;

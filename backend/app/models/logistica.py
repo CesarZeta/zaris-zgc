@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.fechas import hoy
 from app.models.base import Base
 from app.models.bue import Entidad
 
@@ -56,7 +57,7 @@ class HojaRuta(Base):
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     numero: Mapped[int] = mapped_column(BigInteger)
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     transportista_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("transportistas.id"))
     sucursal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sucursales.id"))
     # abierta (se arma) → en_reparto (despachada) → cerrada (rendida)

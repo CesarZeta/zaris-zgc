@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.csv_export import csv_response
 from app.core.db import get_db
+from app.core.fechas import ZONA
 from app.core.permisos import requiere
 from app.models import AuditEvento, Usuario
 from app.services.auditoria import ACCIONES_AUDIT
@@ -57,10 +58,12 @@ def _filtro(
         filtro.append(AuditEvento.modulo == modulo)
     if usuario_id:
         filtro.append(AuditEvento.usuario_id == usuario_id)
+    # El rango desde/hasta es de DÍAS de negocio (zona AR): armado en UTC, un
+    # «hasta 10/9» cortaba a las 20:59 AR del 10 (fix fechas UTC, 2026-09-13).
     if desde:
-        filtro.append(AuditEvento.created_at >= datetime.combine(desde, time.min, timezone.utc))
+        filtro.append(AuditEvento.created_at >= datetime.combine(desde, time.min, ZONA))
     if hasta:
-        filtro.append(AuditEvento.created_at <= datetime.combine(hasta, time.max, timezone.utc))
+        filtro.append(AuditEvento.created_at <= datetime.combine(hasta, time.max, ZONA))
     if q and q.strip():
         patron = f"%{q.strip()}%"
         filtro.append(

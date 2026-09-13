@@ -21,6 +21,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.fechas import hoy
 from app.models import (
     BancoMovimiento,
     Cheque,
@@ -46,7 +47,7 @@ def _evento(
     return ChequeEvento(
         tenant_id=cheque.tenant_id,
         cheque_id=cheque.id,
-        fecha=fecha or date.today(),
+        fecha=fecha or hoy(),
         estado_desde=desde,
         estado_hasta=hasta,
         detalle=detalle,
@@ -147,7 +148,7 @@ async def depositar(
     mov = BancoMovimiento(
         tenant_id=cheque.tenant_id,
         cuenta_id=cuenta_id,
-        fecha=fecha or date.today(),
+        fecha=fecha or hoy(),
         tipo="deposito",
         importe=cheque.importe,
         descripcion=f"Depósito cheque {cheque.numero} ({cheque.banco})",
@@ -178,7 +179,7 @@ async def acreditar(
         )
         if mov and not mov.conciliado:
             mov.conciliado = True
-            mov.fecha_conciliacion = fecha or date.today()
+            mov.fecha_conciliacion = fecha or hoy()
     cheque.estado = "acreditado"
     db.add(_evento(cheque, "depositado", "acreditado", "Acreditado por el banco",
                    banco_movimiento_id=cheque.banco_movimiento_id, usuario_id=usuario_id, fecha=fecha))
@@ -254,13 +255,13 @@ async def debitar(
     mov = BancoMovimiento(
         tenant_id=cheque.tenant_id,
         cuenta_id=cheque.cuenta_id,
-        fecha=fecha or date.today(),
+        fecha=fecha or hoy(),
         tipo="debito",
         importe=cheque.importe,
         descripcion=f"Débito cheque propio {cheque.numero}",
         cheque_id=cheque.id,
         conciliado=True,
-        fecha_conciliacion=fecha or date.today(),
+        fecha_conciliacion=fecha or hoy(),
         origen="cheque",
         creado_por=usuario_id,
     )

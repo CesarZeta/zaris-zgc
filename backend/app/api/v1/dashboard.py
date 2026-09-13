@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
 from app.core.db import get_db
+from app.core.fechas import hoy as hoy_negocio
 from app.core.permisos import permisos_efectivos
 from app.models import (
     Articulo,
@@ -152,7 +153,7 @@ async def kpis(
     no lo tiene, el valor va en null (el inicio muestra '—')."""
     permisos = await permisos_efectivos(db, usuario)
     tenant_id = usuario.tenant_id
-    hoy = (await db.scalar(select(func.current_date()))) or date.today()
+    hoy = hoy_negocio()
 
     def puede(modulo: str) -> bool:
         return modulo in permisos  # cualquier nivel ≥ ver

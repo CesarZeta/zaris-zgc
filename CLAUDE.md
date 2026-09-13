@@ -162,7 +162,7 @@ ZGC/
 - **La versión visible del producto vive en 3 lugares y se bumpean JUNTOS**
   (rebrand 2026-07-16): `web-app/src/lib/version.ts` (la muestran las pantallas de
   acceso), `web-app/package.json` y `version=` del FastAPI en `backend/app/main.py`
-  (openapi.json — sirve de probe de deploy). Hoy: 1.0.0.
+  (openapi.json — sirve de probe de deploy). Hoy: 1.0.1 (fix fechas UTC).
 - **Todo endpoint nuevo nace con guarda RBAC** (Fase 6.5, 2026-07-05): usar
   `Depends(requiere("modulo", accion))` en lugar de `Depends(get_current_user)` —
   GET=`ver`, escritura=`editar`, anulación/borrado=`anular`; catálogos compartidos entre
@@ -321,6 +321,22 @@ ZGC/
   ahí. `test_nodo_dev.py` (levanta un nodo real con TODAS las migraciones) es parte
   de la batería obligatoria cuando se toca esa lista (casi quedó sin correr en F17:
   el login del nodo ahora escribe auditoría en su DB local).
+- **Fecha de NEGOCIO ≠ reloj del server** (fix 2026-09-13, bloqueante cazado por la
+  auditoría de pendientes): la nube (Vercel + Supabase) corre en UTC → `date.today()`
+  fechaba MAÑANA todo hecho posterior a las 21:00 AR (tickets, recibos, OP, cierres;
+  a fin de mes, el período de IVA siguiente). Dev NUNCA lo mostró: Postgres y Python
+  locales están en hora AR — no confiar en dev para nada que dependa del reloj.
+  Regla: en `backend/app` toda fecha de negocio sale de `core/fechas.py` (`hoy()`,
+  `ahora()`, `a_fecha_local(ts)`; zona única `TZ_APP`, nunca por tenant) —
+  PROHIBIDOS `date.today()`, `datetime.now()` a secas, `.date()` de un timestamp y
+  `datetime.combine(..., timezone.utc)` para rangos de días; en el front,
+  `lib/fechas.ts` (`hoyISO()`), nunca `toISOString().slice(0, 10|7)`. Toda columna
+  `Date` con `server_default=current_date()` lleva además `default=hoy` (el ORM
+  manda la fecha), y la migración 028 fija la misma zona en la DB — los
+  `func.date(timestamptz)` de las consultas dependen de ella. Los timestamps de
+  auditoría (`created_at`, `anulado_at`) siguen en UTC aware: son instantes.
+  `tools/test_fechas_dev.py` guarda la regla con un grep del repo (corre en la
+  batería). Windows (nodo, dev) no trae base IANA: `tzdata` va en AMBOS requirements.
 
 ## 6-bis. Carga de datos y scripts contra la DB (lecciones permanentes)
 

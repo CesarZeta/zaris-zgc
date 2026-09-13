@@ -108,4 +108,4 @@ export const TIPO_MOV_LABEL: Record<string, string> = {
 };
 
 export const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 });
-export const hoy = () => new Date().toISOString().slice(0, 10);
+export { hoyISO as hoy } from "../../lib/fechas";

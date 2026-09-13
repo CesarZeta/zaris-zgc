@@ -25,6 +25,7 @@ from app.api.v1.clientes import EntidadIn, _validar_entidad
 from app.api.v1.entidades import EntidadOut, aplicar_busqueda
 from app.core.csv_export import csv_response, num
 from app.core.db import get_db
+from app.core.fechas import a_fecha_local
 from app.core.permisos import requiere
 from app.models import (
     ComisionLiquidacion,
@@ -146,7 +147,7 @@ def _liq_out(lq: ComisionLiquidacion, nombres: dict, con_items: bool = False):
         comision_pct=lq.comision_pct,
         base_total=lq.base_total,
         total=lq.total,
-        fecha=lq.created_at.date(),
+        fecha=a_fecha_local(lq.created_at),
         observaciones=lq.observaciones,
         anulada=lq.anulado_at is not None,
     )

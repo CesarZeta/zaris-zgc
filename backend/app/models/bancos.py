@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.fechas import hoy
 from app.models.base import Base
 
 
@@ -123,7 +124,7 @@ class BancoMovimiento(Base):
     cuenta_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("cuentas_bancarias.id", ondelete="CASCADE")
     )
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     # deposito | extraccion | transferencia_in | transferencia_out | debito |
     # credito | comision | ajuste_positivo | ajuste_negativo
     # (el signo lo da el tipo; importe siempre > 0)
@@ -160,7 +161,7 @@ class ChequeEvento(Base):
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     cheque_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cheques.id", ondelete="CASCADE"))
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     estado_desde: Mapped[str | None] = mapped_column(String(12))
     estado_hasta: Mapped[str] = mapped_column(String(12))
     detalle: Mapped[str | None] = mapped_column(String(200))

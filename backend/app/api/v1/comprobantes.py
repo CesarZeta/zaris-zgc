@@ -20,6 +20,7 @@ from sqlalchemy.orm import noload
 from app.core.config import settings
 from app.core.csv_export import csv_response, num
 from app.core.db import get_db
+from app.core.fechas import ZONA, hoy
 from app.core.permisos import requiere
 from app.models import (
     ArcaConfig,
@@ -508,7 +509,7 @@ async def crear_comprobante(
         punto_venta_id=pv.id,
         tipo_codigo=tipo_codigo,
         letra=letra,
-        fecha=body.fecha or date.today(),
+        fecha=body.fecha or hoy(),
         contado=body.contado,
         condicion_venta_id=body.condicion_venta_id,
         condicion_venta_desc=condicion_desc,
@@ -754,8 +755,8 @@ async def _mover_stock(
     if any(a.en_dolares for a in articulos.values()):
         cotizacion = await stock_valor.cotizacion_vigente(db, comp.tenant_id)
     fecha_mov = (
-        datetime.combine(comp.fecha, time.min, tzinfo=timezone.utc)
-        if comp.fecha != date.today() and tipo_mov != "anulacion"
+        datetime.combine(comp.fecha, time.min, tzinfo=ZONA)  # medianoche AR del papel
+        if comp.fecha != hoy() and tipo_mov != "anulacion"
         else None
     )
     for item in comp.items:
@@ -1063,7 +1064,7 @@ async def crear_nc_espejo_core(
         punto_venta_id=factura.punto_venta_id,
         tipo_codigo=sv.tipo_codigo_para("nota_credito", factura.letra),
         letra=factura.letra,
-        fecha=date.today(),
+        fecha=hoy(),
         cliente_id=factura.cliente_id,
         receptor_nombre=factura.receptor_nombre,
         receptor_doc_tipo=factura.receptor_doc_tipo,
@@ -1174,7 +1175,7 @@ async def facturar_presupuesto(
         punto_venta_id=pre.punto_venta_id,
         tipo_codigo=sv.tipo_codigo_para("factura", letra),
         letra=letra,
-        fecha=date.today(),
+        fecha=hoy(),
         contado=pre.contado,
         condicion_venta_id=pre.condicion_venta_id,
         condicion_venta_desc=pre.condicion_venta_desc,

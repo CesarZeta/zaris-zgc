@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "../../lib/api";
+import { hoyISO } from "../../lib/fechas";
 import type {
   Cliente,
   ImpresionPayload,
@@ -895,7 +896,7 @@ function NuevoPedidoModal({
 }
 
 function MozosTab() {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyISO();
   const [desde, setDesde] = useState(hoy);
   const [hasta, setHasta] = useState(hoy);
   const [filas, setFilas] = useState<PosReporteMozo[]>([]);

@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.fechas import hoy
 from app.models.base import Base
 
 
@@ -82,7 +83,7 @@ class Comprobante(Base):
     tipo_codigo: Mapped[str] = mapped_column(ForeignKey("tipos_comprobante.codigo"))
     letra: Mapped[str] = mapped_column(String(1))
     numero: Mapped[int | None] = mapped_column(BigInteger)
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     cliente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("clientes.id"))
     receptor_nombre: Mapped[str] = mapped_column(String(120), default="Consumidor Final")
     receptor_doc_tipo: Mapped[int] = mapped_column(SmallInteger, default=99)
@@ -213,7 +214,7 @@ class Recibo(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"))
     punto_venta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("puntos_venta.id"))
     numero: Mapped[int] = mapped_column(BigInteger)
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clientes.id"))
     receptor_nombre: Mapped[str] = mapped_column(String(120))
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
@@ -271,7 +272,7 @@ class Imputacion(Base):
         ForeignKey("comprobantes.id", ondelete="CASCADE")
     )
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
-    fecha: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    fecha: Mapped[date] = mapped_column(Date, default=hoy, server_default=func.current_date())
     # anulación NO destructiva (014): la imputación se marca, nunca se borra
     anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     anulado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuarios.id"))

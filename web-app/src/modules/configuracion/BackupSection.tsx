@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { ApiError, apiDescargar } from "../../lib/api";
 import { tienePermiso } from "../../lib/auth";
+import { hoyISO } from "../../lib/fechas";
 
 export default function BackupSection() {
   const [ocupado, setOcupado] = useState(false);
@@ -18,7 +19,7 @@ export default function BackupSection() {
     setError(null);
     setMensaje(null);
     try {
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = hoyISO();
       await apiDescargar("/backup/export.zip", `backup-zgc-${hoy}.zip`);
       setMensaje("Backup descargado. La descarga quedó registrada en Auditoría.");
     } catch (err) {

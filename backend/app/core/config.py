@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     JWT_EXPIRES_HOURS: int = 24
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Zona horaria de NEGOCIO (core/fechas.py). Única por instalación, nunca
+    # por tenant. La nube corre en UTC: sin esto, `date.today()` fechaba mañana
+    # después de las 21:00 AR. La migración 028 fija la misma zona en la DB.
+    TZ_APP: str = "America/Argentina/Buenos_Aires"
+
     # Perfil de ejecución (F13-LAN, DISENO-NODO-LAN.md §1): "nube" = backend
     # central (Vercel/dev de siempre); "nodo" = PC de sucursal en la LAN —
     # mismo código, montaje de routers acotado + réplica de bajada + POS web
